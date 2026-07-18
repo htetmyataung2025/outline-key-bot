@@ -88,11 +88,8 @@ def handle_all_messages(message):
                 end_date_str = date_match.group(0)
                 end_date = end_date_str
                 try:
-                    # ရက်စွဲစာသားကို Date Object ပြောင်းလဲခြင်း
                     end_date_obj = datetime.strptime(end_date_str, "%d.%m.%Y")
-                    # ၁ လ တိတိ နောက်ပြန်ဆုတ်ခြင်း
                     start_date_obj = end_date_obj - relativedelta(months=1)
-                    # စာသားပုံစံ ပြန်ပြောင်းခြင်း
                     start_date = start_date_obj.strftime("%d.%m.%Y")
                 except:
                     start_date = "သတ်မှတ်မထားပါ"
@@ -111,11 +108,12 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
+            # 📅 ပြသပေးမည့် စာသားပုံစံ (Start Date နှင့် End Date ကြားထဲတွင် စာကြောင်းအလွတ် တစ်ကြောင်း ခြားပေးထားပါတယ်)
             result_text = (
-                f"👤 **အသုံးပြုသူ:** {display_name}\n"
-                f"📅 **Start Date:** {start_date}\n"
-                f"⏳ **End Date:** {end_date}\n"
-                f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n"
+                f"👤 **အသုံးပြုသူ:** {display_name}\n\n"
+                f"📅 **Start Date:** {start_date}\n\n"
+                f"⏳ **End Date:** {end_date}\n\n"
+                f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n\n"
                 f"📊 **အသုံးပြုပြီးသား Data:** {usage_gb} GB"
             )
             bot.reply_to(message, result_text, parse_mode="Markdown")
