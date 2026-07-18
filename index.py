@@ -64,7 +64,7 @@ def get_plan_keyboard():
 def send_welcome(message):
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
     )
     bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard())
 
@@ -102,7 +102,7 @@ def handle_buy_callback(call):
         bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
 
-# Screenshot Received (စာသား Error လုံးဝမတက်စေရန် parse_mode ဖြုတ်၍ ပို့သည့်အပိုင်း)
+# Screenshot Received 
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     chat_id = message.chat.id
@@ -112,7 +112,6 @@ def handle_payment_screenshot(message):
     plan_info = user_selected_plans.get(chat_id, {"name": "သတ်မှတ်မထားသော Plan", "price": "မသိရှိပါ"})
     current_time = datetime.now().strftime("%d/%m/%Y %I:%M %p")
 
-    # အစ်ကို့ဆီ ပို့ပေးမည့် စာသားအချက်အလက်ပုံစံ
     admin_alert_text = (
         f"💰 ငွေလွှဲပြေစာ အသစ်ရောက်ရှိလာပါပြီ!\n\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
@@ -124,7 +123,6 @@ def handle_payment_screenshot(message):
     )
     
     try:
-        # Markdown ကြောင့် Error တက်ခြင်းမှ ကာကွယ်ရန် parse_mode မသုံးဘဲ တိုက်ရိုက်ပို့ခြင်း
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
         bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား လက်ခံရရှိပါပြီဗျာ။ စနစ်မှ အတည်ပြုပြီးသည်နှင့် VPN Key လင့်ခ်အား ဤနေရာသို့ ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
     except Exception as e:
@@ -148,20 +146,22 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
-    # ADMIN REPLY BYPASS SYSTEM
+    # ADMIN REPLY BYPASS SYSTEM (🌟 နှိပ်လိုက်ရုံဖြင့် အလိုအလျောက် Copy ကူးသွားစေမည့် စနစ်ထည့်သွင်းခြင်း)
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
         reply_caption = message.reply_to_message.caption
         if reply_caption and "User Chat ID:" in reply_caption:
             try:
                 target_user_id = re.search(r'User Chat ID:\s*(\d+)', reply_caption).group(1)
+                
+                # HTML Mode ၏ <code> tag ဖြင့် Key အား နှိပ်လိုက်ရုံဖြင့် အလိုအလျောက် ကူးယူနိုင်အောင် ပြင်ဆင်ခြင်း
                 success_message = (
-                    f"🎉 လူကြီးမင်း၏ Ngwelweမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီဗျာ!\n\n"
-                    f"🔑 သင်၏ VPN Key လင့်ခ်မှာ အောက်ပါအတိုင်း ဖြစ်ပါသည်:\n"
-                    f"{input_value}\n\n"
-                    f"👉 အထက်ပါ ကီးလင့်ခ်အား ကော်ပီယူ၍ ဆော့ဖ်ဝဲထဲတွင် ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
+                    f"🎉 <b>လူကြီးမင်း၏ Ngwelweမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီဗျာ!</b>\n\n"
+                    f"🔑 <b>သင်၏ VPN Key လင့်ခ်မှာ အောက်ပါအတိုင်း ဖြစ်ပါသည်:</b>\n"
+                    f"<code>{input_value}</code>\n\n"
+                    f"👉 အထက်ပါ ကီးလင့်ခ်ပြာပြာလေးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ဗျာ။ ဆော့ဖ်ဝဲထဲတွင် ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
                 )
-                bot.send_message(target_user_id, success_message)
-                bot.reply_to(message, "✅ Customer ထံသို့ VPN Key အား အောင်မြင်စွာ လှမ်းပို့ပေးလိုက်ပါပြီဗျာ။")
+                bot.send_message(target_user_id, success_message, parse_mode="HTML")
+                bot.reply_to(message, "✅ Customer ထံသို့ VPN Key အား Auto-Copy format ဖြင့် အောင်မြင်စွာ လှမ်းပို့ပေးလိုက်ပါပြီဗျာ။")
                 return
             except Exception as e:
                 bot.reply_to(message, f"❌ ကီးပို့ရာတွင် အမှားအယွင်းရှိပါသည်- {str(e)}")
@@ -248,7 +248,7 @@ def handle_all_messages(message):
             )
             bot.reply_to(message, result_text)
         else:
-            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် သို့မဟုတ် Server တွင် မရှိသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+            bot.reply_to(message, "❌ ขွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် သို့မဟုတ် Server တွင် မရှိသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
             
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
