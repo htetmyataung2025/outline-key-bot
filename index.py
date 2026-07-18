@@ -105,17 +105,13 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # Telegram Parser မှ ကပ်မပစ်နိုင်အောင် စာကြောင်းတိုင်းရဲ့ ကြားထဲမှာ space အလွတ်ကို တိတိကျကျ ခြားပေးထားပါတယ်ဗျာ
+           # Bold (**...**) များကို ဖြုတ်ပြီး ပုံမှန်စာသားအဖြစ် ပြောင်းလဲကာ ညီညာအောင် ညှိခြင်း
             result_text = (
-                f"👤 **အသုံးပြုသူ:** {display_name}\n"
-               
-                f"📅 **Start Date:** {start_date}\n"
-               
-                f"📅 **End Date:** {end_date}\n"
-          
-                f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n"
-                
-                f"📊 **အသုံးပြုပြီးသား Data:** {usage_gb} GB\n"
+                f"👤 အသုံးပြုသူ: {display_name}\n"
+                f"📅 Start Date: {start_date}\n"
+                f"⏳ End Date: {end_date}\n"
+                f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
             )
             bot.reply_to(message, result_text, parse_mode="Markdown")
         else:
