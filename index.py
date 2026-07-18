@@ -3,6 +3,8 @@ import requests
 from flask import Flask, request, jsonify
 import telebot
 import re
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 app = Flask(__name__)
 
@@ -16,7 +18,7 @@ requests.packages.urllib3.disable_warnings()
 def bytes_to_gb(bytes_value):
     return round(bytes_value / (1024 ** 3), 2)
 
-# /start Command 
+# /start Command
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = (
@@ -77,13 +79,26 @@ def handle_all_messages(message):
         if key_id and target_key:
             full_name = target_key.get("name", "HMA User")
             
-            # ၁။ Key ID ကို ဖျောက်ပြီး Display ပြုလုပ်ရန် နာမည်ကို သန့်စင်ခြင်း (ဥပမာ- "Thu Ya" သာပြမည်)
+            # ၁။ နာမည်ကို သန့်စင်ခြင်း
             display_name = full_name.split("tg")[0].replace("_", " ").strip()
             
-            # ၂။ End Date ကို နာမည်ထဲက ရက်စွဲ (ဥပမာ- 18.8.2026) မှ ရှာဖွေဖြတ်ယူခြင်း
+            # ၂။ End Date ကို ရှာဖွေပြီး ၁ လ နောက်ပြန်ဆုတ်ကာ Start Date တွက်ချက်ခြင်း
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
-            end_date = date_match.group(0) if date_match else "သတ်မှတ်မထားပါ"
-            start_date = "စတင်ဝယ်ယူသည့်နေ့" if date_match else "သတ်မှတ်မထားပါ"
+            if date_match:
+                end_date_str = date_match.group(0)
+                end_date = end_date_str
+                try:
+                    # ရက်စွဲစာသားကို Date Object ပြောင်းလဲခြင်း
+                    end_date_obj = datetime.strptime(end_date_str, "%d.%m.%Y")
+                    # ၁ လ တိတိ နောက်ပြန်ဆုတ်ခြင်း
+                    start_date_obj = end_date_obj - relativedelta(months=1)
+                    # စာသားပုံစံ ပြန်ပြောင်းခြင်း
+                    start_date = start_date_obj.strftime("%d.%m.%Y")
+                except:
+                    start_date = "သတ်မှတ်မထားပါ"
+            else:
+                end_date = "သတ်မှတ်မထားပါ"
+                start_date = "သတ်မှတ်မထားပါ"
 
             # ၃။ Data Limit (Plan) ကို ယူခြင်း
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
