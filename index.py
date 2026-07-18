@@ -118,8 +118,8 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ငွေလွှဲပြီး Screenshot လေး ပို့ပေးပါခင်ဗျာ🥰\n"
-            f"(ငွေလွှဲပြေစာ ပို့ပေးပြီးပါက လူကြီးမင်းထံသို့ VPN Key အမြန်ဆုံး ပေးပို့သွားမည် ဖြစ်ပါသည်)"
+            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"(ငွေလွှဲပြေစာ ပို့ပြီးပါက လူကြီးမင်းထံသို့ VPN Key အမြန်ဆုံး ပေးပို့သွားမည် ဖြစ်ပါသည်)"
         )
         bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
@@ -149,7 +149,7 @@ def handle_payment_screenshot(message):
     
     try:
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား ခဏစစ်ဆေးနေပါတယ်ခင်ဗျာ။ Admin ဖက်မှအတည်ပြုပြီးသည်နှင့် VPN Keyကို ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
+        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော ငွေလွှဲပြေစာအား ခဏစစ်ဆေးနေပါတယ်ခင်ဗျာ။ Admin ဖက်မှအတည်ပြုပြီးသည်နှင့် VPN Keyကို ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -165,8 +165,8 @@ def handle_all_messages(message):
         
     if input_value == "📊 Data Usage စစ်ရန်":
         check_guide = (
-            "👇 ဝယ်ယူထားသော VPN Key ကို ပို့ပေးပါ:\n\n"
-            " 🫶 Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ခင်ဗျာ။"
+            "👇 ဝယ်ယူထားသော VPN Key ကို ဒီမှာ Paste ချပေးပါ:\n\n"
+            " 🫶 Key ကို Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ခင်ဗျာ။"
         )
         bot.send_message(chat_id, check_guide)
         return
@@ -179,13 +179,13 @@ def handle_all_messages(message):
                 target_user_id = re.search(r'User Chat ID:\s*(\d+)', reply_caption).group(1)
                 
                 success_message = (
-                    f"🎉 <b>လူကြီးမင်း၏ Ngwelweမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ!</b>\n\n"
-                    f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Keyကို အောက်တွင်ယူပါ</b>\n"
+                    f"🎉 <b>လူကြီးမင်း၏ ငွေလွှဲမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ!</b>\n\n"
+                    f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Keyကို အောက်တွင်ယူပါ</b>\n\n"
                     f"<code>{input_value}</code>\n\n"
                     f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ဆော့ဖ်ဝဲထဲတွင် ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
-                bot.reply_to(message, "✅ Customer ထံသို့ VPN Key အား Auto-Copy format ဖြင့် အောင်မြင်စွာ လှမ်းပို့ပေးလိုက်ပါပြီဗျာ။")
+                bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ လှမ်းပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
                 return
             except Exception as e:
                 bot.reply_to(message, f"❌ ကီးပို့ရာတွင် အမှားအယွင်းရှိပါသည်- {str(e)}")
