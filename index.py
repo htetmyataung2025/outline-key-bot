@@ -17,13 +17,13 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
 def bytes_to_gb(bytes_value):
-    return round(bytes_value / (1024 ** 3), 2)
+    # Outline Manager အတိုင်း ကွက်တိတူညီစေရန် 1 GB = 1,000,000,000 bytes ဖြင့် တွက်ချက်ခြင်း
+    return round(bytes_value / (1000 ** 3), 2)
 
 def clean_ss_url(url_str):
-    """ URL ထဲမှ မလိုအပ်သော outline params နှင့် # tags များကို ဖြတ်ထုတ်၍ main base64 key သီးသန့်ထုတ်ရန် """
+    """ URL ထဲမှ မလိုအပ်သော params များနှင့် tags များကို ဖြတ်ထုတ်ရန် """
     if not url_str:
         return ""
-    # ss:// ဖြုတ်၊ # tag ဖြုတ်၊ ?outline= ဖြုတ်ပြီး သန့်စင်ခြင်း
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
@@ -59,7 +59,6 @@ def handle_all_messages(message):
         if "#" in input_value:
             try:
                 raw_name = input_value.split("#")[1]
-                # နာမည်ထဲက space တွေ သင်္ကေတတွေကို ရှင်းလင်းပြီး lowercase ပြောင်း
                 clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
                 
                 if clean_name:
@@ -71,7 +70,7 @@ def handle_all_messages(message):
             except Exception as e:
                 print(f"Name match error: {e}")
 
-        # ၂။ နာမည်ဖြင့် ရှာမတွေ့ပါက သို့မဟုတ် # နာမည်မပါလာပါက တကယ့် URL internal string ဖြင့် ကွက်တိတိုက်စစ်ခြင်း
+        # ၂။ နာမည်ဖြင့် ရှာမတွေ့ပါက သို့မဟုတ် # နာမည်မပါလာပါက URL string ဖြင့် ကွက်တိတိုက်စစ်ခြင်း
         if not target_key and input_value.startswith("ss://"):
             input_clean = clean_ss_url(input_value)
             
@@ -79,7 +78,6 @@ def handle_all_messages(message):
                 server_access_url = key.get("accessUrl", "")
                 if server_access_url:
                     server_clean = clean_ss_url(server_access_url)
-                    # ပေးပို့လာသော key string နှင့် server ထဲက key string တူညီမှု ရှိမရှိ စစ်ဆေးခြင်း
                     if input_clean and (input_clean in server_clean or server_clean in input_clean):
                         target_key = key
                         break
@@ -98,7 +96,7 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # နာမည်ကို သန့်စင်ခြင်း (tg သို့မဟုတ် Tg မတိုင်ခင်အပိုင်းအား ယူခြင်း)
+            # နာမည်ကို သန့်စင်ခြင်း
             display_name = full_name.split("tg")[0].split("Tg")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
@@ -130,7 +128,7 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # Monospace Box ဖြင့် စာကြောင်းချင်းစီ ညီညာစွာ ပြသခြင်း
+            # Result Display
             result_text = (
                 f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
