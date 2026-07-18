@@ -265,17 +265,18 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
+           # Result Display
             result_text = (
-               f"```\n"
+                f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
                 f"📅 Start Date: {start_date}\n"
                 f"⏳ End Date: {end_date}\n"
                 f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                 f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB\n"
                 f"```"
-
             )
-            bot.reply_to(message, result_text)
+            bot.reply_to(message, result_text, parse_mode="MarkdownV2")
+
         else:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် သို့မဟုတ် Server တွင် မရှိသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
             
