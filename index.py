@@ -84,9 +84,6 @@ def handle_all_messages(message):
                     end_date = f"{int(e_parts[0])}.{int(e_parts[1])}.{e_parts[2]}"
                     
                     end_date_obj = datetime.strptime(end_date_raw, "%d.%m.%Y")
-                    if len(e_parts[1]) == 1:
-                        end_date_obj = datetime.strptime(end_date_raw, "%d.%m.%Y")
-                    
                     start_date_obj = end_date_obj - relativedelta(months=1)
                     start_date = f"{start_date_obj.day}.{start_date_obj.month}.{start_date_obj.year}"
                 except:
@@ -105,15 +102,17 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-           # Bold (**...**) များကို ဖြုတ်ပြီး ပုံမှန်စာသားအဖြစ် ပြောင်းလဲကာ ညီညာအောင် ညှိခြင်း
+            # Telegram မှ စာသားကျုံ့ပစ်သည့်စနစ်အား မသုံးနိုင်အောင် Code Block (```) ဖြင့် ညီညာစွာ ဝန်းရံထားခြင်း
             result_text = (
+                f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
                 f"📅 Start Date: {start_date}\n"
                 f"⏳ End Date: {end_date}\n"
                 f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
+                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB\n"
+                f"```"
             )
-            bot.reply_to(message, result_text, parse_mode="Markdown")
+            bot.reply_to(message, result_text, parse_mode="MarkdownV2")
         else:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
             
