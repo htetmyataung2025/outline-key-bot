@@ -1,9 +1,8 @@
-import os
+Import os
 import requests
 from flask import Flask, request, jsonify
 import telebot
 import re
-import base64
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
@@ -18,15 +17,6 @@ requests.packages.urllib3.disable_warnings()
 
 def bytes_to_gb(bytes_value):
     return round(bytes_value / (1024 ** 3), 2)
-
-def decode_base64_url(text):
-    """ Base64 Encrypted Outline URL များကို ဖြည်ရန် စနစ် """
-    try:
-        clean_text = text.replace("ss://", "").split("#")[0].split("@")[0]
-        clean_text += "=" * ((4 - len(clean_text) % 4) % 4)
-        return base64.b64decode(clean_text).decode('utf-8', errors='ignore')
-    except:
-        return ""
 
 # /start Command
 @bot.message_handler(commands=['start'])
@@ -57,47 +47,35 @@ def handle_all_messages(message):
         key_id = None
         target_key = None
 
-        # ၁။ Link ထဲတွင် outline=ID တိုက်ရိုက်ပါမပါ စစ်ဆေးခြင်း
-        match_outline = re.search(r'outline=(\d+)', input_value)
-        if match_outline:
-            key_id = match_outline.group(1)
-        
-        # ၂။ မတွေ့ပါက Base64 URL အား ဖြည်၍ Server ထဲက Key အစစ်ဖြင့် တိုက်စစ်ခြင်း
-        if not key_id and input_value.startswith("ss://"):
-            decoded_str = decode_base64_url(input_value)
-            for key in keys_data:
-                server_access_url = key.get("accessUrl", "")
-                if server_access_url:
-                    clean_server_url = server_access_url.replace("ss://", "").split("#")[0]
-                    if clean_server_url in input_value or (decoded_str and decoded_str in server_access_url):
-                        target_key = key
+        if "#" in input_value:
+            try:
+                raw_name = input_value.split("#")[1]
+                clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
+                
+                for key in keys_data:
+                    k_name = key.get("name", "").lower()
+                    if clean_name and clean_name in k_name:
                         key_id = str(key.get("id"))
+                        target_key = key
+                        break
+            except Exception as e:
+                print(f"Error parsing name: {e}")
+
+        if not key_id:
+            match_outline = re.search(r'outline=(\d+)', input_value)
+            extracted_id = match_outline.group(1) if match_outline else re.search(r'\d+', input_value).group(0) if re.search(r'\d+', input_value) else None
+            
+            if extracted_id:
+                for key in keys_data:
+                    if str(key.get("id")) == str(extracted_id):
+                        key_id = str(key.get("id"))
+                        target_key = key
                         break
 
-        # ၃။ အကယ်၍ ID သီးသန့် ပို့လာပါက
-        if not key_id:
-            match_numeric = re.search(r'^\d+$', input_value)
-            if match_numeric:
-                key_id = match_numeric.group(0)
-
-        # ID တွေ့ရှိပြီး target_key မသတ်မှတ်ရသေးပါက Server Data ထဲမှ ထပ်ရှာခြင်း
-        if key_id and not target_key:
-            for key in keys_data:
-                if str(key.get("id")) == str(key_id):
-                    target_key = key
-                    break
-
-        # စစ်ဆေးမည့် Key အစစ်အမှန်အား တွေ့ရှိပါက Result ထုတ်ပေးခြင်း
-        if target_key:
+        if key_id and target_key:
             full_name = target_key.get("name", "HMA User")
-            key_id = str(target_key.get("id"))
+            display_name = full_name.split("tg")[0].replace("_", " ").strip()
             
-            # နာမည်ကို သန့်စင်ခြင်း (tg သို့မဟုတ် Tg မတိုင်ခင်အပိုင်းအား ယူခြင်း)
-            display_name = full_name.split("tg")[0].split("Tg")[0].replace("_", " ").strip()
-            if not display_name:
-                display_name = "HMA Customer"
-            
-            # ရက်စွဲအား နာမည်အမှန်ထဲမှ ရှာဖွေတွက်ချက်ပြီး 0 ဖြုတ်ခြင်း
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
             if date_match:
                 end_date_raw = date_match.group(0)
@@ -124,7 +102,7 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # Telegram မှ စာသားမကျုံ့နိုင်အောင် Monospace Box ဖြင့် စာကြောင်းချင်းစီ ညီညာစွာ ပြသခြင်း
+            # Telegram မှ စာသားကျုံ့ပစ်သည့်စနစ်အား မသုံးနိုင်အောင် Code Block (```) ဖြင့် ညီညာစွာ ဝန်းရံထားခြင်း
             result_text = (
                 f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
@@ -136,7 +114,7 @@ def handle_all_messages(message):
             )
             bot.reply_to(message, result_text, parse_mode="MarkdownV2")
         else:
-            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် သို့မဟုတ် Server တွင် မရှိသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
             
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
