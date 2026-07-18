@@ -118,7 +118,7 @@ def handle_payment_screenshot(message):
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']}\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
         f"⏰ ပေးပို့သည့်အချိန်: {current_time}\n"
-      
+        f"📢 ပြေစာရှိ ID ကို စစ်ဆေးပါ။
        
     )
     
