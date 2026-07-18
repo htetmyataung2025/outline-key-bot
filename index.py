@@ -266,11 +266,14 @@ def handle_all_messages(message):
             usage_gb = bytes_to_gb(usage_bytes)
             
             result_text = (
+               f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
                 f"📅 Start Date: {start_date}\n"
                 f"⏳ End Date: {end_date}\n"
                 f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
+                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB\n"
+                f"```"
+
             )
             bot.reply_to(message, result_text)
         else:
