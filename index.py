@@ -118,8 +118,8 @@ def handle_payment_screenshot(message):
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']}\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
         f"⏰ ပေးပို့သည့်အချိန်: {current_time}\n"
-        f"📢 ပြေစာရှိ ID ကို စစ်ဆေးပါ။
-       
+        f"🆔 User Chat ID: {chat_id}\n\n"
+        f"📢 ပြေစာရှိ IDကို စစ်ဆေးပါ။"
     )
     
     try:
@@ -156,9 +156,9 @@ def handle_all_messages(message):
                 # HTML Mode ၏ <code> tag ဖြင့် Key အား နှိပ်လိုက်ရုံဖြင့် အလိုအလျောက် ကူးယူနိုင်အောင် ပြင်ဆင်ခြင်း
                 success_message = (
                     f"🎉 <b>လူကြီးမင်း၏ Ngwelweမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီဗျာ!</b>\n\n"
-                    f"🔑 <b>သင်၏ VPN Key လင့်ခ်မှာ အောက်ပါအတိုင်း ဖြစ်ပါသည်:</b>\n\n"
+                    f"🔑 <b>သင်၏ VPN Key လင့်ခ်မှာ အောက်ပါအတိုင်း ဖြစ်ပါသည်:<</b>\n\n"
                     f"<code>{input_value}</code>\n\n"
-                    f"👉 အထက်ပါ ကီးလေးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ဗျာ။ ဆော့ဖ်ဝဲထဲတွင် ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
+                    f"👉 အထက်ပါ ကီးလင့်ခ်ပြာပြာလေးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ဗျာ။ ဆော့ဖ်ဝဲထဲတွင် ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
                 bot.reply_to(message, "✅ Customer ထံသို့ VPN Key အား Auto-Copy format ဖြင့် အောင်မြင်စွာ လှမ်းပို့ပေးလိုက်ပါပြီဗျာ။")
