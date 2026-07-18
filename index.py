@@ -1,8 +1,9 @@
-Import os
+import os
 import requests
 from flask import Flask, request, jsonify
 import telebot
 import re
+import base64
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
@@ -17,6 +18,14 @@ requests.packages.urllib3.disable_warnings()
 
 def bytes_to_gb(bytes_value):
     return round(bytes_value / (1024 ** 3), 2)
+
+def clean_ss_url(url_str):
+    """ URL ထဲမှ မလိုအပ်သော outline params နှင့် # tags များကို ဖြတ်ထုတ်၍ main base64 key သီးသန့်ထုတ်ရန် """
+    if not url_str:
+        return ""
+    # ss:// ဖြုတ်၊ # tag ဖြုတ်၊ ?outline= ဖြုတ်ပြီး သန့်စင်ခြင်း
+    main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
+    return main_part.strip()
 
 # /start Command
 @bot.message_handler(commands=['start'])
@@ -44,38 +53,57 @@ def handle_all_messages(message):
         keys_data = keys_resp.json().get("accessKeys", [])
         bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
 
-        key_id = None
         target_key = None
 
+        # ၁။ အကယ်၍ ကီးနောက်မှာ # ခံပြီး နာမည်ပါလာပါက နာမည်ဖြင့် အရင်ရှာခြင်း
         if "#" in input_value:
             try:
                 raw_name = input_value.split("#")[1]
+                # နာမည်ထဲက space တွေ သင်္ကေတတွေကို ရှင်းလင်းပြီး lowercase ပြောင်း
                 clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
                 
-                for key in keys_data:
-                    k_name = key.get("name", "").lower()
-                    if clean_name and clean_name in k_name:
-                        key_id = str(key.get("id"))
-                        target_key = key
-                        break
+                if clean_name:
+                    for key in keys_data:
+                        k_name = key.get("name", "").lower()
+                        if clean_name in k_name:
+                            target_key = key
+                            break
             except Exception as e:
-                print(f"Error parsing name: {e}")
+                print(f"Name match error: {e}")
 
-        if not key_id:
-            match_outline = re.search(r'outline=(\d+)', input_value)
-            extracted_id = match_outline.group(1) if match_outline else re.search(r'\d+', input_value).group(0) if re.search(r'\d+', input_value) else None
+        # ၂။ နာမည်ဖြင့် ရှာမတွေ့ပါက သို့မဟုတ် # နာမည်မပါလာပါက တကယ့် URL internal string ဖြင့် ကွက်တိတိုက်စစ်ခြင်း
+        if not target_key and input_value.startswith("ss://"):
+            input_clean = clean_ss_url(input_value)
             
-            if extracted_id:
-                for key in keys_data:
-                    if str(key.get("id")) == str(extracted_id):
-                        key_id = str(key.get("id"))
+            for key in keys_data:
+                server_access_url = key.get("accessUrl", "")
+                if server_access_url:
+                    server_clean = clean_ss_url(server_access_url)
+                    # ပေးပို့လာသော key string နှင့် server ထဲက key string တူညီမှု ရှိမရှိ စစ်ဆေးခြင်း
+                    if input_clean and (input_clean in server_clean or server_clean in input_clean):
                         target_key = key
                         break
 
-        if key_id and target_key:
+        # ၃။ အကယ်၍ numeric ID သီးသန့် ပို့လာပါက
+        if not target_key:
+            match_numeric = re.search(r'^\d+$', input_value)
+            if match_numeric:
+                for key in keys_data:
+                    if str(key.get("id")) == str(match_numeric.group(0)):
+                        target_key = key
+                        break
+
+        # စစ်ဆေးမည့် Key အစစ်အမှန်အား တွေ့ရှိပါက Result ထုတ်ပေးခြင်း
+        if target_key:
             full_name = target_key.get("name", "HMA User")
-            display_name = full_name.split("tg")[0].replace("_", " ").strip()
+            key_id = str(target_key.get("id"))
             
+            # နာမည်ကို သန့်စင်ခြင်း (tg သို့မဟုတ် Tg မတိုင်ခင်အပိုင်းအား ယူခြင်း)
+            display_name = full_name.split("tg")[0].split("Tg")[0].replace("_", " ").strip()
+            if not display_name:
+                display_name = "HMA Customer"
+            
+            # ရက်စွဲအား နာမည်အမှန်ထဲမှ ရှာဖွေတွက်ချက်ပြီး 0 ဖြုတ်ခြင်း
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
             if date_match:
                 end_date_raw = date_match.group(0)
@@ -102,7 +130,7 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # Telegram မှ စာသားကျုံ့ပစ်သည့်စနစ်အား မသုံးနိုင်အောင် Code Block (```) ဖြင့် ညီညာစွာ ဝန်းရံထားခြင်း
+            # Monospace Box ဖြင့် စာကြောင်းချင်းစီ ညီညာစွာ ပြသခြင်း
             result_text = (
                 f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
@@ -114,7 +142,7 @@ def handle_all_messages(message):
             )
             bot.reply_to(message, result_text, parse_mode="MarkdownV2")
         else:
-            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် သို့မဟုတ် Server တွင် မရှိသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
             
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
