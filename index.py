@@ -124,7 +124,7 @@ def handle_buy_callback(call):
         bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
 
-# Screenshot Received (အစ်ကို့ဆီ Plan နောက်က GB ကော၊ ပုံထဲက နာရီအချိန်အမှန်ပါ တွဲပြပေးမည့်အပိုင်း)
+# Screenshot Received (အစ်ကို့ဆီ အချိန်မပါဘဲ ရက်စွဲသီးသန့်ပဲ ပြပေးမည့်အပိုင်း)
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     chat_id = message.chat.id
@@ -135,16 +135,16 @@ def handle_payment_screenshot(message):
     user_plans = load_user_plans()
     plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "data": "မသိရှိပါ", "price": "မသိရှိပါ"})
     
-    # 🕒 ပုံထဲကပြတဲ့ အချိန်အမှန်အတိုင်း ရရှိရန် (Telegram Message Date ကို အခြေခံ၍ တွက်ချက်ခြင်း)
-    current_time = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y %I:%M %p")
+    # 📅 အချိန်ကိုဖြုတ်ပြီး ရက်စွဲသီးသန့်ပဲ ထုတ်ယူခြင်း
+    current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
     # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ
     admin_alert_text = (
-        f"💰 Ngွေလွှဲပြေစာအသစ်\n"
+        f"💰 ငွေလွှဲပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
-        f"⏰ ပေးပို့သည့်အချိန်: {current_time}\n"
+        f"📅 ပေးပို့သည့်ရက်စွဲ: {current_date}\n"
         f"🆔 User Chat ID: {chat_id}\n"
         f"📢 ပြေစာရှိ ID ကို သေချာစစ်ဆေးပါ။"
     )
