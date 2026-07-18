@@ -110,7 +110,7 @@ def handle_all_messages(message):
                 f"👤 **အသုံးပြုသူ:** {display_name}\n"
                
                 f"📅 **Start Date:** {start_date}\n"
-                f"\n"
+               
                 f"⏳ **End Date:** {end_date}\n"
           
                 f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n"
