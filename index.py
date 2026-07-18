@@ -62,10 +62,13 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
+    # 🎁 Public Free Key ခလုတ်အသစ်ကိုပါ အောက်ခြေတွင် တစ်ခါတည်း ပေါ်နေအောင် ထည့်သွင်းခြင်း
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
+    btn_free = KeyboardButton("🎁 Public Free Key")
     markup.add(btn_buy, btn_check)
+    markup.add(btn_free) # တတိယမြောက်ခလုတ်အဖြစ် အောက်တွင် သီးသန့်ပြသခြင်း
     return markup
 
 def get_plan_keyboard():
@@ -108,7 +111,7 @@ def handle_buy_callback(call):
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
@@ -118,13 +121,13 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
 
-# Screenshot Received (အစ်ကို့ဆီ အချိန်မပါဘဲ ရက်စွဲသီးသန့်ပဲ ပြပေးမည့်အပိုင်း)
+# Screenshot Received
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     chat_id = message.chat.id
@@ -140,7 +143,7 @@ def handle_payment_screenshot(message):
 
     # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ
     admin_alert_text = (
-        f"💰 ငွေလွှဲပြေစာအသစ်\n"
+        f"💰 Ngwelweပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
@@ -151,7 +154,7 @@ def handle_payment_screenshot(message):
     
     try:
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
+        bot.reply_to(message, "⏳ Ngwelweပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -173,6 +176,17 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
+    # 🎁 Public Free Key ခလုတ်နှိပ်ခြင်းကို ဖမ်းယူတုံ့ပြန်မှုပေးခြင်း
+    if input_value == "🎁 Public Free Key":
+        free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
+        free_text = (
+            f"🎁 <b>H & E FEATURE VPN အခမဲ့သုံးစွဲနိုင်သော Key ဖြစ်ပါတယ်ဗျာ။</b>\n\n"
+            f"<code>{free_key}</code>\n\n"
+            f"☝️ အပေါ်က ကီးစာတန်းအပြာလေးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
+        )
+        bot.send_message(chat_id, free_text, parse_mode="HTML")
+        return
+
     # ADMIN REPLY BYPASS SYSTEM 
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
         reply_caption = message.reply_to_message.caption
@@ -181,7 +195,7 @@ def handle_all_messages(message):
                 target_user_id = re.search(r'User Chat ID:\s*(\d+)', reply_caption).group(1)
                 
                 success_message = (
-                    f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
+                    f"🎉 <b>Ngwelweမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
                     f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Key ကို အောက်တွင် ရယူနိုင်ပါပြီ။</b>\n\n"
                     f"<code>{input_value}</code>\n\n"
                     f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
@@ -265,7 +279,6 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-           # Result Display
             result_text = (
                 f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
