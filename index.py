@@ -22,51 +22,70 @@ def send_welcome(message):
 @bot.message_handler(commands=['usage'])
 def get_usage(message):
     try:
-        response = requests.get(f"{OUTLINE_API_URL}/metrics/transfer", verify=False, timeout=10)
-        data = response.json()
-        bytes_transferred = data.get("bytesTransferredByUserId", {})
+        # API များမှ Data ဆွဲယူခြင်း
+        keys_resp = requests.get(f"{OUTLINE_API_URL}/access-keys", verify=False, timeout=10)
+        metrics_resp = requests.get(f"{OUTLINE_API_URL}/metrics/transfer", verify=False, timeout=10)
+        
+        keys_data = keys_resp.json().get("accessKeys", [])
+        bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
 
         args = message.text.split()[1:]
         if args:
             input_value = args[0]
-            key_id = input_value
-            
-            # အကယ်၍ ss:// link အပြည့်အစုံ ပါလာပါက 
-            if "ss://" in input_value or "outline=" in input_value:
-                import re
-                # နည်းလမ်း (၁): outline=X ကို အရင်ရှာမည်
-                match_outline = re.search(r'outline=(\d+)', input_value)
-                # နည်းလမ်း (၂): Link ထဲမှာ တစ်ခြားနံပါတ် ဥပမာ /5/ သို့မဟုတ် id=5 ပါရင် ရှာရန်
-                match_id = re.search(r'(?:id=|/access-keys/|/)(\d+)(?:[?#]|$)', input_value)
-                
-                # အစ်ကို့ Link ထဲမှာ Thu_Ya က ID 5 ဖြစ်ပေမယ့် outline=1 ဖြစ်နေရင် 
-                # အမည် (#Thu_Ya) ကိုပါ စစ်ပြီး metrics ထဲက ဆွဲထုတ်ဖို့ ကြိုးစားခြင်း
-                if "#" in input_value:
-                    try:
-                        name_tag = input_value.split("#")[1].strip()
-                        # အကယ်၍ အမည်ကို metrics သို့မဟုတ် access-keys ထဲမှာ တိုက်ရိုက်ရှာလို့ရလျှင် ရှာမည်
-                        # ဒါပေမယ့် metrics/transfer ထဲမှာက ID နံပါတ်ပဲ ပါတာမို့ access-keys API ကိုပါ လှမ်းခေါ်ပြီး ID ရှာပါမယ်
-                        keys_resp = requests.get(f"{OUTLINE_API_URL}/access-keys", verify=False, timeout=10)
-                        keys_data = keys_resp.json().get("accessKeys", [])
-                        for key in keys_data:
-                            if name_tag.lower() in key.get("name", "").lower():
-                                key_id = key.get("id")
-                                break
-                    except:
-                        pass
-                
-                # အပေါ်က အမည်နဲ့ ရှာမတွေ့မှ Link ထဲက နံပါတ်ကို ယူမည်
-                if key_id == input_value:
-                    if match_outline:
-                        key_id = match_outline.group(1)
-                    elif match_id:
-                        key_id = match_id.group(1)
+            key_id = None
+            found_name = None
 
-            usage_bytes = bytes_transferred.get(str(key_id), 0)
-            usage_gb = bytes_to_gb(usage_bytes)
-            bot.reply_to(message, f"🔑 **Key ID:** {key_id}\n📊 **Data Used:** {usage_gb} GB")
+            # အကယ်၍ Link format ဖြင့် ပေးပို့လာပါက (# အနောက်က နာမည်ကို အဓိက ရှာဖွေမည်)
+            if "#" in input_value:
+                try:
+                    # # အနောက်က အစိတ်အပိုင်းကို ယူပြီး ဉပမာ အလံ Emoji များ သို့မဟုတ် စာလုံးဆန်းများကို ဖယ်ထုတ်၍ စာသား သန့်စင်ခြင်း
+                    raw_name = input_value.split("#")[1]
+                    import re
+                    # အင်္ဂလိပ်စာလုံး၊ ဂဏန်းနှင့် Space, Underline တို့ကိုပဲ ယူမည်
+                    clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
+                    
+                    # Outline Access Keys ထဲတွင် ထိုနာမည် ပါဝင်မှု ရှိ၊ မရှိ ပတ်ရှာခြင်း
+                    for key in keys_data:
+                        k_name = key.get("name", "").lower()
+                        # clean_name (ဥပမာ "thu ya") သည် key name (ဥပမာ "thu ya tg 18.8.2026") ထဲမှာ ပါသလား စစ်ဆေးခြင်း
+                        if clean_name and clean_name in k_name:
+                            key_id = str(key.get("id"))
+                            found_name = key.get("name")
+                            break
+                except Exception as e:
+                    print(f"Error parsing name: {e}")
+
+            # အကယ်၍ နာမည်ဖြင့် ရှာမတွေ့ခဲ့ပါက (သို့မဟုတ်) Link မဟုတ်ဘဲ ID သီးသန့် ရိုက်ထည့်လာပါက
+            if not key_id:
+                import re
+                # Link ထဲတွင် outline=X ပါက X ကို ယူရန် ကြိုးစားခြင်း
+                match_outline = re.search(r'outline=(\d+)', input_value)
+                if match_outline:
+                    key_id = match_outline.group(1)
+                else:
+                    # ဂဏန်းသီးသန့် (ဥပမာ /usage 5) ဆိုလျှင် ထိုဂဏန်းကို ယူမည်
+                    match_numeric = re.search(r'\d+', input_value)
+                    if match_numeric:
+                        key_id = match_numeric.group(0)
+
+            # စစ်ဆေးမည့် ID ကို ရှာဖွေတွေ့ရှိပါက Data Usage ပြသခြင်း
+            if key_id:
+                # အကယ်၍ နာမည်ကိုပါ သိခဲ့လျှင် Name ပါ ပြမည်၊ မသိလျှင် ID သာ ပြမည်
+                if not found_name:
+                    for key in keys_data:
+                        if str(key.get("id")) == str(key_id):
+                            found_name = key.get("name")
+                            break
+                
+                name_display = found_name if found_name else f"Key {key_id}"
+                usage_bytes = bytes_transferred.get(str(key_id), 0)
+                usage_gb = bytes_to_gb(usage_bytes)
+                
+                bot.reply_to(message, f"👤 **User:** {name_display} (ID: {key_id})\n📊 **Data Used:** {usage_gb} GB")
+            else:
+                bot.reply_to(message, "❌ Key ID သို့မဟုတ် Key Link ကို စနစ်တကျ ရှာဖွေ၍ မရနိုင်ပါသဖြင့် ပြန်လည်စစ်ဆေးပေးပါ။")
         else:
-            bot.reply_to(message, "💡 ကျေးဇူးပြု၍ Key ID (သို့မဟုတ်) Key Link ထည့်ပေးပါ။ ဥပမာ - `/usage 5`")
+            bot.reply_to(message, "💡 ကျေးဇူးပြု၍ Key ID (သို့မဟုတ်) Key Link ထည့်ပေးပါ။ ဥပမာ - `/usage 5` သို့မဟုတ် `/usage ss://...`")
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
 
