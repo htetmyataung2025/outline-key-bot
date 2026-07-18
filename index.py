@@ -2,6 +2,7 @@ import os
 import requests
 from flask import Flask, request, jsonify
 import telebot
+import re
 
 app = Flask(__name__)
 
@@ -15,25 +16,22 @@ requests.packages.urllib3.disable_warnings()
 def bytes_to_gb(bytes_value):
     return round(bytes_value / (1024 ** 3), 2)
 
-# /start Command (လမ်းညွှန်စာသားကို ပိုရှင်းအောင် ပြင်ဆင်ထားပါတယ်)
+# /start Command 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = (
         "👋 မင်္ဂလာပါ! HMA VPN Data Usage Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "📊 သင့်ရဲ့ VPN Data အသုံးပြုမှုကို စစ်ဆေးရန်အတွက် ဘာ Command မှ ရိုက်စရာမလိုပါဘူးဗျာ။\n\n"
-        "👇 **သင့်ရဲ့ VPN Key (သို့မဟုတ်) ID ကို Chat ထဲသို့ တိုက်ရိုက် ပို့ပေးလိုက်ပါ:**\n"
-        "1. `ss://...` (သင့်ရဲ့ VPN Key Link ကြီးတစ်ခုလုံးကို တန်းပြီး Paste ချပို့နိုင်ပါတယ်)\n"
-        "2. `5` (သင့်ရဲ့ Key ID နံပါတ်တစ်ခုတည်းကိုလည်း တန်းပို့ပြီး စစ်နိုင်ပါတယ်)"
+        "📊 သင့်ရဲ့ VPN သက်တမ်းနဲ့ Data အသုံးပြုမှုကို စစ်ဆေးရန်အတွက် ဘာ Command မှ ရိုက်စရာမလိုပါဘူးဗျာ။\n\n"
+        "👇 **သင့်ရဲ့ VPN Key Link ကို Chat ထဲသို့ တိုက်ရိုက် ပို့ပေးလိုက်ပါ:**\n"
+        "👉 `ss://...` (သင့်ရဲ့ VPN Key Link ကြီးတစ်ခုလုံးကို တန်းပြီး Paste ချပို့နိုင်ပါတယ်)"
     )
     bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
-# စာသား သို့မဟုတ် Key Link များ တန်းပို့လာပါက ဖမ်းယူစစ်ဆေးပေးမည့်စနစ် (Command မလိုပါ)
+# စာသား သို့မဟုတ် Key Link များ တန်းပို့လာပါက ဖမ်းယူစစ်ဆေးပေးမည့်စနစ်
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
-    # User ပို့လိုက်တဲ့ စာသား (Link သို့မဟုတ် ID)
     input_value = message.text.strip()
     
-    # /start သို့မဟုတ် အခြား command တွေမှားဝင်လာရင် ကျော်သွားရန်
     if input_value.startswith('/'):
         return
 
@@ -46,55 +44,68 @@ def handle_all_messages(message):
         bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
 
         key_id = None
-        found_name = None
+        target_key = None
 
-        # အကယ်၍ Link format ဖြင့် ပေးပို့လာပါက
+        # အကယ်၍ Link format ဖြင့် ပေးပို့လာပါက နာမည်ကို ဖြတ်ယူပြီး တိုက်စစ်ခြင်း
         if "#" in input_value:
             try:
                 raw_name = input_value.split("#")[1]
-                import re
                 clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
                 
                 for key in keys_data:
                     k_name = key.get("name", "").lower()
                     if clean_name and clean_name in k_name:
                         key_id = str(key.get("id"))
-                        found_name = key.get("name")
+                        target_key = key
                         break
             except Exception as e:
                 print(f"Error parsing name: {e}")
 
-        # အကယ်၍ နာမည်ဖြင့် ရှာမတွေ့ခဲ့ပါက သို့မဟုတ် ID သီးသန့် ရိုက်ထည့်လာပါက
+        # နာမည်ဖြင့် ရှာမတွေ့လျှင် သို့မဟုတ် ID တန်းပို့လာလျှင် ID ဖြင့် ပြန်ရှာခြင်း
         if not key_id:
-            import re
             match_outline = re.search(r'outline=(\d+)', input_value)
-            if match_outline:
-                key_id = match_outline.group(1)
-            else:
-                match_numeric = re.search(r'\d+', input_value)
-                if match_numeric:
-                    key_id = match_numeric.group(0)
-
-        # စစ်ဆေးမည့် ID ကို ရှာဖွေတွေ့ရှိပါက Data Usage ပြသခြင်း
-        if key_id:
-            if not found_name:
-                for key in keys_data:
-                    if str(key.get("id")) == str(key_id):
-                        found_name = key.get("name")
-                        break
+            extracted_id = match_outline.group(1) if match_outline else re.search(r'\d+', input_value).group(0) if re.search(r'\d+', input_value) else None
             
-            name_display = found_name if found_name else f"Key {key_id}"
+            if extracted_id:
+                for key in keys_data:
+                    if str(key.get("id")) == str(extracted_id):
+                        key_id = str(key.get("id"))
+                        target_key = key
+                        break
+
+        # စစ်ဆေးမည့် Key ကို ရှာဖွေတွေ့ရှိပါက
+        if key_id and target_key:
+            full_name = target_key.get("name", "HMA User")
+            
+            # ၁။ Key ID ကို ဖျောက်ပြီး Display ပြုလုပ်ရန် နာမည်ကို သန့်စင်ခြင်း (ဥပမာ- "Thu Ya" သာပြမည်)
+            display_name = full_name.split("tg")[0].replace("_", " ").strip()
+            
+            # ၂။ End Date ကို နာမည်ထဲက ရက်စွဲ (ဥပမာ- 18.8.2026) မှ ရှာဖွေဖြတ်ယူခြင်း
+            date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
+            end_date = date_match.group(0) if date_match else "သတ်မှတ်မထားပါ"
+            start_date = "စတင်ဝယ်ယူသည့်နေ့" if date_match else "သတ်မှတ်မထားပါ"
+
+            # ၃။ Data Limit (Plan) ကို ယူခြင်း
+            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+            if limit_bytes:
+                plan_gb = f"{bytes_to_gb(limit_bytes)} GB"
+            else:
+                plan_gb = "Unlimited"
+
+            # ၄။ အသုံးပြုပြီးသား Data Usage တွက်ချက်ခြင်း
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
             result_text = (
-                f"👤 **အသုံးပြုသူ:** {name_display}\n"
-                f"🔑 **Key ID:** {key_id}\n"
+                f"👤 **အသုံးပြုသူ:** {display_name}\n"
+                f"📅 **Start Date:** {start_date}\n"
+                f"⏳ **End Date:** {end_date}\n"
+                f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n"
                 f"📊 **အသုံးပြုပြီးသား Data:** {usage_gb} GB"
             )
             bot.reply_to(message, result_text, parse_mode="Markdown")
         else:
-            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link သို့မဟုတ် ID မှားယွင်းနေသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
             
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
