@@ -114,7 +114,7 @@ def handle_all_messages(message):
                 f"⏳ **End Date:** {end_date}\n"
                 f"\n"
                 f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n"
-                f"\n"
+                
                 f"📊 **အသုံးပြုပြီးသား Data:** {usage_gb} GB"
             )
             bot.reply_to(message, result_text, parse_mode="Markdown")
