@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 
 app = Flask(__name__)
 
-# API Link နှင့် Token ကို ကုဒ်ထဲတွင် တိုက်ရိုက်ထည့်သွင်းထားခြင်း
+# Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 OUTLINE_API_URL = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 
@@ -38,7 +38,6 @@ def handle_all_messages(message):
         return
 
     try:
-        # API များမှ Data ဆွဲယူခြင်း
         keys_resp = requests.get(f"{OUTLINE_API_URL}/access-keys", verify=False, timeout=10)
         metrics_resp = requests.get(f"{OUTLINE_API_URL}/metrics/transfer", verify=False, timeout=10)
         
@@ -48,7 +47,6 @@ def handle_all_messages(message):
         key_id = None
         target_key = None
 
-        # အကယ်၍ Link format ဖြင့် ပေးပို့လာပါက နာမည်ကို ဖြတ်ယူပြီး တိုက်စစ်ခြင်း
         if "#" in input_value:
             try:
                 raw_name = input_value.split("#")[1]
@@ -63,7 +61,6 @@ def handle_all_messages(message):
             except Exception as e:
                 print(f"Error parsing name: {e}")
 
-        # နာမည်ဖြင့် ရှာမတွေ့လျှင် သို့မဟုတ် ID တန်းပို့လာလျှင် ID ဖြင့် ပြန်ရှာခြင်း
         if not key_id:
             match_outline = re.search(r'outline=(\d+)', input_value)
             extracted_id = match_outline.group(1) if match_outline else re.search(r'\d+', input_value).group(0) if re.search(r'\d+', input_value) else None
@@ -75,14 +72,10 @@ def handle_all_messages(message):
                         target_key = key
                         break
 
-        # စစ်ဆေးမည့် Key ကို ရှာဖွေတွေ့ရှိပါက
         if key_id and target_key:
             full_name = target_key.get("name", "HMA User")
-            
-            # ၁။ နာမည်ကို သန့်စင်ခြင်း
             display_name = full_name.split("tg")[0].replace("_", " ").strip()
             
-            # ၂။ End Date ကို ရှာဖွေပြီး ၁ လ နောက်ပြန်ဆုတ်ကာ Start Date တွက်ချက်ခြင်း
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
             if date_match:
                 end_date_str = date_match.group(0)
@@ -97,18 +90,16 @@ def handle_all_messages(message):
                 end_date = "သတ်မှတ်မထားပါ"
                 start_date = "သတ်မှတ်မထားပါ"
 
-            # ၃။ Data Limit (Plan) ကို ယူခြင်း
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
             if limit_bytes:
                 plan_gb = f"{bytes_to_gb(limit_bytes)} GB"
             else:
                 plan_gb = "Unlimited"
 
-            # ၄။ အသုံးပြုပြီးသား Data Usage တွက်ချက်ခြင်း
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # 📊 စာကြောင်း ၅ ကြောင်းလုံးကြားတွင် Space တစ်ကြောင်းစီ ညီညီညာညာ ကွက်တိ ခြားပေးထားသောပုံစံ
+            # 📊 ညီညာမှုကို ထိန်းညှိရန် String Format ပြင်ဆင်ခြင်း (\n\n ကို တိတိကျကျ စာကြောင်းတိုင်းကြား ထည့်ထားသည်)
             result_text = (
                 f"👤 **အသုံးပြုသူ:** {display_name}\n\n"
                 f"📅 **Start Date:** {start_date}\n\n"
