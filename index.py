@@ -14,7 +14,7 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 OUTLINE_API_URL = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 
-# 🔑 အစ်ကို့ရဲ့ Telegram Chat ID အမှန်
+# 🔑 အစ်ကို့ရဲ့ Telegram Chat ID
 ADMIN_CHAT_ID = "8778394176"  
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
@@ -33,7 +33,6 @@ PLANS = {
 }
 
 def bytes_to_gb(bytes_value):
-    # Outline Manager အတိုင်း ကွက်တိတူညီစေရန် 1 GB = 1,000,000,000 bytes ဖြင့် တွက်ချက်ခြင်း
     return round(bytes_value / (1000 ** 3), 2)
 
 def clean_ss_url(url_str):
@@ -43,7 +42,6 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    """ အောက်ခြေတွင် အမြဲပေါ်နေမည့် ပုံသေ Menu Button အလှများ """
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
@@ -83,7 +81,7 @@ def handle_buy_callback(call):
     chat_id = call.message.chat.id
     
     if plan:
-        user_selected_plans[chat_id] = plan['name']
+        user_selected_plans[chat_id] = plan
         payment_text = (
             f"✅ **သင်ရွေးချယ်ထားသော Plan:**\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
@@ -104,25 +102,34 @@ def handle_buy_callback(call):
         bot.send_message(chat_id, payment_text, parse_mode="Markdown")
         bot.answer_callback_query(call.id)
 
-# Screenshot Received
+# Screenshot Received (အစ်ကို့ဆီ အချက်အလက် တန်းပို့ပေးမည့်အပိုင်း)
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     chat_id = message.chat.id
     user_name = message.from_user.first_name if message.from_user.first_name else "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
     
-    selected_plan = user_selected_plans.get(chat_id, "သတ်မှတ်မထားသော Plan")
-    
+    # ၎င်း User ရွေးထားသည့် Plan အချက်အလက်
+    plan_info = user_selected_plans.get(chat_id, {"name": "သတ်မှတ်မထားသော Plan", "price": "မသိရှိပါ"})
+    current_time = datetime.now().strftime("%d/%m/%Y %I:%M %p")
+
+    # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ
     admin_alert_text = (
-        f"💰 **ငွေလွှဲပြေစာ အသစ်ရရှိပါသည်!**\n\n"
-        f"👤 **ဝယ်ယူသူ:** {user_name} ({username})\n"
-        f"🆔 **User Chat ID:** `{chat_id}`\n"
-        f"📦 **ရွေးချယ်ထားသော Plan:** {selected_plan}\n\n"
-        f"📢 *အထက်ပါ Screenshot ကို စစ်ဆေးပြီး အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်၍ VPN Key (ss://...) အား ပို့ပေးလိုက်ပါဗျာ။*"
+        f"💰 **ငွေလွှဲပြေစာ အသစ်ရောက်ရှိလာပါပြီ!**\n\n"
+        f"👤 **ဝယ်ယူသူနာမည်:** {user_name} ({username})\n"
+        f"📦 **ရွေးချယ်ထားသော Plan:** {plan_info['name']}\n"
+        f"💵 **ကျသင့်ငွေပမာဏ:** {plan_info['price']}\n"
+        f"⏰ **ပေးပို့သည့်အချိန်:** {current_time}\n"
+        f"🆔 **User Chat ID:** `{chat_id}`\n\n"
+        f"📢 *ပြေစာရှိ ID ၅ လုံးကို စစ်ဆေးပါ။ အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်ပြီး VPN Key (ss://...) ကို ရိုက်ပို့ပေးလိုက်ပါဗျာ။*"
     )
     
-    bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="Markdown")
-    bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား လက်ခံရရှိပါပြီဗျာ။ စနစ်မှ အတည်ပြုပြီးသည်နှင့် VPN Key လင့်ခ်အား ဤနေရာသို့ ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
+    try:
+        bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="Markdown")
+        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား လက်ခံရရှိပါပြီဗျာ။ စနစ်မှ အတည်ပြုပြီးသည်နှင့် VPN Key လင့်ခ်အား ဤနေရာသို့ ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
+    except Exception as e:
+        # Bot အား Admin မှ Start မလုပ်ရသေးပါက Customer ဆီသို့ သတိပေးစာပြခြင်း
+        bot.reply_to(message, "❌ စနစ်အတွင်း ယာယီချိတ်ဆက်မှု ပြတ်တောက်နေပါသည်။ ခေတ္တစောင့်ဆိုင်းပြီးမှ ပြန်လည်ပေးပို့ပေးပါရန်။")
 
 # Text/Key Handler
 @bot.message_handler(func=lambda message: True)
@@ -142,7 +149,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide, parse_mode="Markdown")
         return
 
-    # ADMIN REPLY BYPASS SYSTEM (အစ်ကို့ဘက်မှ ပုံကို Reply ပြန်ပြီး ကီးထုတ်ပေးသည့် စနစ်)
+    # ADMIN REPLY BYPASS SYSTEM
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
         reply_caption = message.reply_to_message.caption
         if reply_caption and "User Chat ID:" in reply_caption:
@@ -164,7 +171,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # Outline API Usage Check (စာကြောင်းမကျုံ့သော Monospace စနစ်)
+    # Outline API Usage Check
     try:
         keys_resp = requests.get(f"{OUTLINE_API_URL}/access-keys", verify=False, timeout=10)
         metrics_resp = requests.get(f"{OUTLINE_API_URL}/metrics/transfer", verify=False, timeout=10)
