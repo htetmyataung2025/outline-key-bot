@@ -15,12 +15,28 @@ requests.packages.urllib3.disable_warnings()
 def bytes_to_gb(bytes_value):
     return round(bytes_value / (1024 ** 3), 2)
 
+# /start Command (လမ်းညွှန်စာသားကို ပိုရှင်းအောင် ပြင်ဆင်ထားပါတယ်)
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "👋 မင်္ဂလာပါ! Outline Data Usage Bot အဆင်သင့်ဖြစ်ပါပြီ။\n\n📊 အားလုံးစစ်ရန်: /all\n🔑 သီးသန့်စစ်ရန်: /usage [Key ID]")
+    welcome_text = (
+        "👋 မင်္ဂလာပါ! HMA VPN Data Usage Bot မှ ကြိုဆိုပါတယ်။\n\n"
+        "📊 သင့်ရဲ့ VPN Data အသုံးပြုမှုကို စစ်ဆေးရန်အတွက် ဘာ Command မှ ရိုက်စရာမလိုပါဘူးဗျာ။\n\n"
+        "👇 **သင့်ရဲ့ VPN Key (သို့မဟုတ်) ID ကို Chat ထဲသို့ တိုက်ရိုက် ပို့ပေးလိုက်ပါ:**\n"
+        "1. `ss://...` (သင့်ရဲ့ VPN Key Link ကြီးတစ်ခုလုံးကို တန်းပြီး Paste ချပို့နိုင်ပါတယ်)\n"
+        "2. `5` (သင့်ရဲ့ Key ID နံပါတ်တစ်ခုတည်းကိုလည်း တန်းပို့ပြီး စစ်နိုင်ပါတယ်)"
+    )
+    bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
-@bot.message_handler(commands=['usage'])
-def get_usage(message):
+# စာသား သို့မဟုတ် Key Link များ တန်းပို့လာပါက ဖမ်းယူစစ်ဆေးပေးမည့်စနစ် (Command မလိုပါ)
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    # User ပို့လိုက်တဲ့ စာသား (Link သို့မဟုတ် ID)
+    input_value = message.text.strip()
+    
+    # /start သို့မဟုတ် အခြား command တွေမှားဝင်လာရင် ကျော်သွားရန်
+    if input_value.startswith('/'):
+        return
+
     try:
         # API များမှ Data ဆွဲယူခြင်း
         keys_resp = requests.get(f"{OUTLINE_API_URL}/access-keys", verify=False, timeout=10)
@@ -29,86 +45,59 @@ def get_usage(message):
         keys_data = keys_resp.json().get("accessKeys", [])
         bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
 
-        args = message.text.split()[1:]
-        if args:
-            input_value = args[0]
-            key_id = None
-            found_name = None
+        key_id = None
+        found_name = None
 
-            # အကယ်၍ Link format ဖြင့် ပေးပို့လာပါက (# အနောက်က နာမည်ကို အဓိက ရှာဖွေမည်)
-            if "#" in input_value:
-                try:
-                    # # အနောက်က အစိတ်အပိုင်းကို ယူပြီး ဉပမာ အလံ Emoji များ သို့မဟုတ် စာလုံးဆန်းများကို ဖယ်ထုတ်၍ စာသား သန့်စင်ခြင်း
-                    raw_name = input_value.split("#")[1]
-                    import re
-                    # အင်္ဂလိပ်စာလုံး၊ ဂဏန်းနှင့် Space, Underline တို့ကိုပဲ ယူမည်
-                    clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
-                    
-                    # Outline Access Keys ထဲတွင် ထိုနာမည် ပါဝင်မှု ရှိ၊ မရှိ ပတ်ရှာခြင်း
-                    for key in keys_data:
-                        k_name = key.get("name", "").lower()
-                        # clean_name (ဥပမာ "thu ya") သည် key name (ဥပမာ "thu ya tg 18.8.2026") ထဲမှာ ပါသလား စစ်ဆေးခြင်း
-                        if clean_name and clean_name in k_name:
-                            key_id = str(key.get("id"))
-                            found_name = key.get("name")
-                            break
-                except Exception as e:
-                    print(f"Error parsing name: {e}")
-
-            # အကယ်၍ နာမည်ဖြင့် ရှာမတွေ့ခဲ့ပါက (သို့မဟုတ်) Link မဟုတ်ဘဲ ID သီးသန့် ရိုက်ထည့်လာပါက
-            if not key_id:
+        # အကယ်၍ Link format ဖြင့် ပေးပို့လာပါက
+        if "#" in input_value:
+            try:
+                raw_name = input_value.split("#")[1]
                 import re
-                # Link ထဲတွင် outline=X ပါက X ကို ယူရန် ကြိုးစားခြင်း
-                match_outline = re.search(r'outline=(\d+)', input_value)
-                if match_outline:
-                    key_id = match_outline.group(1)
-                else:
-                    # ဂဏန်းသီးသန့် (ဥပမာ /usage 5) ဆိုလျှင် ထိုဂဏန်းကို ယူမည်
-                    match_numeric = re.search(r'\d+', input_value)
-                    if match_numeric:
-                        key_id = match_numeric.group(0)
+                clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
+                
+                for key in keys_data:
+                    k_name = key.get("name", "").lower()
+                    if clean_name and clean_name in k_name:
+                        key_id = str(key.get("id"))
+                        found_name = key.get("name")
+                        break
+            except Exception as e:
+                print(f"Error parsing name: {e}")
 
-            # စစ်ဆေးမည့် ID ကို ရှာဖွေတွေ့ရှိပါက Data Usage ပြသခြင်း
-            if key_id:
-                # အကယ်၍ နာမည်ကိုပါ သိခဲ့လျှင် Name ပါ ပြမည်၊ မသိလျှင် ID သာ ပြမည်
-                if not found_name:
-                    for key in keys_data:
-                        if str(key.get("id")) == str(key_id):
-                            found_name = key.get("name")
-                            break
-                
-                name_display = found_name if found_name else f"Key {key_id}"
-                usage_bytes = bytes_transferred.get(str(key_id), 0)
-                usage_gb = bytes_to_gb(usage_bytes)
-                
-                bot.reply_to(message, f"👤 **User:** {name_display} (ID: {key_id})\n📊 **Data Used:** {usage_gb} GB")
+        # အကယ်၍ နာမည်ဖြင့် ရှာမတွေ့ခဲ့ပါက သို့မဟုတ် ID သီးသန့် ရိုက်ထည့်လာပါက
+        if not key_id:
+            import re
+            match_outline = re.search(r'outline=(\d+)', input_value)
+            if match_outline:
+                key_id = match_outline.group(1)
             else:
-                bot.reply_to(message, "❌ Key ID သို့မဟုတ် Key Link ကို စနစ်တကျ ရှာဖွေ၍ မရနိုင်ပါသဖြင့် ပြန်လည်စစ်ဆေးပေးပါ။")
+                match_numeric = re.search(r'\d+', input_value)
+                if match_numeric:
+                    key_id = match_numeric.group(0)
+
+        # စစ်ဆေးမည့် ID ကို ရှာဖွေတွေ့ရှိပါက Data Usage ပြသခြင်း
+        if key_id:
+            if not found_name:
+                for key in keys_data:
+                    if str(key.get("id")) == str(key_id):
+                        found_name = key.get("name")
+                        break
+            
+            name_display = found_name if found_name else f"Key {key_id}"
+            usage_bytes = bytes_transferred.get(str(key_id), 0)
+            usage_gb = bytes_to_gb(usage_bytes)
+            
+            result_text = (
+                f"👤 **အသုံးပြုသူ:** {name_display}\n"
+                f"🔑 **Key ID:** {key_id}\n"
+                f"📊 **အသုံးပြုပြီးသား Data:** {usage_gb} GB"
+            )
+            bot.reply_to(message, result_text, parse_mode="Markdown")
         else:
-            bot.reply_to(message, "💡 ကျေးဇူးပြု၍ Key ID (သို့မဟုတ်) Key Link ထည့်ပေးပါ။ ဥပမာ - `/usage 5` သို့မဟုတ် `/usage ss://...`")
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link သို့မဟုတ် ID မှားယွင်းနေသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+            
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
-
-@bot.message_handler(commands=['all'])
-def get_all_usage(message):
-    try:
-        keys_resp = requests.get(f"{OUTLINE_API_URL}/access-keys", verify=False, timeout=10)
-        metrics_resp = requests.get(f"{OUTLINE_API_URL}/metrics/transfer", verify=False, timeout=10)
-        
-        keys_data = keys_resp.json().get("accessKeys", [])
-        bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
-
-        report = "📊 **Outline Keys Data Usage List:**\n\n"
-        for key in keys_data:
-            k_id = key.get("id")
-            name = key.get("name", f"Key {k_id}")
-            usage_bytes = bytes_transferred.get(k_id, 0)
-            usage_gb = bytes_to_gb(usage_bytes)
-            report += f"👤 {name} (ID: {k_id}) -> {usage_gb} GB\n"
-
-        bot.reply_to(message, report)
-    except Exception as e:
-        bot.reply_to(message, f"❌ Data ဆွဲမရပါ- {str(e)}")
 
 # Catch-all Webhook Route
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
