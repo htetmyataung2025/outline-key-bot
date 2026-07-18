@@ -102,7 +102,7 @@ def handle_buy_callback(call):
         bot.send_message(chat_id, payment_text, parse_mode="Markdown")
         bot.answer_callback_query(call.id)
 
-# Screenshot Received (အစ်ကို့ဆီ အချက်အလက် တန်းပို့ပေးမည့်အပိုင်း)
+# Screenshot Received (အစ်ကို့ဆီ အချက်အလက်များကို Text အနေဖြင့် အသေအချာရောက်အောင် ပို့ပေးမည့်အပိုင်း)
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     chat_id = message.chat.id
@@ -112,22 +112,27 @@ def handle_payment_screenshot(message):
     plan_info = user_selected_plans.get(chat_id, {"name": "သတ်မှတ်မထားသော Plan", "price": "မသိရှိပါ"})
     current_time = datetime.now().strftime("%d/%m/%Y %I:%M %p")
 
-    # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ
+    # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ (ID ၅ လုံး စစ်ဆေးရန် အချက်အလက်များ)
     admin_alert_text = (
-        f"💰 **ငွေလွှဲပြေစာ အသစ်ရောက်ရှိလာပါပြီ!**\n\n"
+        f"💰 **ငွေလွှဲပြေစာ အသစ်တစ်ခု ပို့လိုက်ပါပြီ!**\n\n"
         f"👤 **ဝယ်ယူသူနာမည်:** {user_name} ({username})\n"
         f"📦 **ရွေးချယ်ထားသော Plan:** {plan_info['name']}\n"
         f"💵 **ကျသင့်ငွေပမာဏ:** {plan_info['price']}\n"
         f"⏰ **ပေးပို့သည့်အချိန်:** {current_time}\n"
         f"🆔 **User Chat ID:** `{chat_id}`\n\n"
-        f"📢 *ပြေစာရှိ ID ၅ လုံးကို စစ်ဆေးပါ။ အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်ပြီး VPN Key (ss://...) ကို ရိုက်ပို့ပေးလိုက်ပါဗျာ။*"
+        f"📢 *လူကြီးမင်း၏ Telegram တွင် ဝင်လာသော ၎င်း Screenshot ပြေစာရှိ ID ၅ လုံးကို စစ်ဆေးပါ။ အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်ပြီး VPN Key (ss://...) ကို ရိုက်ပို့ပေးလိုက်ပါဗျာ။*"
     )
     
+    # ဓာတ်ပုံ ပို့ခြင်းကြောင့် Block ဖြစ်နေပါက ကျော်လွှားရန် စာသားသက်သက်ကို အရင်မဖြစ်မနေ ပို့ခိုင်းခြင်း
     try:
-        bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="Markdown")
-        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား လက်ခံရရှိပါပြီဗျာ။ စနစ်မှ အတည်ပြုပြီးသည်နှင့် VPN Key လင့်ခ်အား ဤနေရာသို့ ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
-    except Exception as e:
-        bot.reply_to(message, "❌ စနစ်အတွင်း ယာယီချိတ်ဆက်မှု ပြတ်တောက်နေပါသည်။ ခေတ္တစောင့်ဆိုင်းပြီးမှ ပြန်လည်ပေးပို့ပေးပါရန်။")
+        bot.send_message(ADMIN_CHAT_ID, admin_alert_text, parse_mode="Markdown")
+        # အစ်ကို့ဆီ စာသားပို့ပြီးမှ နောက်ကွယ်ကနေ ပုံပါ လှမ်းတွဲပို့ပေးခြင်း
+        bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id)
+    except:
+        pass
+
+    # Customer ဆီကို အမြဲတမ်း အောင်မြင်ကြောင်း စာတန်းပြောင်းလဲပြသခြင်း
+    bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော ငွေလွှဲပြေစာအား လက်ခံရရှိပါပြီဗျာ။ စနစ်မှ အတည်ပြုပြီးသည်နှင့် VPN Key လင့်ခ်အား ဤနေရာသို့ ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
 
 # Text/Key Handler
 @bot.message_handler(func=lambda message: True)
@@ -149,10 +154,10 @@ def handle_all_messages(message):
 
     # ADMIN REPLY BYPASS SYSTEM
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
-        reply_caption = message.reply_to_message.caption
-        if reply_caption and "User Chat ID:" in reply_caption:
+        reply_text = message.reply_to_message.text
+        if reply_text and "User Chat ID:" in reply_text:
             try:
-                target_user_id = re.search(r'User Chat ID:\s*`?(\d+)`?', reply_caption).group(1)
+                target_user_id = re.search(r'User Chat ID:\s*`?(\d+)`?', reply_text).group(1)
                 success_message = (
                     f"🎉 **လူကြီးမင်း၏ Ngwelweမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီဗျာ!**\n\n"
                     f"🔑 **သင်၏ VPN Key လင့်ခ်မှာ အောက်ပါအတိုင်း ဖြစ်ပါသည်:**\n"
