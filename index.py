@@ -14,7 +14,7 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 OUTLINE_API_URL = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 
-# 🔑 အစ်ကို့ရဲ့ Telegram Chat ID
+# 🔑 အစ်ကို့ရဲ့ Telegram Chat ID အမှန်
 ADMIN_CHAT_ID = "8778394176"  
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
@@ -109,7 +109,6 @@ def handle_payment_screenshot(message):
     user_name = message.from_user.first_name if message.from_user.first_name else "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
     
-    # ၎င်း User ရွေးထားသည့် Plan အချက်အလက်
     plan_info = user_selected_plans.get(chat_id, {"name": "သတ်မှတ်မထားသော Plan", "price": "မသိရှိပါ"})
     current_time = datetime.now().strftime("%d/%m/%Y %I:%M %p")
 
@@ -128,7 +127,6 @@ def handle_payment_screenshot(message):
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="Markdown")
         bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား လက်ခံရရှိပါပြီဗျာ။ စနစ်မှ အတည်ပြုပြီးသည်နှင့် VPN Key လင့်ခ်အား ဤနေရာသို့ ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
     except Exception as e:
-        # Bot အား Admin မှ Start မလုပ်ရသေးပါက Customer ဆီသို့ သတိပေးစာပြခြင်း
         bot.reply_to(message, "❌ စနစ်အတွင်း ယာယီချိတ်ဆက်မှု ပြတ်တောက်နေပါသည်။ ခေတ္တစောင့်ဆိုင်းပြီးမှ ပြန်လည်ပေးပို့ပေးပါရန်။")
 
 # Text/Key Handler
