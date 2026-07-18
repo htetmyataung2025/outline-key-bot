@@ -5,6 +5,7 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 import re
 import base64
+import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
@@ -20,7 +21,26 @@ ADMIN_CHAT_ID = "8778394176"
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-user_selected_plans = {}
+# Vercel တွင် Memory Reset ဖြစ်ခြင်းမှ ကာကွယ်ရန် Temp File ဖြင့် Plan သိမ်းဆည်းသည့်စနစ်
+STATE_FILE = "/tmp/user_plans.json"
+
+def load_user_plans():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_user_plan(chat_id, plan_data):
+    plans = load_user_plans()
+    plans[str(chat_id)] = plan_data
+    try:
+        with open(STATE_FILE, 'w') as f:
+            json.dump(plans, f)
+    except:
+        pass
 
 PLANS = {
     "starter": {"name": "Starter Plan", "data": "25 GB", "price": "1,000 Ks"},
@@ -81,12 +101,14 @@ def handle_buy_callback(call):
     chat_id = call.message.chat.id
     
     if plan:
-        user_selected_plans[chat_id] = plan
+        # File state ထဲတွင် သေချာစွာ သိမ်းဆည်းခြင်း
+        save_user_plan(chat_id, plan)
+        
         payment_text = (
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
@@ -96,35 +118,39 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ပိုက်ဆံချေဖို့ ငွေလွှဲပြီး Screenshot လေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 ပိုက်ဆံချေဖို့ Ngwelweပြီး Screenshot လေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ငွေလွှဲပြေစာ ပို့ပေးပြီးပါက လူကြီးမင်းထံသို့ VPN Key အမြန်ဆုံး ပေးပို့သွားမည် ဖြစ်ပါသည်)"
         )
         bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
 
-# Screenshot Received 
+# Screenshot Received (အစ်ကို့ဆီ Plan တွေ ကွက်တိပြောင်းလဲ ပို့ဆောင်ပေးမည့်အပိုင်း)
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     chat_id = message.chat.id
     user_name = message.from_user.first_name if message.from_user.first_name else "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
     
-    plan_info = user_selected_plans.get(chat_id, {"name": "သတ်မှတ်မထားသော Plan", "price": "မသိရှိပါ"})
+    # File ထဲမှ Plan ကို လှမ်းထုတ်ယူခြင်း
+    user_plans = load_user_plans()
+    plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "price": "မသိရှိပါ"})
     current_time = datetime.now().strftime("%d/%m/%Y %I:%M %p")
 
+    # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ
     admin_alert_text = (
-        f"💰 ငွေလွှဲပြေစာအသစ်\n"
+        f"💰 ငွေလွှဲပြေစာအသစ်\n\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']}\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
         f"⏰ ပေးပို့သည့်အချိန်: {current_time}\n"
         f"🆔 User Chat ID: {chat_id}\n\n"
-        f"📢 ပြေစာရှိ ID ကို သေချာစစ်ဆေးပါ။"
+        f"📢 ပြေစာရှိ ID ကို သေချာစစ်ဆေးပါ။ အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်ပြီး VPN Key (ss://...) ကို ရိုက်ပို့ပေးလိုက်ပါဗျာ။"
     )
     
     try:
+        # Markdown parsing error မဖြစ်စေရန် parse_mode မထည့်ဘဲ ပုံမှန် Text အဖြစ် ပို့ခြင်း
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော ငွေလွှဲပြေစာအား ခဏစစ်ဆေးနေပါတယ်ခင်ဗျာ။ Admin ဖက်မှအတည်ပြုပြီးသည်နှင့် VPN Keyကို ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
+        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား ခဏစစ်ဆေးနေပါတယ်ခင်ဗျာ။ Admin ဖက်မှအတည်ပြုပြီးသည်နှင့် VPN Keyကို ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -146,14 +172,14 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
-    # ADMIN REPLY BYPASS SYSTEM (🌟 နှိပ်လိုက်ရုံဖြင့် အလိုအလျောက် Copy ကူးသွားစေမည့် စနစ်ထည့်သွင်းခြင်း)
+    # ADMIN REPLY BYPASS SYSTEM (🌟 နှိပ်လိုက်ရုံဖြင့် အလိုအလျောက် Copy ကူးသွားစေမည့် စနစ်)
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
         reply_caption = message.reply_to_message.caption
         if reply_caption and "User Chat ID:" in reply_caption:
             try:
                 target_user_id = re.search(r'User Chat ID:\s*(\d+)', reply_caption).group(1)
                 
-                # HTML Mode ၏ <code> tag ဖြင့် Key အား နှိပ်လိုက်ရုံဖြင့် အလိုအလျောက် ကူးယူနိုင်အောင် ပြင်ဆင်ခြင်း
+                # HTML Mode ဖြင့် တစ်ချက်ထိရုံဖြင့် Auto Copy ကူးစေမည့် စနစ်ပုံစံအမှန်
                 success_message = (
                     f"🎉 <b>လူကြီးမင်း၏ ငွေလွှဲမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ!</b>\n\n"
                     f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Keyကို အောက်တွင်ယူပါ</b>\n"
