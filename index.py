@@ -31,20 +31,42 @@ def get_usage(message):
             input_value = args[0]
             key_id = input_value
             
-            # အကယ်၍ user က ss:// link ကြီး ထည့်လာရင် ID ကို ဖြတ်ယူခြင်း
-            if "outline=1" in input_value:
-                try:
-                    # ဥပမာ outline=5#Name ထဲက 5 ကို ဖြတ်ယူမည်
-                    part = input_value.split("outline=")[1]
-                    key_id = part.split("#")[0]
-                except:
-                    pass
+            # အကယ်၍ ss:// link အပြည့်အစုံ ပါလာပါက 
+            if "ss://" in input_value or "outline=" in input_value:
+                import re
+                # နည်းလမ်း (၁): outline=X ကို အရင်ရှာမည်
+                match_outline = re.search(r'outline=(\d+)', input_value)
+                # နည်းလမ်း (၂): Link ထဲမှာ တစ်ခြားနံပါတ် ဥပမာ /5/ သို့မဟုတ် id=5 ပါရင် ရှာရန်
+                match_id = re.search(r'(?:id=|/access-keys/|/)(\d+)(?:[?#]|$)', input_value)
+                
+                # အစ်ကို့ Link ထဲမှာ Thu_Ya က ID 5 ဖြစ်ပေမယ့် outline=1 ဖြစ်နေရင် 
+                # အမည် (#Thu_Ya) ကိုပါ စစ်ပြီး metrics ထဲက ဆွဲထုတ်ဖို့ ကြိုးစားခြင်း
+                if "#" in input_value:
+                    try:
+                        name_tag = input_value.split("#")[1].strip()
+                        # အကယ်၍ အမည်ကို metrics သို့မဟုတ် access-keys ထဲမှာ တိုက်ရိုက်ရှာလို့ရလျှင် ရှာမည်
+                        # ဒါပေမယ့် metrics/transfer ထဲမှာက ID နံပါတ်ပဲ ပါတာမို့ access-keys API ကိုပါ လှမ်းခေါ်ပြီး ID ရှာပါမယ်
+                        keys_resp = requests.get(f"{OUTLINE_API_URL}/access-keys", verify=False, timeout=10)
+                        keys_data = keys_resp.json().get("accessKeys", [])
+                        for key in keys_data:
+                            if name_tag.lower() in key.get("name", "").lower():
+                                key_id = key.get("id")
+                                break
+                    except:
+                        pass
+                
+                # အပေါ်က အမည်နဲ့ ရှာမတွေ့မှ Link ထဲက နံပါတ်ကို ယူမည်
+                if key_id == input_value:
+                    if match_outline:
+                        key_id = match_outline.group(1)
+                    elif match_id:
+                        key_id = match_id.group(1)
 
-            usage_bytes = bytes_transferred.get(key_id, 0)
+            usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             bot.reply_to(message, f"🔑 **Key ID:** {key_id}\n📊 **Data Used:** {usage_gb} GB")
         else:
-            bot.reply_to(message, "💡 ကျေးဇူးပြု၍ Key ID (သို့မဟုတ်) Key Link ထည့်ပေးပါ။ ဥပမာ - `/usage 5` သို့မဟုတ် `/usage ss://...`")
+            bot.reply_to(message, "💡 ကျေးဇူးပြု၍ Key ID (သို့မဟုတ်) Key Link ထည့်ပေးပါ။ ဥပမာ - `/usage 5`")
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
 
