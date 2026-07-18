@@ -118,7 +118,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ပိုက်ဆံချေဖို့ Ngwelweပြီး Screenshot လေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 ငွေလွှဲပြီး Screenshot လေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ငွေလွှဲပြေစာ ပို့ပေးပြီးပါက လူကြီးမင်းထံသို့ VPN Key အမြန်ဆုံး ပေးပို့သွားမည် ဖြစ်ပါသည်)"
         )
         bot.send_message(chat_id, payment_text)
@@ -144,13 +144,13 @@ def handle_payment_screenshot(message):
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
         f"⏰ ပေးပို့သည့်အချိန်: {current_time}\n"
         f"🆔 User Chat ID: {chat_id}\n\n"
-        f"📢 ပြေစာရှိ ID ကို သေချာစစ်ဆေးပါ။ အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်ပြီး VPN Key (ss://...) ကို ရိုက်ပို့ပေးလိုက်ပါဗျာ။"
+        f"📢 ပြေစာရှိ ID ကို သေချာစစ်ဆေးပါ။"
     )
     
     try:
         # Markdown parsing error မဖြစ်စေရန် parse_mode မထည့်ဘဲ ပုံမှန် Text အဖြစ် ပို့ခြင်း
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား ခဏစစ်ဆေးနေပါတယ်ခင်ဗျာ။ Admin ဖက်မှအတည်ပြုပြီးသည်နှင့် VPN Keyကို ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
+        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော ငွေလွှဲပြေစာအား စစ်ဆေးနေပါတယ်ခင်ဗျာ။ Admin ဖက်မှအတည်ပြုပြီးသည်နှင့် VPN Keyကို ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -182,7 +182,7 @@ def handle_all_messages(message):
                 # HTML Mode ဖြင့် တစ်ချက်ထိရုံဖြင့် Auto Copy ကူးစေမည့် စနစ်ပုံစံအမှန်
                 success_message = (
                     f"🎉 <b>လူကြီးမင်း၏ ငွေလွှဲမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ!</b>\n\n"
-                    f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Keyကို အောက်တွင်ယူပါ</b>\n"
+                    f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Keyကို အောက်တွင်ယူပါ</b>\n\n"
                     f"<code>{input_value}</code>\n\n"
                     f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ဆော့ဖ်ဝဲထဲတွင် ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
                 )
