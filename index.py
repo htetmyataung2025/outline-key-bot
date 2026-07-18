@@ -124,7 +124,7 @@ def handle_buy_callback(call):
         bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
 
-# Screenshot Received (အစ်ကို့ဆီ Plan နောက်က GB ပါ တစ်ခါတည်း တွဲပြပေးမည့်အပိုင်း)
+# Screenshot Received (အစ်ကို့ဆီ Plan နောက်က GB ကော၊ ပုံထဲက နာရီအချိန်အမှန်ပါ တွဲပြပေးမည့်အပိုင်း)
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     chat_id = message.chat.id
@@ -134,11 +134,13 @@ def handle_payment_screenshot(message):
     # File ထဲမှ Plan ကို လှမ်းထုတ်ယူခြင်း
     user_plans = load_user_plans()
     plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "data": "မသိရှိပါ", "price": "မသိရှိပါ"})
-    current_time = datetime.now().strftime("%d/%m/%Y %I:%M %p")
+    
+    # 🕒 ပုံထဲကပြတဲ့ အချိန်အမှန်အတိုင်း ရရှိရန် (Telegram Message Date ကို အခြေခံ၍ တွက်ချက်ခြင်း)
+    current_time = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y %I:%M %p")
 
-    # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ (Plan နာမည်နောက်တွင် GB ပါ တစ်ပါတည်း ထည့်သွင်းထားပါသည်)
+    # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ
     admin_alert_text = (
-        f"💰 ငွေလွှဲပြေစာအသစ်\n"
+        f"💰 Ngွေလွှဲပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
@@ -171,7 +173,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
-    # ADMIN REPLY BYPASS SYSTEM (🌟 နှိပ်လိုက်ရုံဖြင့် အလိုအလျောက် Copy ကူးသွားစေမည့် စနစ်)
+    # ADMIN REPLY BYPASS SYSTEM 
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
         reply_caption = message.reply_to_message.caption
         if reply_caption and "User Chat ID:" in reply_caption:
