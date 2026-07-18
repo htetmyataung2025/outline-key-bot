@@ -143,7 +143,7 @@ def handle_payment_screenshot(message):
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
         f"⏰ ပေးပို့သည့်အချိန်: {current_time}\n"
-        f"🆔 User Chat ID: {chat_id}\n\n"
+        f"🆔 User Chat ID: {chat_id}\n\"
         f"📢 ပြေစာရှိ ID ကို သေချာစစ်ဆေးပါ။ အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်ပြီး VPN Key (ss://...) ကို ရိုက်ပို့ပေးလိုက်ပါဗျာ။"
     )
     
@@ -185,7 +185,7 @@ def handle_all_messages(message):
                     f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ဆော့ဖ်ဝဲထဲတွင် ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
-                bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ လှမ်းပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
+                bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
                 return
             except Exception as e:
                 bot.reply_to(message, f"❌ ကီးပို့ရာတွင် အမှားအယွင်းရှိပါသည်- {str(e)}")
