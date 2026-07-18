@@ -108,7 +108,7 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # 📊 စာကြောင်းအားလုံးကြားတွင် Space တစ်ကြောင်းစီ ညီညီညာညာ ခြားပေးထားသောပုံစံ
+            # 📊 စာကြောင်း ၅ ကြောင်းလုံးကြားတွင် Space တစ်ကြောင်းစီ ညီညီညာညာ ကွက်တိ ခြားပေးထားသောပုံစံ
             result_text = (
                 f"👤 **အသုံးပြုသူ:** {display_name}\n\n"
                 f"📅 **Start Date:** {start_date}\n\n"
