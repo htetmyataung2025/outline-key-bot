@@ -28,12 +28,23 @@ def get_usage(message):
 
         args = message.text.split()[1:]
         if args:
-            key_id = args[0]
+            input_value = args[0]
+            key_id = input_value
+            
+            # အကယ်၍ user က ss:// link ကြီး ထည့်လာရင် ID ကို ဖြတ်ယူခြင်း
+            if "outline=1" in input_value:
+                try:
+                    # ဥပမာ outline=5#Name ထဲက 5 ကို ဖြတ်ယူမည်
+                    part = input_value.split("outline=")[1]
+                    key_id = part.split("#")[0]
+                except:
+                    pass
+
             usage_bytes = bytes_transferred.get(key_id, 0)
             usage_gb = bytes_to_gb(usage_bytes)
             bot.reply_to(message, f"🔑 **Key ID:** {key_id}\n📊 **Data Used:** {usage_gb} GB")
         else:
-            bot.reply_to(message, "💡 ကျေးဇူးပြု၍ Key ID ထည့်ပေးပါ။ ဥပမာ - `/usage 1`")
+            bot.reply_to(message, "💡 ကျေးဇူးပြု၍ Key ID (သို့မဟုတ်) Key Link ထည့်ပေးပါ။ ဥပမာ - `/usage 5` သို့မဟုတ် `/usage ss://...`")
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
 
