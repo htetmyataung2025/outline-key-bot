@@ -107,15 +107,15 @@ def handle_all_messages(message):
             
             # Telegram Parser မှ ကပ်မပစ်နိုင်အောင် စာကြောင်းတိုင်းရဲ့ ကြားထဲမှာ space အလွတ်ကို တိတိကျကျ ခြားပေးထားပါတယ်ဗျာ
             result_text = (
-                f"👤 **အသုံးပြုသူ:** {display_name}"
+                f"👤 **အသုံးပြုသူ:** {display_name}\n"
                
-                f"📅 **Start Date:** {start_date}"
+                f"📅 **Start Date:** {start_date}\n\n"
                
-                f"⏳ **End Date:** {end_date}"
+                f"⏳ **End Date:** {end_date}\n"
           
-                f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}"
+                f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n"
                 
-                f"📊 **အသုံးပြုပြီးသား Data:** {usage_gb} GB"
+                f"📊 **အသုံးပြုပြီးသား Data:** {usage_gb} GB\n"
             )
             bot.reply_to(message, result_text, parse_mode="Markdown")
         else:
