@@ -66,12 +66,12 @@ def send_welcome(message):
         "👋 မင်္ဂလာပါ! H & E FEATURE VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
         "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
-    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(), parse_mode="Markdown")
+    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard())
 
 # /buy Command
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
-    bot.reply_to(message, "🛒 **ကျေးဇူးပြု၍ သင်ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:**", reply_markup=get_plan_keyboard())
+    bot.reply_to(message, "🛒 ကျေးဇူးပြု၍ သင်ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 # Plan Button Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
@@ -83,26 +83,26 @@ def handle_buy_callback(call):
     if plan:
         user_selected_plans[chat_id] = plan
         payment_text = (
-            f"✅ **သင်ရွေးချယ်ထားသော Plan:**\n"
+            f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 **ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:**\n\n"
-            f"📱 **KBZ Pay** - `09699970092`\n"
+            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
-            f"📱 **Wave Pay** - `09699970092`\n"
+            f"📱 Wave Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
-            f"📱 **AYA Pay** - `09699970092`\n"
+            f"📱 AYA Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
-            f"📱 **Uab Pay** - `09699970092`\n"
+            f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ပိုက်ဆံချေဖို့ Ngwelweပြီး Screenshot လေး ပို့ပေးပါခင်ဗျာ🥰\n"
-            f"*(ငွေလွှဲပြေစာ ပို့ပေးပြီးပါက လူကြီးမင်းထံသို့ VPN Key လင့်ခ်အား အမြန်ဆုံး ဖန်တီးပေးပို့သွားမည် ဖြစ်ပါသည်)*"
+            f"🙏🏻 ပိုက်ဆံချေဖို့ ငွေလွှဲပြီး Screenshot လေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"(ငွေလွှဲပြေစာ ပို့ပေးပြီးပါက လူကြီးမင်းထံသို့ VPN Key လင့်ခ်အား အမြန်ဆုံး ဖန်တီးပေးပို့သွားမည် ဖြစ်ပါသည်)"
         )
-        bot.send_message(chat_id, payment_text, parse_mode="Markdown")
+        bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
 
-# Screenshot Received (အစ်ကို့ဆီ အချက်အလက်များကို Text အနေဖြင့် အသေအချာရောက်အောင် ပို့ပေးမည့်အပိုင်း)
+# Screenshot Received (စာသား Error လုံးဝမတက်စေရန် parse_mode ဖြုတ်၍ ပို့သည့်အပိုင်း)
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     chat_id = message.chat.id
@@ -112,27 +112,23 @@ def handle_payment_screenshot(message):
     plan_info = user_selected_plans.get(chat_id, {"name": "သတ်မှတ်မထားသော Plan", "price": "မသိရှိပါ"})
     current_time = datetime.now().strftime("%d/%m/%Y %I:%M %p")
 
-    # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ (ID ၅ လုံး စစ်ဆေးရန် အချက်အလက်များ)
+    # အစ်ကို့ဆီ ပို့ပေးမည့် စာသားအချက်အလက်ပုံစံ
     admin_alert_text = (
-        f"💰 **ငွေလွှဲပြေစာ အသစ်တစ်ခု ပို့လိုက်ပါပြီ!**\n\n"
-        f"👤 **ဝယ်ယူသူနာမည်:** {user_name} ({username})\n"
-        f"📦 **ရွေးချယ်ထားသော Plan:** {plan_info['name']}\n"
-        f"💵 **ကျသင့်ငွေပမာဏ:** {plan_info['price']}\n"
-        f"⏰ **ပေးပို့သည့်အချိန်:** {current_time}\n"
-        f"🆔 **User Chat ID:** `{chat_id}`\n\n"
-        f"📢 *လူကြီးမင်း၏ Telegram တွင် ဝင်လာသော ၎င်း Screenshot ပြေစာရှိ ID ၅ လုံးကို စစ်ဆေးပါ။ အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်ပြီး VPN Key (ss://...) ကို ရိုက်ပို့ပေးလိုက်ပါဗျာ။*"
+        f"💰 ငွေလွှဲပြေစာ အသစ်ရောက်ရှိလာပါပြီ!\n\n"
+        f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
+        f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']}\n"
+        f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
+        f"⏰ ပေးပို့သည့်အချိန်: {current_time}\n"
+        f"🆔 User Chat ID: {chat_id}\n\n"
+        f"📢 ပြေစာရှိ ID ၅ လုံးကို စစ်ဆေးပါ။ အတည်ပြုလိုပါက ဤစာသားကို Reply ပြန်ပြီး VPN Key (ss://...) ကို ရိုက်ပို့ပေးလိုက်ပါဗျာ။"
     )
     
-    # ဓာတ်ပုံ ပို့ခြင်းကြောင့် Block ဖြစ်နေပါက ကျော်လွှားရန် စာသားသက်သက်ကို အရင်မဖြစ်မနေ ပို့ခိုင်းခြင်း
     try:
-        bot.send_message(ADMIN_CHAT_ID, admin_alert_text, parse_mode="Markdown")
-        # အစ်ကို့ဆီ စာသားပို့ပြီးမှ နောက်ကွယ်ကနေ ပုံပါ လှမ်းတွဲပို့ပေးခြင်း
-        bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id)
-    except:
-        pass
-
-    # Customer ဆီကို အမြဲတမ်း အောင်မြင်ကြောင်း စာတန်းပြောင်းလဲပြသခြင်း
-    bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော ငွေလွှဲပြေစာအား လက်ခံရရှိပါပြီဗျာ။ စနစ်မှ အတည်ပြုပြီးသည်နှင့် VPN Key လင့်ခ်အား ဤနေရာသို့ ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
+        # Markdown ကြောင့် Error တက်ခြင်းမှ ကာကွယ်ရန် parse_mode မသုံးဘဲ တိုက်ရိုက်ပို့ခြင်း
+        bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
+        bot.reply_to(message, "⏳ လူကြီးမင်း ပေးပို့လိုက်သော Ngwelweပြေစာအား လက်ခံရရှိပါပြီဗျာ။ စနစ်မှ အတည်ပြုပြီးသည်နှင့် VPN Key လင့်ခ်အား ဤနေရာသို့ ချက်ချင်း ပို့ဆောင်ပေးမည် ဖြစ်ပါသည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။")
+    except Exception as e:
+        bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
 # Text/Key Handler
 @bot.message_handler(func=lambda message: True)
@@ -141,30 +137,30 @@ def handle_all_messages(message):
     chat_id = message.chat.id
 
     if input_value == "🛒 Plan များ ကြည့်ရန်":
-        bot.send_message(chat_id, "🛒 **ကျေးဇူးပြု၍ သင်ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:**", reply_markup=get_plan_keyboard())
+        bot.send_message(chat_id, "🛒 ကျေးဇူးပြု၍ သင်ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
     if input_value == "📊 Data Usage စစ်ရန်":
         check_guide = (
-            "👇 **သင့်ရရှိထားသော VPN Key Link ကို ပို့ပေးပါ:**\n\n"
-            "👉 Copy ယူလာတဲ့ `ss://...` နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ဗျာ။"
+            "👇 သင့်ရရှိထားသော VPN Key Link ကို ပို့ပေးပါ:\n\n"
+            "👉 Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ဗျာ။"
         )
-        bot.send_message(chat_id, check_guide, parse_mode="Markdown")
+        bot.send_message(chat_id, check_guide)
         return
 
     # ADMIN REPLY BYPASS SYSTEM
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
-        reply_text = message.reply_to_message.text
-        if reply_text and "User Chat ID:" in reply_text:
+        reply_caption = message.reply_to_message.caption
+        if reply_caption and "User Chat ID:" in reply_caption:
             try:
-                target_user_id = re.search(r'User Chat ID:\s*`?(\d+)`?', reply_text).group(1)
+                target_user_id = re.search(r'User Chat ID:\s*(\d+)', reply_caption).group(1)
                 success_message = (
-                    f"🎉 **လူကြီးမင်း၏ Ngwelweမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီဗျာ!**\n\n"
-                    f"🔑 **သင်၏ VPN Key လင့်ခ်မှာ အောက်ပါအတိုင်း ဖြစ်ပါသည်:**\n"
-                    f"`{input_value}`\n\n"
+                    f"🎉 လူကြီးမင်း၏ Ngwelweမှုအား အောင်မြင်စွာ အတည်ပြုပြီးပါပြီဗျာ!\n\n"
+                    f"🔑 သင်၏ VPN Key လင့်ခ်မှာ အောက်ပါအတိုင်း ဖြစ်ပါသည်:\n"
+                    f"{input_value}\n\n"
                     f"👉 အထက်ပါ ကီးလင့်ခ်အား ကော်ပီယူ၍ ဆော့ဖ်ဝဲထဲတွင် ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။ ကျေးဇူးတင်ရှိပါသည်!"
                 )
-                bot.send_message(target_user_id, success_message, parse_mode="Markdown")
+                bot.send_message(target_user_id, success_message)
                 bot.reply_to(message, "✅ Customer ထံသို့ VPN Key အား အောင်မြင်စွာ လှမ်းပို့ပေးလိုက်ပါပြီဗျာ။")
                 return
             except Exception as e:
@@ -244,15 +240,13 @@ def handle_all_messages(message):
             usage_gb = bytes_to_gb(usage_bytes)
             
             result_text = (
-                f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
                 f"📅 Start Date: {start_date}\n"
                 f"⏳ End Date: {end_date}\n"
                 f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB\n"
-                f"```"
+                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
             )
-            bot.reply_to(message, result_text, parse_mode="MarkdownV2")
+            bot.reply_to(message, result_text)
         else:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် သို့မဟုတ် Server တွင် မရှိသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
             
