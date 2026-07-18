@@ -99,12 +99,12 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # စာကြောင်းများအကြား space မပါဘဲ ပုံမှန် \n တစ်ကြောင်းစီဖြင့် ကပ်လျက် ပြသပေးမည့်ပုံစံ
+            # စာကြောင်း ၅ ကြောင်းစလုံးရဲ့ကြားမှာ newline (\n) ပုံစံတူ ၂ ခါစီ ကွက်တိခံပြီး ညီညာအောင် ညှိထားပါတယ်
             result_text = (
-                f"👤 **အသုံးပြုသူ:** {display_name}\n"
-                f"📅 **Start Date:** {start_date}\n"
-                f"⏳ **End Date:** {end_date}\n"
-                f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n"
+                f"👤 **အသုံးပြုသူ:** {display_name}\n\n"
+                f"📅 **Start Date:** {start_date}\n\n"
+                f"⏳ **End Date:** {end_date}\n\n"
+                f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n\n"
                 f"📊 **အသုံးပြုပြီးသား Data:** {usage_gb} GB"
             )
             bot.reply_to(message, result_text, parse_mode="Markdown")
