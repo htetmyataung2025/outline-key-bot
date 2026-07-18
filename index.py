@@ -108,7 +108,7 @@ def handle_buy_callback(call):
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
