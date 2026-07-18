@@ -109,9 +109,9 @@ def handle_all_messages(message):
             result_text = (
                 f"👤 **အသုံးပြုသူ:** {display_name}\n"
                
-                f"📅 **Start Date:** {start_date}\n\n"
+                f"📅 **Start Date:** {start_date}\n"
                
-                f"⏳ **End Date:** {end_date}\n"
+                f"📅 **End Date:** {end_date}\n"
           
                 f"📋 **ဝယ်ယူထားသော Plan:** {plan_gb}\n"
                 
