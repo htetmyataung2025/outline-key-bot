@@ -23,7 +23,7 @@ def bytes_to_gb(bytes_value):
 def send_welcome(message):
     welcome_text = (
         "👋 မင်္ဂလာပါ! HMA VPN Data Usage Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "📊 သင့်ရဲ့ VPN သက်တမ်းနဲ့ Data အသုံးပြုမှုကို စစ်ဆေးရန်အတွက် ဘာ Command မှ ရိုက်စရာမလိုပါဘူးဗျာ။\n\n"
+        "📊 သင့်ရဲ့ VPN သက်တမ်းနဲ့ Data အသုံးပြုမှုကို စစ်ဆေးရန်အတွက် ဘာ Command မှ ရိုက်စရာမလိုပါဘူးဗျာ。\n\n"
         "👇 **သင့်ရဲ့ VPN Key Link ကို Chat ထဲသို့ တိုက်ရိုက် ပို့ပေးလိုက်ပါ:**\n"
         "👉 `ss://...` (သင့်ရဲ့ VPN Key Link ကြီးတစ်ခုလုံးကို တန်းပြီး Paste ချပို့နိုင်ပါတယ်)"
     )
@@ -78,13 +78,23 @@ def handle_all_messages(message):
             
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
             if date_match:
-                end_date_str = date_match.group(0)
-                end_date = end_date_str
+                end_date_raw = date_match.group(0)
                 try:
-                    end_date_obj = datetime.strptime(end_date_str, "%d.%m.%Y")
+                    # ရက်စွဲကို 0 မပါတဲ့ format ဖြစ်အောင် ရှင်းလင်းခြင်း (ဥပမာ 18.08.2026 ဖြစ်နေလျှင်လည်း 18.8.2026 ပြောင်းမည်)
+                    e_parts = end_date_raw.split('.')
+                    end_date = f"{int(e_parts[0])}.{int(e_parts[1])}.{e_parts[2]}"
+                    
+                    # စတင်ဝယ်ယူသည့်နေ့အား ၁ လ နောက်ဆုတ်ပြီး ရှေ့က 0 များ ဖြုတ်ပစ်ခြင်း
+                    end_date_obj = datetime.strptime(end_date_raw, "%d.%m.%Y" if '.' in end_date_raw and len(e_parts[1])==2 else "%d.%m.%Y")
+                    # အကယ်၍ key ထဲမှာ ရက်စွဲက 18.8.2026 လို 0 မပါဘဲ ရှိနေလျှင် parser အဆင်ပြေအောင် ညှိခြင်း
+                    if len(e_parts[1]) == 1:
+                        end_date_obj = datetime.strptime(end_date_raw, "%d.%m.%Y" if len(e_parts[0])==2 else "%d.%m.%Y")
+                    
                     start_date_obj = end_date_obj - relativedelta(months=1)
-                    start_date = start_date_obj.strftime("%d.%m.%Y")
+                    # %-m ကိုသုံး၍ ရှာဖွေပြီး လအရှေ့က 0 ကို ဖယ်ရှားခြင်း
+                    start_date = f"{start_date_obj.day}.{start_date_obj.month}.{start_date_obj.year}"
                 except:
+                    end_date = end_date_raw
                     start_date = "သတ်မှတ်မထားပါ"
             else:
                 end_date = "သတ်မှတ်မထားပါ"
@@ -99,7 +109,7 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # စာကြောင်း ၅ ကြောင်းစလုံးကြားတွင် Space လုံးဝမခြားဘဲ ပုံမှန် \n တစ်ကြောင်းစီဖြင့် သေသပ်စွာ ညီညာစေသောပုံစံ
+            # စာသားများအားလုံး တစ်ကြောင်းချင်းစီ ကပ်လျက်ဖြစ်ပြီး ရက်စွဲပါ ညီညာသွားသော format
             result_text = (
                 f"👤 **အသုံးပြုသူ:** {display_name}\n"
                 f"📅 **Start Date:** {start_date}\n"
