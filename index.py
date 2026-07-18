@@ -22,10 +22,10 @@ def bytes_to_gb(bytes_value):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = (
-        "👋 မင်္ဂလာပါ! HMA VPN Data Usage Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "📊 သင့်ရဲ့ VPN သက်တမ်းနဲ့ Data အသုံးပြုမှုကို စစ်ဆေးရန်အတွက် ဘာ Command မှ ရိုက်စရာမလိုပါဘူးဗျာ။\n\n"
-        "👇 **သင့်ရဲ့ VPN Key Link ကို Chat ထဲသို့ တိုက်ရိုက် ပို့ပေးလိုက်ပါ:**\n"
-        "👉 `ss://...` (သင့်ရဲ့ VPN Key Link ကြီးတစ်ခုလုံးကို တန်းပြီး Paste ချပို့နိုင်ပါတယ်)"
+        "👋 မင်္ဂလာပါ! H & E FEATURE Data Usage Bot မှ ကြိုဆိုပါတယ်။\n\n"
+        "📊 ကျွန်တော်ဆီက ဝယ်ယူထားတဲ့ VPN သက်တမ်းနဲ့ Data အသုံးပြုမှုကို စစ်ဆေးရန်အတွက် ဘာ Command မှ ရိုက်စရာမလိုပါဘူးခင်ဗျာ။\n\n"
+        "👇 **ကျွန်တော်ဆီက ဝယ်ယူထားတဲ့ VPN Key Link ကို Chat ထဲသို့ တိုက်ရိုက် ပို့ပေးလိုက်ပါ:**\n"
+        "👉 `ss://...` နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီမှာတန်းပြီး Paste ချပို့ပြီးစစ်နိုင်ပါတယ်"
     )
     bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
