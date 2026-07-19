@@ -135,7 +135,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -152,7 +152,6 @@ def handle_payment_screenshot(message):
     plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "data": "မသိရှိပါ", "price": "မသိရှိပါ"})
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
-    # 🌟 အစ်ကို့ဆီ ဝင်လာမည့် စာတန်းခေါင်းစဉ်ကိုပါ "ငွေလွှဲပြေစာအသစ်" ဟု မြန်မာလို အပြီးသတ် ပြောင်းလဲထားပါသည်
     admin_alert_text = (
         f"💰 ငွေလွှဲပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
@@ -165,7 +164,7 @@ def handle_payment_screenshot(message):
     
     try:
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
+        bot.reply_to(message, "⏳ Ngwelweပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -264,7 +263,7 @@ def handle_all_messages(message):
                     f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN Appထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
-                bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ปို့ပေးလိုက်ပါပြီခင်ဗျာ။")
+                bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
                 return
             except Exception as e:
                 bot.reply_to(message, f"❌ ကီးပို့ရာတွင် အမှားအယွင်းရှိပါသည်- {str(e)}")
@@ -284,15 +283,15 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # ရက်စွဲကို နာမည်ထဲကနေ တိတိကျကျ အရင်ဆုံး ရှာဖွေထုတ်ယူခြင်း logic
-            date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
+            # 📅 🌟 ဂဏန်း ၄ လုံး (2026) သို့မဟုတ် ဂဏန်း ၂ လုံး (26) ရက်စွဲပုံစံနှစ်ခုလုံးကို ရှာဖွေနိုင်မည့် Regex အသစ်
+            date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
-            # ရက်စွဲစာသားကို ဖယ်ထုတ်ပြီး ကျန်တဲ့အပိုင်းကိုပဲ နာမည်အဖြစ် သန့်စင်စွာ ယူခြင်း
             display_name = full_name
             if date_match:
                 display_name = display_name.replace(date_match.group(0), "")
             
-            display_name = display_name.split("tg")[0].split("Tg")[0].replace("_", " ").strip()
+            # စာသားသန့်စင်ခြင်း
+            display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
             
@@ -300,29 +299,48 @@ def handle_all_messages(message):
                 end_date_raw = date_match.group(0)
                 try:
                     e_parts = end_date_raw.split('.')
-                    end_date = f"{int(e_parts[0])}.{int(e_parts[1])}.{e_parts[2]}"
-                    end_date_obj = datetime.strptime(end_date_raw, "%d.%m.%Y")
+                    day = int(e_parts[0])
+                    month = int(e_parts[1])
+                    year_str = e_parts[2]
+                    
+                    # 🌟 ဂဏန်း ၂ လုံးတည်းနဲ့ ခုနှစ်ဖြစ်နေရင် (ဥပမာ '26') ရှေ့မှာ '20' ကို ပေါင်းထည့်ပေးမည့် စနစ်
+                    if len(year_str) == 2:
+                        year = int("20" + year_str)
+                    else:
+                        year = int(year_str)
+                        
+                    end_date = f"{day}.{month}.{year}"
+                    end_date_obj = datetime(year, month, day)
                     start_date_obj = end_date_obj - relativedelta(months=1)
                     start_date = f"{start_date_obj.day}.{start_date_obj.month}.{start_date_obj.year}"
+                    
+                    has_date = True
                 except:
-                    end_date = end_date_raw
-                    start_date = "သတ်မှတ်မထားပါ"
+                    has_date = False
             else:
-                end_date = "သတ်မှတ်မထားပါ"
-                start_date = "သတ်မှတ်မထားပါ"
+                has_date = False
 
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
             plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            result_text = (
-                f"👤 အသုံးပြုသူ: {display_name}\n"
-                f"📅 Start Date: {start_date}\n"
-                f"⏳ End Date: {end_date}\n"
-                f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
-            )
+            # စာသားတွဲဖက်ပြသခြင်း
+            if has_date:
+                result_text = (
+                    f"👤 အသုံးပြုသူ: {display_name}\n"
+                    f"📅 Start Date: {start_date}\n"
+                    f"⏳ End Date: {end_date}\n"
+                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
+                )
+            else:
+                result_text = (
+                    f"👤 အသုံးပြုသူ: {display_name}\n"
+                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
+                )
+                
             bot.reply_to(message, result_text)
 
         except Exception as e:
