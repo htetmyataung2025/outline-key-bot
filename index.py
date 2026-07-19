@@ -66,7 +66,7 @@ def clean_ss_url(url_str):
 
 def get_main_menu_keyboard():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
+    btn_buy = KeyboardButton("🛒 VPN Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
