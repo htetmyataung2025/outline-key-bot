@@ -14,7 +14,7 @@ app = Flask(__name__)
 # Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 
-# 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ (Server ၂ နေရာတွင် အစ်ကို့ API အသစ်ကို ထည့်သွင်းထားပါသည်)
+# 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
@@ -153,7 +153,7 @@ def handle_payment_screenshot(message):
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
     admin_alert_text = (
-        f"💰 Ngwelweပြေစာအသစ်\n"
+        f"💰 ငွေလွှဲပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
@@ -168,11 +168,12 @@ def handle_payment_screenshot(message):
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
-# Multi-Server Data Checking Function
+# Multi-Server Data Checking Function (🌟 IP Server များအတွက် verify=False စနစ်သေချာထည့်သွင်းခြင်း)
 def fetch_key_from_server(api_url, input_value):
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
-        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=6)
+        # Vercel မှ IP ဆီတိုက်ရိုက်ချိတ်ဆက်ရာတွင် SSL Error မတက်စေရန် verify=False ကို ထည့်သွင်းထားပါသည်
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
         
         if keys_resp.status_code != 200:
             return None, None
@@ -246,7 +247,7 @@ def handle_all_messages(message):
     if input_value == "👨‍💻 Admin သို့ ဆက်သွယ်ရန်":
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
-        bot.send_message(chat_id, "👇 အောက်ကخလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
+        bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
     # ADMIN REPLY BYPASS SYSTEM 
@@ -321,11 +322,10 @@ def handle_all_messages(message):
             )
             bot.reply_to(message, result_text, parse_mode="MarkdownV2")
 
-        else:
-            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို ဆာဗာ (၁) ရော (၂) တွင်ပါ ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
-            
-    except Exception as e:
-        bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
+        except Exception as e:
+            bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
+    else:
+        bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို ဆာဗာ (၁) ရော (၂) တွင်ပါ ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
 
 # Catch-all Webhook Route
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
