@@ -62,18 +62,16 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    # 🌟 လက်ရှိခလုတ်များကို မပြောင်းလဲဘဲ Website Mini App နှင့် Admin ဆက်သွယ်ရန် ခလုတ်များ အသစ်တိုးထည့်ခြင်း
+    # 🌟 Website ခလုတ်ကို ဖြုတ်ပြီး Admin ဆက်သွယ်ရန် ခလုတ်ကို အောက်ခြေအလယ်တွင် ထားရှိခြင်း
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
-    
-    # Admin ထံ တန်းသွားမည့် Link ခလုတ် (Reply Keyboard တွင် Link တိုက်ရိုက်မရသဖြင့် စာသားအဖြစ် ပို့ခိုင်းရန် တည်ဆောက်ခြင်း)
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
     
     markup.add(btn_buy, btn_check)
     markup.add(btn_free)
-    markup.add(btn_web, btn_admin)
+    markup.add(btn_admin)
     return markup
 
 def get_plan_keyboard():
@@ -96,12 +94,12 @@ def send_welcome(message):
     )
     
     try:
-        # 📸 စာရိုက်ဘားဘေးတွင် "Menu" ဟုပေါ်ပြီး နှိပ်လျှင် Mini App ပွင့်စေမည့် Chat Menu Button စနစ် သတ်မှတ်ခြင်း
+        # 📸 စာရိုက်ဘားဘေးတွင် နာမည်အား "Main Website" ဟု ပြောင်းလဲသတ်မှတ်ခြင်း
         bot.set_chat_menu_button(message.chat.id, telebot.types.MenuButtonWebApp(
             type="web_app",
             text="Main Website",
-            web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io")
-        ))
+            web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io"))
+        )
     except:
         pass
         
@@ -120,14 +118,14 @@ def handle_buy_callback(call):
     chat_id = call.message.chat.id
     
     if plan:
-        # File state ထဲတွင် သေჩာစွာ သိမ်းဆည်းခြင်း
+        # File state ထဲတွင် သေချာစွာ သိမ်းဆည်းခြင်း
         save_user_plan(chat_id, plan)
         
         payment_text = (
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
@@ -137,7 +135,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -159,7 +157,7 @@ def handle_payment_screenshot(message):
 
     # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ
     admin_alert_text = (
-        f"💰 Ngwelweပြေစာအသစ်\n"
+        f"💰 ငွေလွှဲပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
@@ -170,7 +168,7 @@ def handle_payment_screenshot(message):
     
     try:
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ Ngwelweပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
+        bot.reply_to(message, "⏳ ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -203,7 +201,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, free_text, parse_mode="HTML")
         return
 
-    # 👨‍💻 Admin သို့ ဆက်သွယ်ရန် ခလုတ်နှိပ်ခြင်းအား Inline Button လင့်ခ်ဖြင့် ပြန်လည်တုံ့ပြန်ပေးခြင်း
+    # 👨‍💻 Admin သို့ ဆက်သွယ်ရန် ขလုတ်နှိပ်ခြင်း
     if input_value == "👨‍💻 Admin သို့ ဆက်သွယ်ရန်":
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
