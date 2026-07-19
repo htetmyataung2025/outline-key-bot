@@ -135,7 +135,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -153,7 +153,7 @@ def handle_payment_screenshot(message):
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
     admin_alert_text = (
-        f"💰 ငွေလွှဲပြေစာအသစ်\n"
+        f"💰 Ngwelweပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
@@ -168,10 +168,9 @@ def handle_payment_screenshot(message):
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
-# Multi-Server Data Checking Function (🌟 IP Server များအတွက် verify=False စနစ်သေချာထည့်သွင်းခြင်း)
+# Multi-Server Data Checking Function
 def fetch_key_from_server(api_url, input_value):
     try:
-        # Vercel မှ IP ဆီတိုက်ရိုက်ချိတ်ဆက်ရာတွင် SSL Error မတက်စေရန် verify=False ကို ထည့်သွင်းထားပါသည်
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
         metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
         
@@ -275,11 +274,9 @@ def handle_all_messages(message):
 
     # 🔄 Multi-Server ရှာဖွေရေး စနစ်
     target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
-    server_no = "Server 1"
     
     if not target_key:
         target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
-        server_no = "Server 2"
 
     if target_key:
         try:
@@ -310,10 +307,10 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
+            # 🌟 အစ်ကိုဖြစ်ချင်သည့်အတိုင်း တည်ရှိရာဆာဗာလိုင်းကို လုံးဝဖြုတ်ချပြီး သေသပ်စွာ ပြသခြင်း
             result_text = (
                 f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
-                f"📡 တည်ရှိရာဆာဗာ: {server_no}\n"
                 f"📅 Start Date: {start_date}\n"
                 f"⏳ End Date: {end_date}\n"
                 f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
@@ -325,7 +322,7 @@ def handle_all_messages(message):
         except Exception as e:
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
     else:
-        bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို ဆာဗာ (၁) ရော (၂) တွင်ပါ ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+        bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို စနစ်တွင် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
 
 # Catch-all Webhook Route
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
