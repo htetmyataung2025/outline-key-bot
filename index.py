@@ -13,7 +13,10 @@ app = Flask(__name__)
 
 # Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
-OUTLINE_API_URL = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
+
+# 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ (Server ၂ နေရာတွင် အစ်ကို့ API အသစ်ကို ထည့်သွင်းထားပါသည်)
+OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
+OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
 # 🔑 အစ်ကို့ရဲ့ Telegram Chat ID အမှန်
 ADMIN_CHAT_ID = "8778394176"  
@@ -62,7 +65,6 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    # 🌟 Website ခလုတ်ကို ဖြုတ်ပြီး Admin ဆက်သွယ်ရန် ခလုတ်ကို အောက်ခြေအလယ်တွင် ထားရှိခြင်း
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
@@ -94,7 +96,6 @@ def send_welcome(message):
     )
     
     try:
-        # 📸 စာရိုက်ဘားဘေးတွင် နာမည်အား "Main Website" ဟု ပြောင်းလဲသတ်မှတ်ခြင်း
         bot.set_chat_menu_button(message.chat.id, telebot.types.MenuButtonWebApp(
             type="web_app",
             text="Main Website",
@@ -118,7 +119,6 @@ def handle_buy_callback(call):
     chat_id = call.message.chat.id
     
     if plan:
-        # File state ထဲတွင် သေချာစွာ သိမ်းဆည်းခြင်း
         save_user_plan(chat_id, plan)
         
         payment_text = (
@@ -148,16 +148,12 @@ def handle_payment_screenshot(message):
     user_name = message.from_user.first_name if message.from_user.first_name else "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
     
-    # File ထဲမှ Plan ကို လှမ်းထုတ်ယူခြင်း
     user_plans = load_user_plans()
     plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "data": "မသိရှိပါ", "price": "မသိရှိပါ"})
-    
-    # 📅 အချိန်ကိုဖြုတ်ပြီး ရက်စွဲသီးသန့်ပဲ ထုတ်ယူခြင်း
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
-    # အစ်ကို့ဆီ ပို့ပေးမည့် သေသပ်လှပသော စာသားပုံစံ
     admin_alert_text = (
-        f"💰 ငွေလွှဲပြေစာအသစ်\n"
+        f"💰 Ngwelweပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
@@ -171,6 +167,53 @@ def handle_payment_screenshot(message):
         bot.reply_to(message, "⏳ ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
+
+# Multi-Server Data Checking Function
+def fetch_key_from_server(api_url, input_value):
+    try:
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=6)
+        
+        if keys_resp.status_code != 200:
+            return None, None
+            
+        keys_data = keys_resp.json().get("accessKeys", [])
+        bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
+        
+        target_key = None
+
+        if "#" in input_value:
+            try:
+                raw_name = input_value.split("#")[1]
+                clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
+                if clean_name:
+                    for key in keys_data:
+                        if clean_name in key.get("name", "").lower():
+                            target_key = key
+                            break
+            except:
+                pass
+
+        if not target_key and input_value.startswith("ss://"):
+            input_clean = clean_ss_url(input_value)
+            for key in keys_data:
+                server_clean = clean_ss_url(key.get("accessUrl", ""))
+                if input_clean and (input_clean in server_clean or server_clean in input_clean):
+                    target_key = key
+                    break
+
+        if not target_key and re.search(r'^\d+$', input_value):
+            match_id = re.search(r'^\d+$', input_value).group(0)
+            for key in keys_data:
+                if str(key.get("id")) == str(match_id):
+                    target_key = key
+                    break
+                    
+        if target_key:
+            return target_key, bytes_transferred
+    except:
+        pass
+    return None, None
 
 # Text/Key Handler
 @bot.message_handler(func=lambda message: True)
@@ -190,7 +233,6 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
-    # 🎁 Public Free Key ขလုတ်နှိပ်ခြင်း
     if input_value == "🎁 Public Free Key":
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
@@ -201,11 +243,10 @@ def handle_all_messages(message):
         bot.send_message(chat_id, free_text, parse_mode="HTML")
         return
 
-    # 👨‍💻 Admin သို့ ဆက်သွယ်ရန် ขလုတ်နှိပ်ခြင်း
     if input_value == "👨‍💻 Admin သို့ ဆက်သွယ်ရန်":
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
-        bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
+        bot.send_message(chat_id, "👇 အောက်ကخလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
     # ADMIN REPLY BYPASS SYSTEM 
@@ -231,48 +272,16 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # Outline API Usage Check
-    try:
-        keys_resp = requests.get(f"{OUTLINE_API_URL}/access-keys", verify=False, timeout=10)
-        metrics_resp = requests.get(f"{OUTLINE_API_URL}/metrics/transfer", verify=False, timeout=10)
-        
-        keys_data = keys_resp.json().get("accessKeys", [])
-        bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
+    # 🔄 Multi-Server ရှာဖွေရေး စနစ်
+    target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
+    server_no = "Server 1"
+    
+    if not target_key:
+        target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
+        server_no = "Server 2"
 
-        target_key = None
-
-        if "#" in input_value:
-            try:
-                raw_name = input_value.split("#")[1]
-                clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
-                if clean_name:
-                    for key in keys_data:
-                        k_name = key.get("name", "").lower()
-                        if clean_name in k_name:
-                            target_key = key
-                            break
-            except:
-                pass
-
-        if not target_key and input_value.startswith("ss://"):
-            input_clean = clean_ss_url(input_value)
-            for key in keys_data:
-                server_access_url = key.get("accessUrl", "")
-                if server_access_url:
-                    server_clean = clean_ss_url(server_access_url)
-                    if input_clean and (input_clean in server_clean or server_clean in input_clean):
-                        target_key = key
-                        break
-
-        if not target_key:
-            match_numeric = re.search(r'^\d+$', input_value)
-            if match_numeric:
-                for key in keys_data:
-                    if str(key.get("id")) == str(match_numeric.group(0)):
-                        target_key = key
-                        break
-
-        if target_key:
+    if target_key:
+        try:
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             display_name = full_name.split("tg")[0].split("Tg")[0].replace("_", " ").strip()
@@ -303,6 +312,7 @@ def handle_all_messages(message):
             result_text = (
                 f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
+                f"📡 တည်ရှိရာဆာဗာ: {server_no}\n"
                 f"📅 Start Date: {start_date}\n"
                 f"⏳ End Date: {end_date}\n"
                 f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
@@ -312,7 +322,7 @@ def handle_all_messages(message):
             bot.reply_to(message, result_text, parse_mode="MarkdownV2")
 
         else:
-            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link မှားယွင်းနေသဖြင့် သို့မဟုတ် Server တွင် မရှိသဖြင့် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို ဆာဗာ (၁) ရော (၂) တွင်ပါ ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
             
     except Exception as e:
         bot.reply_to(message, f"❌ Server သို့ ချိတ်ဆက်၍မရပါ- {str(e)}")
