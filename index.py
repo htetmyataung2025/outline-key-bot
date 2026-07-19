@@ -125,7 +125,7 @@ def handle_buy_callback(call):
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
@@ -135,7 +135,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -152,8 +152,9 @@ def handle_payment_screenshot(message):
     plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "data": "မသိရှိပါ", "price": "မသိရှိပါ"})
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
+    # 🌟 အစ်ကို့ဆီဝင်လာမည့် ခေါင်းစဉ်ကိုပါ "ငွေလွှဲပြေစာအသစ်" ဟု မြန်မာလို အပြီးသတ် ပြောင်းလဲထားပါသည်
     admin_alert_text = (
-        f"💰 Ngwelweပြေစာအသစ်\n"
+        f"💰 ငွေလွှဲပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
@@ -282,10 +283,13 @@ def handle_all_messages(message):
         try:
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
-            display_name = full_name.split("tg")[0].split("Tg")[0].replace("_", " ").strip()
+            
+            # 🌟 tg / Tg အမှီပြုခြင်းကို ဖြုတ်ပြီး နာမည်သက်သက်ကို သန့်စင်စွာ ထုတ်ယူခြင်း logic
+            display_name = full_name.split("tg")[0].split("Tg")[0].split("1")[0].split("2")[0].split("3")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
             
+            # 📅 နာမည်ထဲမှာ ဘယ်လိုပုံစံပဲဖြစ်ဖြစ် ရက်စွဲ (ရက်.လ.ခုနှစ်) တွေ့တာနဲ့ တန်းမှတ်ပေးမည့် စနစ်အသစ်
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
             if date_match:
                 end_date_raw = date_match.group(0)
@@ -307,17 +311,14 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # 🌟 အစ်ကိုဖြစ်ချင်သည့်အတိုင်း တည်ရှိရာဆာဗာလိုင်းကို လုံးဝဖြုတ်ချပြီး သေသပ်စွာ ပြသခြင်း
             result_text = (
-                f"```\n"
                 f"👤 အသုံးပြုသူ: {display_name}\n"
                 f"📅 Start Date: {start_date}\n"
                 f"⏳ End Date: {end_date}\n"
                 f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB\n"
-                f"```"
+                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
             )
-            bot.reply_to(message, result_text, parse_mode="MarkdownV2")
+            bot.reply_to(message, result_text)
 
         except Exception as e:
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
