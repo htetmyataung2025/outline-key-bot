@@ -86,7 +86,7 @@ def get_plan_keyboard():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = (
-        "👋 မင်္ဂလာပါ! H & E FEATURE VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+        "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
         "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
     )
     bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard())
