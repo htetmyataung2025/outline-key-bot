@@ -68,8 +68,6 @@ def get_main_menu_keyboard():
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     
-    # WebAppInfo စနစ်ဖြင့် Mini App အဖြစ် ပွင့်မည့် ခလုတ်
-    btn_web = KeyboardButton("🌐 H & E FEATURE Website", web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io"))
     # Admin ထံ တန်းသွားမည့် Link ခလုတ် (Reply Keyboard တွင် Link တိုက်ရိုက်မရသဖြင့် စာသားအဖြစ် ပို့ခိုင်းရန် တည်ဆောက်ခြင်း)
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
     
@@ -101,7 +99,7 @@ def send_welcome(message):
         # 📸 စာရိုက်ဘားဘေးတွင် "Menu" ဟုပေါ်ပြီး နှိပ်လျှင် Mini App ပွင့်စေမည့် Chat Menu Button စနစ် သတ်မှတ်ခြင်း
         bot.set_chat_menu_button(message.chat.id, telebot.types.MenuButtonWebApp(
             type="web_app",
-            text="Menu",
+            text="Main Website",
             web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io")
         ))
     except:
