@@ -180,7 +180,7 @@ def handle_all_messages(message):
     if input_value == "🎁 Public Free Key":
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
-            f"🎁 <b>H & E FEATUREမှ လူအများအတွက် 1.5TBအထိ အခမဲ့သုံးစွဲနိုင်သော Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
+            f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TBအထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
             f"<code>{free_key}</code>\n\n"
             f"☝️ အပေါ်က ကီးလေးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
         )
