@@ -152,7 +152,7 @@ def handle_payment_screenshot(message):
     plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "data": "မသိရှိပါ", "price": "မသိရှိပါ"})
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
-    # 🌟 အစ်ကို့ဆီဝင်လာမည့် ခေါင်းစဉ်ကိုပါ "ငွေလွှဲပြေစာအသစ်" ဟု မြန်မာလို အပြီးသတ် ပြောင်းလဲထားပါသည်
+    # 🌟 အစ်ကို့ဆီ ဝင်လာမည့် စာတန်းခေါင်းစဉ်ကိုပါ "ငွေလွှဲပြေစာအသစ်" ဟု မြန်မာလို အပြီးသတ် ပြောင်းလဲထားပါသည်
     admin_alert_text = (
         f"💰 ငွေလွှဲပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
@@ -264,7 +264,7 @@ def handle_all_messages(message):
                     f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN Appထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
-                bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
+                bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ปို့ပေးလိုက်ပါပြီခင်ဗျာ။")
                 return
             except Exception as e:
                 bot.reply_to(message, f"❌ ကီးပို့ရာတွင် အမှားအယွင်းရှိပါသည်- {str(e)}")
@@ -284,13 +284,18 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # 🌟 tg / Tg အမှီပြုခြင်းကို ဖြုတ်ပြီး နာမည်သက်သက်ကို သန့်စင်စွာ ထုတ်ယူခြင်း logic
-            display_name = full_name.split("tg")[0].split("Tg")[0].split("1")[0].split("2")[0].split("3")[0].replace("_", " ").strip()
+            # ရက်စွဲကို နာမည်ထဲကနေ တိတိကျကျ အရင်ဆုံး ရှာဖွေထုတ်ယူခြင်း logic
+            date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
+            
+            # ရက်စွဲစာသားကို ဖယ်ထုတ်ပြီး ကျန်တဲ့အပိုင်းကိုပဲ နာမည်အဖြစ် သန့်စင်စွာ ယူခြင်း
+            display_name = full_name
+            if date_match:
+                display_name = display_name.replace(date_match.group(0), "")
+            
+            display_name = display_name.split("tg")[0].split("Tg")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
             
-            # 📅 နာမည်ထဲမှာ ဘယ်လိုပုံစံပဲဖြစ်ဖြစ် ရက်စွဲ (ရက်.လ.ခုနှစ်) တွေ့တာနဲ့ တန်းမှတ်ပေးမည့် စနစ်အသစ်
-            date_match = re.search(r'\d{1,2}\.\d{1,2}\.\d{4}', full_name)
             if date_match:
                 end_date_raw = date_match.group(0)
                 try:
