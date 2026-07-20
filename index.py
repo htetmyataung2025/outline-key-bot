@@ -1,4 +1,4 @@
-Import os
+import os
 import requests
 from flask import Flask, request, jsonify
 import telebot
@@ -66,7 +66,7 @@ def clean_ss_url(url_str):
 
 def get_main_menu_keyboard():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_buy = KeyboardButton("🏷 Plan များ ကြည့်ရန်")
+    btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
@@ -109,7 +109,7 @@ def send_welcome(message):
 # /buy Command
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
-    bot.reply_to(message, "🏷 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
+    bot.reply_to(message, "🛒 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 # Plan Button Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
@@ -125,7 +125,7 @@ def handle_buy_callback(call):
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
@@ -135,7 +135,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -164,7 +164,7 @@ def handle_payment_screenshot(message):
     
     try:
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
+        bot.reply_to(message, "⏳ Ngwelweပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -221,7 +221,7 @@ def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
 
-    if input_value == "🏷 Plan များ ကြည့်ရန်":
+    if input_value == "🛒 Plan များ ကြည့်ရန်":
         bot.send_message(chat_id, "🛒  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
@@ -236,7 +236,7 @@ def handle_all_messages(message):
     if input_value == "🎁 Public Free Key":
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
-            f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TB အထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
+            f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TBအထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
             f"<code>{free_key}</code>\n\n"
             f"☝️ အပေါ်က ကီးလေးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
         )
@@ -329,16 +329,15 @@ def handle_all_messages(message):
             if has_date:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"📆 Start Date: {start_date}\n"
-                    
-                    f"⏰ End   Date: {end_date}\n"
-                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📅 Start Date: {start_date}\n"
+                    f"⏳ End Date: {end_date}\n"
+                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
             else:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
                 
@@ -358,4 +357,4 @@ def index(path):
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return jsonify({"status": "ok"}), 200
-    return "Bot is running perfectly!", 200 ဒီထဲကိုအပြီးပြင်ထည့်ပေး ငွေလွှဲဆိုတာကို မြန်ာမာလိုပဲအကုန်ထည့်
+    return "Bot is running perfectly!", 200
