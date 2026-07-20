@@ -65,7 +65,7 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    # persistent=True ကြောင့် Menu ခလုတ် ပျောက်မသွားတော့ပါဗျာ
+    # persistent=True ကြောင့် အောက်ခြေ Menu ခလုတ်ကြီး ပျောက်မသွားတော့ပါဗျာ
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, one_time_keyboard=False, persistent=True)
     btn_buy = KeyboardButton("🏷 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
@@ -136,7 +136,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -247,7 +247,7 @@ def handle_all_messages(message):
     if input_value == "👨‍💻 Admin သို့ ဆက်သွယ်ရန်":
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
-        bot.send_message(chat_id, "👇 အောက်ကخလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
+        bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
     # ADMIN REPLY BYPASS SYSTEM 
@@ -284,7 +284,7 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # ရက်စွဲ ရှာဖွေခြင်း logic
+            # 📅 ရက်စွဲ (2026 သို့မဟုတ် 26) ရှာဖွေခြင်း logic
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
@@ -295,12 +295,12 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
-            # Data တွက်ချက်မှုအပိုင်းကို if အပြင်ဘက်ထုတ်ထားခြင်းဖြင့် Crash ဖြစ်ခြင်းမှ ကာကွယ်ပါသည်
+            # Variable တွက်ချက်မှုအပိုင်းကို အပေါ်ဆုံးတင်ထားခြင်းဖြင့် Layout နှစ်ခုလုံးအတွက်အဆင်ပြေစေပါသည်
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
             plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
-
+            
             if date_match:
                 end_date_raw = date_match.group(0)
                 try:
@@ -318,31 +318,21 @@ def handle_all_messages(message):
                     end_date_obj = datetime(year, month, day)
                     start_date_obj = end_date_obj - relativedelta(months=1)
                     start_date = f"{start_date_obj.day}.{start_date_obj.month}.{start_date_obj.year}"
-                    
-                    has_date = True
                 except:
-                    has_date = False
+                    end_date = "သတ်မှတ်မထားပါ"
+                    start_date = "သတ်မှတ်မထားပါ"
             else:
-                has_date = False
+                end_date = "သတ်မှတ်မထားပါ"
+                start_date = "သတ်မှတ်မထားပါ"
             
-            # စာသားတွဲဖက်ပြသခြင်း
-            if has_date:
-                result_text = (
-                    f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"📅 Start Date: {start_date}\n"
-                    f"⏳ End Date: {end_date}\n"
-                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                    f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
-                )
-            else:
-                result_text = (
-                    f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"📅 Start Date: သတ်မှတ်မထားပါ\n"
-                    f"⏳ End Date: သတ်မှတ်မထားပါ\n"
-                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                    f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
-                )
-                
+            # 🌟 အစ်ကိုဖြစ်ချင်သည့် ဒုတိယပုံLayout စာကြောင်းအကွာအဝေးအတိုင်း ကွက်တိပြင်ဆင်ခြင်း
+            result_text = (
+                f"👤 အသုံးပြုသူ: {display_name}\n\n"
+                f"📅 Start Date: {start_date}\n\n"
+                f"⏳ End Date: {end_date}\n\n"
+                f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n\n"
+                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
+            )
             bot.reply_to(message, result_text)
 
         except Exception as e:
