@@ -331,7 +331,7 @@ def handle_all_messages(message):
                     f"👤 အသုံးပြုသူ : {display_name}\n"
                     f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
                     f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
-                    f"⏰ ကီးသက်တမ်းကုန်ဆုံးရက်: {end_date}"
+                    f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
                 )
             else:
                 result_text = (
