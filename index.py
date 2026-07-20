@@ -66,7 +66,7 @@ def clean_ss_url(url_str):
 
 def get_main_menu_keyboard():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
+    btn_buy = KeyboardButton("🏷️ Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
@@ -125,7 +125,7 @@ def handle_buy_callback(call):
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
@@ -135,7 +135,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -221,7 +221,7 @@ def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
 
-    if input_value == "🛒 Plan များ ကြည့်ရန်":
+    if input_value == "🏷️ Plan များ ကြည့်ရန်":
         bot.send_message(chat_id, "🛒  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
@@ -330,14 +330,14 @@ def handle_all_messages(message):
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
                     f"📅 Start Date: {start_date}\n"
-                    f"⏳ End Date: {end_date}\n"
-                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"⏰ End Date: {end_date}\n"
+                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
             else:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
                 
