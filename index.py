@@ -65,7 +65,7 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    # 🌟 persistent=True ကြောင့် Menu ခလုတ်ကြီး ဖုန်းထဲတွင် ဘယ်တော့မှ ပျောက်မသွားတော့ပါဗျာ
+    # persistent=True စနစ်ကြောင့် Menu ခလုတ်ကြီး ပျောက်မသွားတော့ပါဗျာ
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, one_time_keyboard=False, persistent=True)
     btn_buy = KeyboardButton("🏷 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
@@ -122,7 +122,6 @@ def handle_buy_callback(call):
     if plan:
         save_user_plan(chat_id, plan)
         
-        # 🌟 ငွေလွှဲစာသားများအားလုံး မြန်မာလို အပြီးသတ် ပြင်ဆင်ပြီးစီးခြင်း
         payment_text = (
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
@@ -285,19 +284,18 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # 📅 ရက်စွဲ (2026 သို့မဟုတ် 26) ကို ရှာဖွေထုတ်ယူခြင်း logic
+            # ရက်စွဲ (2026 သို့မဟုတ် 26) ရှာဖွေခြင်း logic
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
             if date_match:
                 display_name = display_name.replace(date_match.group(0), "")
             
-            # စာသားသန့်စင်ခြင်း
             display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
             
-            # 🌟 Variable တွက်ချက်မှုအပိုင်းကို if-else အပြင်ဘက်ဆုံးသို့ ထုတ်ထားပေးခြင်းဖြင့် NameError လုံးဝမတက်တော့ဘဲ Crash ကင်းဝေးစေပါသည်
+            # Variable တွက်ချက်မှုကို နေရာမှန် ထုတ်ထားပေးခြင်းဖြင့် NameError လုံးဝမတက်တော့ပါ
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
             plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
             usage_bytes = bytes_transferred.get(str(key_id), 0)
@@ -327,13 +325,13 @@ def handle_all_messages(message):
             else:
                 has_date = False
             
-            # 🌟 အစ်ကိုဖြစ်ချင်သည့် ဒုတိယပုံ Layout စာကြောင်းအကွာအဝေး (Double Newline) အတိုင်း ကွက်တိပြင်ဆင်ခြင်း
+            # 🌟 အစ်ကိုဖြစ်ချင်သည့် ဒုတိယပုံ Layout စာကြောင်းအကွာအဝေး (Double Newline) အတိုင်း ညီညာစွာ ပြသပေးခြင်း
             if has_date:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n\n"
                     f"📅 Start Date: {start_date}\n\n"
-                    f"⏰ End   Date: {end_date}\n\n"
-                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n\n"
+                    f"⏳ End Date: {end_date}\n\n"
+                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
             else:
