@@ -66,7 +66,7 @@ def clean_ss_url(url_str):
 
 def get_main_menu_keyboard():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
+    btn_buy = KeyboardButton("🏷 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
@@ -109,7 +109,7 @@ def send_welcome(message):
 # /buy Command
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
-    bot.reply_to(message, "🛒 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
+    bot.reply_to(message, "🏷 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 # Plan Button Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
@@ -221,7 +221,7 @@ def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
 
-    if input_value == "🛒 Plan များ ကြည့်ရန်":
+    if input_value == "🏷 Plan များ ကြည့်ရန်":
         bot.send_message(chat_id, "🛒  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
