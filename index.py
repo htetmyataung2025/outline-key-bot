@@ -1,4 +1,4 @@
-Import os
+import os
 import requests
 from flask import Flask, request, jsonify
 import telebot
@@ -65,7 +65,8 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    # 🌟 persistent=True စနစ်ထည့်သွင်းပေးထားသဖြင့် Menu ခလုတ်ကြီး ပျောက်မသွားတော့ပါဗျာ
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, one_time_keyboard=False, persistent=True)
     btn_buy = KeyboardButton("🏷 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
@@ -283,17 +284,22 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # 📅 🌟 ဂဏန်း ၄ လုံး (2026) သို့မဟုတ် ဂဏန်း ၂ လုံး (26) ရက်စွဲပုံစံနှစ်ခုလုံးကို ရှာဖွေနိုင်မည့် Regex အသစ်
+            # 📅 ရက်စွဲ (2026 သို့မဟုတ် 26) ကို ရှာဖွေထုတ်ယူခြင်း
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
             if date_match:
                 display_name = display_name.replace(date_match.group(0), "")
             
-            # စာသားသန့်စင်ခြင်း
             display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
+            
+            # 🌟 Variable တွက်ချက်မှုအပိုင်းကို if အပြင်ဘက်ကို တင်ပေးလိုက်သဖြင့် Error လုံးဝကင်းရှင်းသွားပါပြီ
+            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+            usage_bytes = bytes_transferred.get(str(key_id), 0)
+            usage_gb = bytes_to_gb(usage_bytes)
             
             if date_match:
                 end_date_raw = date_match.group(0)
@@ -303,7 +309,6 @@ def handle_all_messages(message):
                     month = int(e_parts[1])
                     year_str = e_parts[2]
                     
-                    # 🌟 ဂဏန်း ၂ လုံးတည်းနဲ့ ခုနှစ်ဖြစ်နေရင် (ဥပမာ '26') ရှေ့မှာ '20' ကို ပေါင်းထည့်ပေးမည့် စနစ်
                     if len(year_str) == 2:
                         year = int("20" + year_str)
                     else:
@@ -319,18 +324,12 @@ def handle_all_messages(message):
                     has_date = False
             else:
                 has_date = False
-
-            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
-            usage_bytes = bytes_transferred.get(str(key_id), 0)
-            usage_gb = bytes_to_gb(usage_bytes)
             
             # စာသားတွဲဖက်ပြသခြင်း
             if has_date:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"📆 Start Date: {start_date}\n"
-                    
+                    f"📅 Start Date: {start_date}\n"
                     f"⏰ End   Date: {end_date}\n"
                     f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
@@ -338,7 +337,9 @@ def handle_all_messages(message):
             else:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📅 Start Date: သတ်မှတ်မထားပါ\n"
+                    f"⏳ End Date: သတ်မှတ်မထားပါ\n"
+                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
                 
@@ -358,4 +359,4 @@ def index(path):
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return jsonify({"status": "ok"}), 200
-    return "Bot is running perfectly!", 200 
+    return "Bot is running perfectly!", 200
