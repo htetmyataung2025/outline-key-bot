@@ -154,11 +154,11 @@ def handle_payment_screenshot(message):
 
     admin_alert_text = (
         f"💰 ငွေလွှဲပြေစာအသစ်\n"
-        f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
-        f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
-        f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
-        f"📅 ပေးပို့သည့်ရက်စွဲ: {current_date}\n"
-        f"🆔 User Chat ID: {chat_id}\n"
+        f"👤 ဝယ်ယူသူနာမည် : {user_name} ({username})\n"
+        f"📦 ရွေးချယ်ထားသော Plan : {plan_info['name']} ({plan_info.get('data', '')})\n"
+        f"💵 ကျသင့်ငွေပမာဏ : {plan_info['price']}\n"
+        f"📅 ပေးပို့သည့်ရက်စွဲ : {current_date}\n"
+        f"🆔 User Chat ID : {chat_id}\n"
         f"📢 ပြေစာရှိ ID ကို သေချာစစ်ဆေးပါ။"
     )
     
@@ -328,16 +328,16 @@ def handle_all_messages(message):
             # စာသားတွဲဖက်ပြသခြင်း
             if has_date:
                 result_text = (
-                    f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"💳 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                    f"⚡️ အသုံးပြုပြီးသား Data: {usage_gb} GB\n"
-                    f"⏰ End Date: {end_date}"
+                    f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"⏰ ကီးသက်တမ်းကုန်ဆုံးရက်: {end_date}"
                 )
             else:
                 result_text = (
-                    f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"💳 ဝယ်ယူထားသော Plan: {plan_gb}\n"
-                    f"⚡️ အသုံးပြုပြီးသား Data: {usage_gb} GB"
+                    f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB"
                 )
                 
             bot.reply_to(message, result_text)
