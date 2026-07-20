@@ -1,4 +1,4 @@
-import os
+Import os
 import requests
 from flask import Flask, request, jsonify
 import telebot
@@ -65,8 +65,7 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    # persistent=True ကြောင့် အောက်ခြေ Menu ခလုတ်ကြီး ပျောက်မသွားတော့ပါဗျာ
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, one_time_keyboard=False, persistent=True)
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("🏷 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
@@ -284,22 +283,17 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # 📅 ရက်စွဲ (2026 သို့မဟုတ် 26) ရှာဖွေခြင်း logic
+            # 📅 🌟 ဂဏန်း ၄ လုံး (2026) သို့မဟုတ် ဂဏန်း ၂ လုံး (26) ရက်စွဲပုံစံနှစ်ခုလုံးကို ရှာဖွေနိုင်မည့် Regex အသစ်
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
             if date_match:
                 display_name = display_name.replace(date_match.group(0), "")
             
+            # စာသားသန့်စင်ခြင်း
             display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
-            
-            # Variable တွက်ချက်မှုအပိုင်းကို အပေါ်ဆုံးတင်ထားခြင်းဖြင့် Layout နှစ်ခုလုံးအတွက်အဆင်ပြေစေပါသည်
-            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
-            usage_bytes = bytes_transferred.get(str(key_id), 0)
-            usage_gb = bytes_to_gb(usage_bytes)
             
             if date_match:
                 end_date_raw = date_match.group(0)
@@ -309,6 +303,7 @@ def handle_all_messages(message):
                     month = int(e_parts[1])
                     year_str = e_parts[2]
                     
+                    # 🌟 ဂဏန်း ၂ လုံးတည်းနဲ့ ခုနှစ်ဖြစ်နေရင် (ဥပမာ '26') ရှေ့မှာ '20' ကို ပေါင်းထည့်ပေးမည့် စနစ်
                     if len(year_str) == 2:
                         year = int("20" + year_str)
                     else:
@@ -318,21 +313,35 @@ def handle_all_messages(message):
                     end_date_obj = datetime(year, month, day)
                     start_date_obj = end_date_obj - relativedelta(months=1)
                     start_date = f"{start_date_obj.day}.{start_date_obj.month}.{start_date_obj.year}"
+                    
+                    has_date = True
                 except:
-                    end_date = "သတ်မှတ်မထားပါ"
-                    start_date = "သတ်မှတ်မထားပါ"
+                    has_date = False
             else:
-                end_date = "သတ်မှတ်မထားပါ"
-                start_date = "သတ်မှတ်မထားပါ"
+                has_date = False
+
+            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+            usage_bytes = bytes_transferred.get(str(key_id), 0)
+            usage_gb = bytes_to_gb(usage_bytes)
             
-            # 🌟 အစ်ကိုဖြစ်ချင်သည့် ဒုတိယပုံLayout စာကြောင်းအကွာအဝေးအတိုင်း ကွက်တိပြင်ဆင်ခြင်း
-            result_text = (
-                f"👤 အသုံးပြုသူ: {display_name}\n\n"
-                f"📅 Start Date: {start_date}\n\n"
-                f"⏳ End Date: {end_date}\n\n"
-                f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n\n"
-                f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
-            )
+            # စာသားတွဲဖက်ပြသခြင်း
+            if has_date:
+                result_text = (
+                    f"👤 အသုံးပြုသူ: {display_name}\n"
+                    f"📆 Start Date: {start_date}\n"
+                    
+                    f"⏰ End   Date: {end_date}\n"
+                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
+                )
+            else:
+                result_text = (
+                    f"👤 အသုံးပြုသူ: {display_name}\n"
+                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
+                )
+                
             bot.reply_to(message, result_text)
 
         except Exception as e:
@@ -349,4 +358,4 @@ def index(path):
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return jsonify({"status": "ok"}), 200
-    return "Bot is running perfectly!", 200
+    return "Bot is running perfectly!", 200 ဒီထဲကိုအပြီးပြင်ထည့်ပေး ငွေလွှဲဆိုတာကို မြန်ာမာလိုပဲအကုန်ထည့်
