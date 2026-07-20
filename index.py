@@ -66,8 +66,8 @@ def clean_ss_url(url_str):
 
 def get_main_menu_keyboard():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_buy = KeyboardButton("🏷️ Plan များ ကြည့်ရန်")
-    btn_check = KeyboardButton("🧿 Data Usage စစ်ရန်")
+    btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
+    btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
     
@@ -221,11 +221,11 @@ def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
 
-    if input_value == "🏷️ Plan များ ကြည့်ရန်":
+    if input_value == "💳 Plan များ ကြည့်ရန်":
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
-    if input_value == "🧿 Data Usage စစ်ရန်":
+    if input_value == "⚡️ Data Usage စစ်ရန်":
         check_guide = (
             "👇 ဝယ်ယူထားသော VPN Key ကို ဒီမှာ Paste ချပေးပါ:\n\n"
             " 🫶 Key ကို Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ခင်ဗျာ။"
