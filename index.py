@@ -65,9 +65,8 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    # 🌟 persistent=True စနစ်ထည့်သွင်းပေးထားသဖြင့် Menu ခလုတ်ကြီး ပျောက်မသွားတော့ပါဗျာ
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, one_time_keyboard=False, persistent=True)
-    btn_buy = KeyboardButton("🏷 Plan များ ကြည့်ရန်")
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn_buy = KeyboardButton("🛒 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
@@ -110,7 +109,7 @@ def send_welcome(message):
 # /buy Command
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
-    bot.reply_to(message, "🏷 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
+    bot.reply_to(message, "🛒 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 # Plan Button Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
@@ -126,7 +125,7 @@ def handle_buy_callback(call):
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
@@ -136,7 +135,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -165,7 +164,7 @@ def handle_payment_screenshot(message):
     
     try:
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
+        bot.reply_to(message, "⏳ Ngwelweပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -222,7 +221,7 @@ def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
 
-    if input_value == "🏷 Plan များ ကြည့်ရန်":
+    if input_value == "🛒 Plan များ ကြည့်ရန်":
         bot.send_message(chat_id, "🛒  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
@@ -237,7 +236,7 @@ def handle_all_messages(message):
     if input_value == "🎁 Public Free Key":
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
-            f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TB အထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
+            f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TBအထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
             f"<code>{free_key}</code>\n\n"
             f"☝️ အပေါ်က ကီးလေးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
         )
@@ -284,22 +283,17 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # 📅 ရက်စွဲ (2026 သို့မဟုတ် 26) ကို ရှာဖွေထုတ်ယူခြင်း
+            # 📅 🌟 ဂဏန်း ၄ လုံး (2026) သို့မဟုတ် ဂဏန်း ၂ လုံး (26) ရက်စွဲပုံစံနှစ်ခုလုံးကို ရှာဖွေနိုင်မည့် Regex အသစ်
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
             if date_match:
                 display_name = display_name.replace(date_match.group(0), "")
             
+            # စာသားသန့်စင်ခြင်း
             display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
-            
-            # 🌟 Variable တွက်ချက်မှုအပိုင်းကို if အပြင်ဘက်ကို တင်ပေးလိုက်သဖြင့် Error လုံးဝကင်းရှင်းသွားပါပြီ
-            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
-            usage_bytes = bytes_transferred.get(str(key_id), 0)
-            usage_gb = bytes_to_gb(usage_bytes)
             
             if date_match:
                 end_date_raw = date_match.group(0)
@@ -309,6 +303,7 @@ def handle_all_messages(message):
                     month = int(e_parts[1])
                     year_str = e_parts[2]
                     
+                    # 🌟 ဂဏန်း ၂ လုံးတည်းနဲ့ ခုနှစ်ဖြစ်နေရင် (ဥပမာ '26') ရှေ့မှာ '20' ကို ပေါင်းထည့်ပေးမည့် စနစ်
                     if len(year_str) == 2:
                         year = int("20" + year_str)
                     else:
@@ -324,21 +319,24 @@ def handle_all_messages(message):
                     has_date = False
             else:
                 has_date = False
+
+            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+            usage_bytes = bytes_transferred.get(str(key_id), 0)
+            usage_gb = bytes_to_gb(usage_bytes)
             
             # စာသားတွဲဖက်ပြသခြင်း
             if has_date:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
                     f"📅 Start Date: {start_date}\n"
-                    f"⏰ End   Date: {end_date}\n"
-                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"⏳ End Date: {end_date}\n"
+                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
             else:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"📅 Start Date: သတ်မှတ်မထားပါ\n"
-                    f"⏳ End Date: သတ်မှတ်မထားပါ\n"
                     f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
