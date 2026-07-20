@@ -125,7 +125,7 @@ def handle_buy_callback(call):
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 Ngwelweရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Wave Pay - 09699970092\n"
@@ -135,7 +135,7 @@ def handle_buy_callback(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 Ngwelweပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
         )
         bot.send_message(chat_id, payment_text)
@@ -164,7 +164,7 @@ def handle_payment_screenshot(message):
     
     try:
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
-        bot.reply_to(message, "⏳ Ngwelweပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
+        bot.reply_to(message, "💌 ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -283,7 +283,7 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # 📅 ရက်စွဲ (2026 သို့မဟုတ် 26) ကို ရှာဖွေထုတ်ယူခြင်း
+            # 📅 🌟 ဂဏန်း ၄ လုံး (2026) သို့မဟုတ် ဂဏန်း ၂ လုံး (26) ရက်စွဲပုံစံနှစ်ခုလုံးကို ရှာဖွေနိုင်မည့် Regex အသစ်
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
@@ -295,31 +295,6 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
-            # Variable တွက်ချက်မှုအပိုင်း (NameError မဖြစ်အောင် Scope အပြင်ထုတ်ထားပါသည်)
-            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            raw_gb = bytes_to_gb(limit_bytes) if limit_bytes else 0
-            usage_bytes = bytes_transferred.get(str(key_id), 0)
-            usage_gb = bytes_to_gb(usage_bytes)
-            
-            # 🌟 GB ပမာဏအလိုက် ဝယ်ယူထားသော Plan နာမည်များကို အလိုအလျောက် သတ်မှတ်ပေးသည့် စနစ်
-            if limit_bytes:
-                if raw_gb == 25.0:
-                    plan_gb = "Starter Plan (25 GB)"
-                elif raw_gb == 50.0:
-                    plan_gb = "Basic Plan (50 GB)"
-                elif raw_gb == 75.0:
-                    plan_gb = "Standard Plan (75 GB)"
-                elif raw_gb == 100.0:
-                    plan_gb = "Premium Plan (100 GB)"
-                elif raw_gb == 150.0:
-                    plan_gb = "VIP Plan (150 GB)"
-                elif raw_gb == 200.0:
-                    plan_gb = "Pro Plan (200 GB)"
-                else:
-                    plan_gb = f"Custom Plan ({raw_gb} GB)"
-            else:
-                plan_gb = "Ultimate VIP Plan (Unlimited)"
-            
             if date_match:
                 end_date_raw = date_match.group(0)
                 try:
@@ -328,6 +303,7 @@ def handle_all_messages(message):
                     month = int(e_parts[1])
                     year_str = e_parts[2]
                     
+                    # 🌟 ဂဏန်း ၂ လုံးတည်းနဲ့ ခုနှစ်ဖြစ်နေရင် (ဥပမာ '26') ရှေ့မှာ '20' ကို ပေါင်းထည့်ပေးမည့် စနစ်
                     if len(year_str) == 2:
                         year = int("20" + year_str)
                     else:
@@ -344,6 +320,11 @@ def handle_all_messages(message):
             else:
                 has_date = False
 
+            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+            usage_bytes = bytes_transferred.get(str(key_id), 0)
+            usage_gb = bytes_to_gb(usage_bytes)
+            
             # စာသားတွဲဖက်ပြသခြင်း
             if has_date:
                 result_text = (
