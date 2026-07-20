@@ -335,7 +335,12 @@ def handle_all_messages(message):
                     f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
-           
+            else:
+                result_text = (
+                    f"👤 အသုံးပြုသူ: {display_name}\n"
+                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
+                )
                 
             bot.reply_to(message, result_text)
 
@@ -353,4 +358,4 @@ def index(path):
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return jsonify({"status": "ok"}), 200
-    return "Bot is running perfectly!", 200 ဒီထဲကိုအပြီးပြင်ထည့်ပေး ငွေလွှဲဆိုတာကို မြန်ာမာလိုပဲအကုန်ထည့်
+    return "Bot is running perfectly!", 200
