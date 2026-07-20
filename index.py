@@ -65,7 +65,8 @@ def clean_ss_url(url_str):
     return main_part.strip()
 
 def get_main_menu_keyboard():
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    # 🌟 persistent=True ထည့်သွင်းလိုက်သဖြင့် Menu ခလုတ်ကြီး ဖုန်းထဲတွင် ဘယ်တော့မှ ပျောက်မသွားတော့ပါဗျာ
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, one_time_keyboard=False, persistent=True)
     btn_buy = KeyboardButton("🏷 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("📊 Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
@@ -121,6 +122,7 @@ def handle_buy_callback(call):
     if plan:
         save_user_plan(chat_id, plan)
         
+        # 🌟 Ngwelwe စာသားများကို "ငွေလွှဲ" ဟု မြန်မာလို အပြီးသတ် ပြောင်းလဲပြင်ဆင်ခြင်း
         payment_text = (
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
             f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
@@ -152,6 +154,7 @@ def handle_payment_screenshot(message):
     plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "data": "မသိရှိပါ", "price": "မသိရှိပါ"})
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
+    # 🌟 "ငွေလွှဲပြေစာအသစ်" အဖြစ် မြန်မာလို အပြီးသတ် ပြင်ဆင်ပြီးစီးခြင်း
     admin_alert_text = (
         f"💰 ငွေလွှဲပြေစာအသစ်\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
@@ -283,14 +286,13 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # 📅 🌟 ဂဏန်း ၄ လုံး (2026) သို့မဟုတ် ဂဏန်း ၂ လုံး (26) ရက်စွဲပုံစံနှစ်ခုလုံးကို ရှာဖွေနိုင်မည့် Regex အသစ်
+            # 📅 ရက်စွဲ (2026 သို့မဟုတ် 26 ပုံစံနှစ်ခုလုံး) ကို ရှာဖွေထုတ်ယူခြင်း logic
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
             if date_match:
                 display_name = display_name.replace(date_match.group(0), "")
             
-            # စာသားသန့်စင်ခြင်း
             display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
@@ -303,7 +305,6 @@ def handle_all_messages(message):
                     month = int(e_parts[1])
                     year_str = e_parts[2]
                     
-                    # 🌟 ဂဏန်း ၂ လုံးတည်းနဲ့ ခုနှစ်ဖြစ်နေရင် (ဥပမာ '26') ရှေ့မှာ '20' ကို ပေါင်းထည့်ပေးမည့် စနစ်
                     if len(year_str) == 2:
                         year = int("20" + year_str)
                     else:
@@ -329,8 +330,7 @@ def handle_all_messages(message):
             if has_date:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"📆 Start Date: {start_date}\n"
-                    
+                    f"📅 Start Date: {start_date}\n"
                     f"⏰ End   Date: {end_date}\n"
                     f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
@@ -338,7 +338,9 @@ def handle_all_messages(message):
             else:
                 result_text = (
                     f"👤 အသုံးပြုသူ: {display_name}\n"
-                    f"🌟 ဝယ်ယူထားသော Plan: {plan_gb}\n"
+                    f"📅 Start Date: သတ်မှတ်မထားပါ\n"
+                    f"⏳ End Date: သတ်မှတ်မထားပါ\n"
+                    f"📋 ဝယ်ယူထားသော Plan: {plan_gb}\n"
                     f"📊 အသုံးပြုပြီးသား Data: {usage_gb} GB"
                 )
                 
