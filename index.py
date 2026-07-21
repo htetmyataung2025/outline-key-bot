@@ -24,8 +24,9 @@ ADMIN_CHAT_ID = "8778394176"
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# Vercel တွင် Memory Reset ဖြစ်ခြင်းမှ ကာကွယ်ရန် Temp File ဖြင့် Plan သိမ်းဆည်းသည့်စနစ်
+# Temp Files ဖြင့် Plan နှင့် Key Map များ သိမ်းဆည်းသည့်စနစ်
 STATE_FILE = "/tmp/user_plans.json"
+MAPPING_FILE = "/tmp/key_mappings.json"
 
 def load_user_plans():
     if os.path.exists(STATE_FILE):
@@ -42,6 +43,25 @@ def save_user_plan(chat_id, plan_data):
     try:
         with open(STATE_FILE, 'w') as f:
             json.dump(plans, f)
+    except:
+        pass
+
+# Key Name / User Identification Map ကို သိမ်းဆည်းသည့် Function
+def load_key_mappings():
+    if os.path.exists(MAPPING_FILE):
+        try:
+            with open(MAPPING_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_key_mapping(clean_name, chat_id):
+    mappings = load_key_mappings()
+    mappings[clean_name.lower()] = str(chat_id)
+    try:
+        with open(MAPPING_FILE, 'w') as f:
+            json.dump(mappings, f)
     except:
         pass
 
@@ -150,7 +170,6 @@ def handle_payment_screenshot(message):
     
     user_plans = load_user_plans()
     
-    # 🌟 နည်းလမ်း (၁) - Plan မရွေးရသေးဘဲ တန်းပို့လာပါက Screenshot ပြေစာ လက်မခံဘဲ သတိပေးမည့် စနစ်
     if str(chat_id) not in user_plans:
         bot.reply_to(message, "⚠️ ခွင့်လွှတ်ပါခင်ဗျာ၊ ကျေးဇူးပြု၍ '💳 Plan များ ကြည့်ရန်' ခလုတ်ကို အရင်နှိပ်ပြီး ဝယ်ယူလိုသော Plan ကို ရွေးချယ်ပေးပါဦးခင်ဗျာ။")
         return
@@ -289,18 +308,19 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # 📅 🌟 ဂဏန်း ၄ လုံး (2026) သို့မဟုတ် ဂဏန်း ၂ လုံး (26) ရက်စွဲပုံစံနှစ်ခုလုံးကို ရှာဖွေနိုင်မည့် Regex အသစ်
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
             if date_match:
                 display_name = display_name.replace(date_match.group(0), "")
             
-            # စာသားသန့်စင်ခြင်း
             display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
             
+            # 🌟 Customer အဟောင်း လာစစ်ချိန်တွင် Key Name နှင့် Chat ID ကို Auto မှတ်ပေးသည့် စနစ်
+            save_key_mapping(display_name, chat_id)
+
             if date_match:
                 end_date_raw = date_match.group(0)
                 try:
@@ -309,7 +329,6 @@ def handle_all_messages(message):
                     month = int(e_parts[1])
                     year_str = e_parts[2]
                     
-                    # 🌟 ဂဏန်း ၂ လုံးတည်းနဲ့ ခုနှစ်ဖြစ်နေရင် (ဥပမာ '26') ရှေ့မှာ '20' ကို ပေါင်းထည့်ပေးမည့် စနစ်
                     if len(year_str) == 2:
                         year = int("20" + year_str)
                     else:
@@ -331,7 +350,6 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # စာသားတွဲဖက်ပြသခြင်း
             if has_date:
                 result_text = (
                     f"👤 အသုံးပြုသူ : {display_name}\n"
@@ -352,6 +370,82 @@ def handle_all_messages(message):
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
     else:
         bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို စနစ်တွင် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+
+# ⏰ နေ့စဉ် အလိုအလျောက် သက်တမ်း ကုန်/မကုန် စစ်ဆေးပြီး Noti ပို့ပေးမည့် Cron Route
+@app.route('/cron-check', methods=['GET', 'POST'])
+def cron_check():
+    today_str = datetime.now().strftime("%d.%m.%Y")
+    today_short_str = datetime.now().strftime("%d.%m.%y")
+    
+    key_mappings = load_key_mappings()
+    notified_count = 0
+
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
+        try:
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+            
+            if keys_resp.status_code != 200:
+                continue
+                
+            keys_data = keys_resp.json().get("accessKeys", [])
+            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
+
+            for key in keys_data:
+                full_name = key.get("name", "")
+                key_id = str(key.get("id"))
+                limit_bytes = key.get("dataLimit", {}).get("bytes")
+                usage_bytes = bytes_transferred.get(key_id, 0)
+                
+                # ၁။ Data Limit ပြည့်သွားသလား စစ်ခြင်း
+                is_gb_full = False
+                if limit_bytes and usage_bytes >= limit_bytes:
+                    is_gb_full = True
+
+                # ၂။ ဒီနေ့ သက်တမ်း ကုန်သလား စစ်ခြင်း
+                is_expired_today = False
+                if today_str in full_name or today_short_str in full_name:
+                    is_expired_today = True
+
+                if is_gb_full or is_expired_today:
+                    date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
+                    clean_name = full_name
+                    if date_match:
+                        clean_name = clean_name.replace(date_match.group(0), "")
+                    clean_name = clean_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip().lower()
+
+                    target_chat_id = key_mappings.get(clean_name)
+
+                    reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
+
+                    # Customer ထံ Noti ပို့ခြင်း
+                    if target_chat_id:
+                        try:
+                            user_noti = (
+                                f"⚠️ <b>သတိပေးချက်:</b>\n\n"
+                                f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် <b>{reason_text}</b> ခင်ဗျာ။\n\n"
+                                f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '💳 Plan များ ကြည့်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
+                            )
+                            bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
+                            notified_count += 1
+                        except:
+                            pass
+
+                    # Admin ထံ Noti Alert ပို့ခြင်း
+                    try:
+                        admin_noti = (
+                            f"📢 <b>Notification Alert</b>\n"
+                            f"👤 အသုံးပြုသူ: {full_name}\n"
+                            f"📌 အခြေအနေ: {reason_text}\n"
+                            f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
+                        )
+                        bot.send_message(ADMIN_CHAT_ID, admin_noti, parse_mode="HTML")
+                    except:
+                        pass
+        except:
+            pass
+
+    return jsonify({"status": "cron completed", "notified_users": notified_count}), 200
 
 # Catch-all Webhook Route
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
