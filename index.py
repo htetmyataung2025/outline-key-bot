@@ -149,7 +149,13 @@ def handle_payment_screenshot(message):
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
     
     user_plans = load_user_plans()
-    plan_info = user_plans.get(str(chat_id), {"name": "သတ်မှတ်မထားသော Plan", "data": "မသိရှိပါ", "price": "မသိရှိပါ"})
+    
+    # 🌟 နည်းလမ်း (၁) - Plan မရွေးရသေးဘဲ တန်းပို့လာပါက Screenshot ပြေစာ လက်မခံဘဲ သတိပေးမည့် စနစ်
+    if str(chat_id) not in user_plans:
+        bot.reply_to(message, "⚠️ ခွင့်လွှတ်ပါခင်ဗျာ၊ ကျေးဇူးပြု၍ '💳 Plan များ ကြည့်ရန်' ခလုတ်ကို အရင်နှိပ်ပြီး ဝယ်ယူလိုသော Plan ကို ရွေးချယ်ပေးပါဦးခင်ဗျာ။")
+        return
+
+    plan_info = user_plans.get(str(chat_id))
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
     admin_alert_text = (
