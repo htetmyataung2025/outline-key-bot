@@ -11,5 +11,11 @@
       "src": "/(.*)",
       "dest": "index.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/cron-check",
+      "schedule": "0 1 * * *"
+    }
   ]
 }
