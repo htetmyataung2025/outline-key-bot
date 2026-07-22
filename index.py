@@ -93,8 +93,8 @@ def get_main_menu_keyboard():
     btn_refresh = KeyboardButton("🔄 Bot Refresh")
     
     markup.add(btn_buy, btn_check)
-    markup.add(btn_free)
-    markup.add(btn_admin, btn_refresh)
+    markup.add(btn_free, btn_refresh)
+    markup.add(btn_admin)
     return markup
 
 def get_plan_keyboard():
