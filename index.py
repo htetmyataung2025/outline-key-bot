@@ -90,10 +90,11 @@ def get_main_menu_keyboard():
     btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
+    btn_refresh = KeyboardButton("🔄 Bot Refresh")
     
     markup.add(btn_buy, btn_check)
     markup.add(btn_free)
-    markup.add(btn_admin)
+    markup.add(btn_admin, btn_refresh)
     return markup
 
 def get_plan_keyboard():
@@ -272,6 +273,14 @@ def handle_all_messages(message):
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
+        return
+            
+    if input_value == "🔄 Bot Refresh" or input_value == "/refresh":
+        refresh_text = (
+            "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
+            "✨  Update စနစ်သစ်ဖြင့် စတင်အသုံးပြုနိုင်ပါပြီ။"
+        )
+        bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard())
         return
 
     # ADMIN REPLY BYPASS SYSTEM 
