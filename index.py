@@ -93,8 +93,8 @@ def get_main_menu_keyboard():
     btn_refresh = KeyboardButton("🔄 Bot Refresh")
     
     markup.add(btn_buy, btn_check)
-    markup.add(btn_free)
-    markup.add(btn_admin, btn_refresh)
+    markup.add(btn_free, btn_refresh)
+    markup.add(btn_admin)
     return markup
 
 def get_plan_keyboard():
@@ -360,7 +360,7 @@ def handle_all_messages(message):
     if input_value == "🔄 Bot Refresh" or input_value == "/refresh":
         refresh_text = (
             "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
-            "✨ နောက်ဆုံးထွက် Menu ခလုတ်များအား အောက်တွင် အသုံးပြုနိုင်ပါပြီ။"
+            "✨ Update စနစ်သစ်ဖြင့် စတင် အသုံးပြုနိုင်ပါပြီ။"
         )
         bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard())
         return
