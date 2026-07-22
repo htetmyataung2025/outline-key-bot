@@ -479,7 +479,7 @@ def handle_all_messages(message):
         except Exception as e:
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
     else:
-        bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို စနစ်တွင် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
+        bot.reply_to(message, "⚠️ လက်ရှိ Bot ကို Update လုပ်ထားပါသည်။ အသစ်ပြင်ဆင်ထားသော Menu မပေါ်သေးပါက /start လို့ တစ်ချက်ရိုက်ပို့ပေးပါခင်ဗျာ။")
 
 # ⏰ နေ့စဉ် အလိုအလျောက် သက်တမ်း စစ်ဆေးခြင်း၊ Noti ပို့ခြင်း နှင့် ၁ ရက်ကျော်သူများအား Auto Delete ဖျက်ဆီးခြင်း Route
 @app.route('/cron-check', methods=['GET', 'POST'])
