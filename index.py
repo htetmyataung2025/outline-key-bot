@@ -374,8 +374,11 @@ def handle_all_messages(message):
 # ⏰ နေ့စဉ် အလိုအလျောက် သက်တမ်း ကုန်/မကုန် စစ်ဆေးပြီး Noti ပို့ပေးမည့် Cron Route
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
-    today_str = datetime.now().strftime("%d.%m.%Y")
-    today_short_str = datetime.now().strftime("%d.%m.%y")
+    today = datetime.now()
+    today_day = today.day
+    today_month = today.month
+    today_year_full = today.year
+    today_year_short = int(str(today.year)[-2:])
     
     key_mappings = load_key_mappings()
     notified_count = 0
@@ -402,13 +405,22 @@ def cron_check():
                 if limit_bytes and usage_bytes >= limit_bytes:
                     is_gb_full = True
 
-                # ၂။ ဒီနေ့ သက်တမ်း ကုန်သလား စစ်ခြင်း
+                # ၂။ ဒီနေ့ သက်တမ်း ကုန်သလား စစ်ခြင်း (0 ပါပါ မပါပါ အမှန်စစ်ပေးမည့် Logic)
                 is_expired_today = False
-                if today_str in full_name or today_short_str in full_name:
-                    is_expired_today = True
+                date_match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name)
+                
+                if date_match:
+                    k_day = int(date_match.group(1))
+                    k_month = int(date_match.group(2))
+                    k_year = int(date_match.group(3))
+                    
+                    # Year နှစ်လုံးထဲ သို့မဟုတ် လေးလုံးလုံး ပါပါ စစ်ပေးခြင်း
+                    year_matches = (k_year == today_year_full) or (k_year == today_year_short)
+                    
+                    if k_day == today_day and k_month == today_month and year_matches:
+                        is_expired_today = True
 
                 if is_gb_full or is_expired_today:
-                    date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
                     clean_name = full_name
                     if date_match:
                         clean_name = clean_name.replace(date_match.group(0), "")
