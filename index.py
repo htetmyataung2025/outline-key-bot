@@ -252,10 +252,10 @@ def handle_approve_callback(call):
             bot.edit_message_caption(
                 chat_id=ADMIN_CHAT_ID,
                 message_id=call.message.message_id,
-                caption=call.message.caption + f"\n\n✅ <b>အတည်ပြုပြီးပါပြီ (Server {server_num} မှ မွေးထားသော Key):</b>\n🔑 {key_name}",
+                caption=call.message.caption + f"\n\n✅ <b>အတည်ပြုပြီးပါပြီ (Server {server_num} မှ ထုတ်ထားသော Key):</b>\n🔑 {key_name}",
                 parse_mode="HTML"
             )
-            bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key မွေးပြီး Customer ထံ ပို့ပြီးပါပြီ!")
+            bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key ထုတ်ပြီး Customer ထံ ပို့ပြီးပါပြီ!")
         else:
             bot.answer_callback_query(call.id, f"❌ Server {server_num} မှ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ API စစ်ပါ။", show_alert=True)
     except Exception as e:
@@ -289,8 +289,8 @@ def handle_payment_screenshot(message):
     
     approve_markup = InlineKeyboardMarkup()
     approve_markup.row(
-        InlineKeyboardButton("🟢 Server 1 မှ ထုတ်မည်", callback_data=f"approve_srv1_{chat_id}_{plan_code}"),
-        InlineKeyboardButton("🔵 Server 2 မှ ထုတ်မည်", callback_data=f"approve_srv2_{chat_id}_{plan_code}")
+        InlineKeyboardButton("🟢 Server 1 ", callback_data=f"approve_srv1_{chat_id}_{plan_code}"),
+        InlineKeyboardButton("🔵 Server 2 ", callback_data=f"approve_srv2_{chat_id}_{plan_code}")
     )
     
     try:
