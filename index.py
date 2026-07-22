@@ -66,13 +66,13 @@ def save_key_mapping(clean_name, chat_id):
         pass
 
 PLANS = {
-    "starter": {"name": "Starter Plan", "data": "25 GB", "price": "1,000 Ks"},
-    "basic": {"name": "Basic Plan", "data": "50 GB", "price": "2,000 Ks"},
-    "standard": {"name": "Standard Plan", "data": "75 GB", "price": "3,000 Ks"},
-    "premium": {"name": "Premium Plan", "data": "100 GB", "price": "4,000 Ks"},
-    "vip": {"name": "VIP Plan", "data": "150 GB", "price": "5,000 Ks"},
-    "pro": {"name": "Pro Plan", "data": "200 GB", "price": "7,000 Ks"},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited", "price": "10,000 Ks"},
+    "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": "1,000 Ks"},
+    "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": "2,000 Ks"},
+    "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": "3,000 Ks"},
+    "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": "4,000 Ks"},
+    "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": "5,000 Ks"},
+    "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": "7,000 Ks"},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited", "bytes": None, "price": "10,000 Ks"},
 }
 
 def bytes_to_gb(bytes_value):
@@ -90,10 +90,9 @@ def get_main_menu_keyboard():
     btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
-    btn_refresh = KeyboardButton("🔄 Bot Refresh")
     
     markup.add(btn_buy, btn_check)
-    markup.add(btn_free, btn_refresh)
+    markup.add(btn_free)
     markup.add(btn_admin)
     return markup
 
@@ -107,6 +106,37 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="buy_pro"))
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimted) - 10,000 Ks", callback_data="buy_ultimate"))
     return markup
+
+# ⚡ ရွေးချယ်လိုက်သော Server ထဲ Key အသစ် အလိုအလျောက် မွေးပေးသည့် Function
+def create_outline_key(server_num, user_name, plan_info):
+    today = datetime.now()
+    expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
+    key_name = f"{user_name} {expire_date}"
+    
+    # Server ရွေးချယ်ခြင်း
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
+    
+    try:
+        # ၁။ Key အသစ် တောင်းဆိုခြင်း
+        res = requests.post(f"{api_url}/access-keys", verify=False, timeout=10)
+        if res.status_code in [200, 201]:
+            key_data = res.json()
+            key_id = key_data.get("id")
+            
+            # ၂။ Key Name သတ်မှတ်ခြင်း (ဝယ်သူနာမည် + သက်တမ်းကုန်မည့်ရက်)
+            requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": key_name}, verify=False, timeout=8)
+            
+            # ၃။ Data Limit (GB) သတ်မှတ်ခြင်း
+            limit_bytes = plan_info.get("bytes")
+            if limit_bytes:
+                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
+            
+            raw_access_url = key_data.get("accessUrl", "")
+            final_key = f"{raw_access_url}#{key_name}"
+            return final_key, key_name, expire_date
+    except Exception as e:
+        print("Key Generation Error:", e)
+    return None, None, None
 
 # /start Command
 @bot.message_handler(commands=['start'])
@@ -137,6 +167,7 @@ def send_plans(message):
 def handle_buy_callback(call):
     plan_code = call.data.replace("buy_", "")
     plan = PLANS.get(plan_code)
+    plan['code'] = plan_code
     chat_id = call.message.chat.id
     
     if plan:
@@ -162,6 +193,58 @@ def handle_buy_callback(call):
         bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
 
+# Admin Server 1 သို့မဟုတ် Server 2 ရွေးချယ် Approve ခလုတ် Callback Handler
+@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
+def handle_approve_callback(call):
+    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+        bot.answer_callback_query(call.id, "❌ Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
+        return
+        
+    try:
+        parts = call.data.split("_")
+        server_num = "1" if parts[1] == "srv1" else "2"
+        target_chat_id = parts[2]
+        plan_code = parts[3]
+        
+        plan_info = PLANS.get(plan_code, PLANS["starter"])
+        
+        # User Info ရယူခြင်း
+        chat_info = bot.get_chat(target_chat_id)
+        user_name = chat_info.first_name if chat_info.first_name else "HMA Customer"
+        
+        # ရွေးလိုက်သည့် Server မှ Key Auto မွေးပေးခြင်း
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info)
+        
+        if vpn_key:
+            # Customer ထံ Key တန်းပို့ပေးခြင်း
+            success_message = (
+                f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
+                f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
+                f"💳 <b>Plan:</b> {plan_info['name']} ({plan_info['data']})\n"
+                f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n"
+                f"<code>{vpn_key}</code>\n\n"
+                f"☝️ အပေါ်က Key Link ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+            )
+            bot.send_message(target_chat_id, success_message, parse_mode="HTML")
+            
+            # Key Mapping Auto သိမ်းဆည်းခြင်း
+            clean_name = user_name.strip().lower()
+            save_key_mapping(clean_name, target_chat_id)
+            
+            # Admin Chat ထဲတွင် Approved ဖြစ်သွားကြောင်း ပြင်ပေးခြင်း
+            bot.edit_message_caption(
+                chat_id=ADMIN_CHAT_ID,
+                message_id=call.message.message_id,
+                caption=call.message.caption + f"\n\n✅ <b>အတည်ပြုပြီးပါပြီ (Server {server_num} မှ မွေးထားသော Key):</b>\n🔑 {key_name}",
+                parse_mode="HTML"
+            )
+            bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key မွေးပြီး Customer ထံ ပို့ပြီးပါပြီ!")
+        else:
+            bot.answer_callback_query(call.id, f"❌ Server {server_num} မှ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ API စစ်ပါ။", show_alert=True)
+    except Exception as e:
+        bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
+
 # Screenshot Received
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
@@ -176,20 +259,27 @@ def handle_payment_screenshot(message):
         return
 
     plan_info = user_plans.get(str(chat_id))
+    plan_code = plan_info.get('code', 'starter')
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
     admin_alert_text = (
-        f"💰 ငွေလွှဲပြေစာအသစ်\n"
+        f"💰 <b>ငွေလွှဲပြေစာအသစ်</b>\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
         f"📅 ပေးပို့သည့်ရက်စွဲ: {current_date}\n"
-        f"🆔 User Chat ID: {chat_id}\n"
-        f"📢 ပြေစာရှိ ID ကို သေချာစစ်ဆေးပါ။"
+        f"🆔 User Chat ID: {chat_id}"
+    )
+    
+    # Admin အတွက် Server 1 နှင့် Server 2 ရွေးချယ်ရန် ခလုတ် (၂) ခု ထည့်ပေးခြင်း
+    approve_markup = InlineKeyboardMarkup()
+    approve_markup.row(
+        InlineKeyboardButton("🟢 Server 1 မှ ထုတ်မည်", callback_data=f"approve_srv1_{chat_id}_{plan_code}"),
+        InlineKeyboardButton("🔵 Server 2 မှ ထုတ်မည်", callback_data=f"approve_srv2_{chat_id}_{plan_code}")
     )
     
     try:
-        bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text)
+        bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=approve_markup)
         bot.reply_to(message, "💌 ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
@@ -274,16 +364,8 @@ def handle_all_messages(message):
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
-            
-    if input_value == "🔄 Bot Refresh" or input_value == "/refresh":
-        refresh_text = (
-            "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
-            "✨  Update စနစ်သစ်ဖြင့် စတင်အသုံးပြုနိုင်ပါပြီ။"
-        )
-        bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard())
-        return
 
-    # ADMIN REPLY BYPASS SYSTEM 
+    # ADMIN MANUAL REPLY BYPASS SYSTEM (Manual ပြန်ပို့ချင်ရင်လည်း ရအောင် မူရင်းအတိုင်း ထားပေးထားပါသည်)
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
         reply_caption = message.reply_to_message.caption
         if reply_caption and "User Chat ID:" in reply_caption:
@@ -327,7 +409,7 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
-            # 🌟 Customer အဟောင်း လာစစ်ချိန်တွင် Key Name နှင့် Chat ID ကို Auto မှတ်ပေးသည့် စနစ်
+            # Customer အဟောင်း လာစစ်ချိန်တွင် Key Name နှင့် Chat ID ကို Auto မှတ်ပေးသည့် စနစ်
             save_key_mapping(display_name, chat_id)
 
             if date_match:
@@ -380,17 +462,15 @@ def handle_all_messages(message):
     else:
         bot.reply_to(message, "❌ ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို စနစ်တွင် ရှာမတွေ့ပါ။ ပြန်လည်စစ်ဆေးပေးပါဦး။")
 
-# ⏰ နေ့စဉ် အလိုအလျောက် သက်တမ်း ကုန်/မကုန် စစ်ဆေးပြီး Noti ပို့ပေးမည့် Cron Route
+# ⏰ နေ့စဉ် အလိုအလျောက် သက်တမ်း စစ်ဆေးခြင်း၊ Noti ပို့ခြင်း နှင့် ၁ ရက်ကျော်သူများအား Auto Delete ဖျက်ဆီးခြင်း Route
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
-    today_day = today.day
-    today_month = today.month
-    today_year_full = today.year
-    today_year_short = int(str(today.year)[-2:])
+    today_date = today.date()
     
     key_mappings = load_key_mappings()
     notified_count = 0
+    deleted_count = 0
 
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
         try:
@@ -414,21 +494,50 @@ def cron_check():
                 if limit_bytes and usage_bytes >= limit_bytes:
                     is_gb_full = True
 
-                # ၂။ ဒီနေ့ သက်တမ်း ကုန်သလား စစ်ခြင်း (0 ပါပါ မပါပါ အမှန်စစ်ပေးမည့် Logic)
+                # ၂။ ရက်စွဲ စစ်ဆေးခြင်း Logic
                 is_expired_today = False
+                should_delete = False
+                
                 date_match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name)
                 
                 if date_match:
-                    k_day = int(date_match.group(1))
-                    k_month = int(date_match.group(2))
-                    k_year = int(date_match.group(3))
-                    
-                    # Year နှစ်လုံးထဲ သို့မဟုတ် လေးလုံးလုံး ပါပါ စစ်ပေးခြင်း
-                    year_matches = (k_year == today_year_full) or (k_year == today_year_short)
-                    
-                    if k_day == today_day and k_month == today_month and year_matches:
-                        is_expired_today = True
+                    try:
+                        k_day = int(date_match.group(1))
+                        k_month = int(date_match.group(2))
+                        k_year_raw = date_match.group(3)
+                        k_year = int("20" + k_year_raw) if len(k_year_raw) == 2 else int(k_year_raw)
+                        
+                        key_expire_date = datetime(k_year, k_month, k_day).date()
+                        
+                        # ဒီနေ့ ကုန်တဲ့နေ့ဆိုရင် ➡️ Noti ပို့မည် (မဖျက်သေးပါ)
+                        if key_expire_date == today_date:
+                            is_expired_today = True
+                            
+                        # သက်တမ်းကုန်ပြီး ၁ ရက်ကျော်သွားပြီဆိုရင် ➡️ Server ပေါ်မှ Auto Delete ဖျက်မည်
+                        elif today_date > key_expire_date:
+                            should_delete = True
+                    except:
+                        pass
 
+                # 🚨 ၁ ရက်ကျော်လွန်သူများအား Server ပေါ်မှ အလိုအလျောက် Key ဖျက်ဆီးခြင်း
+                if should_delete:
+                    try:
+                        del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+                        if del_res.status_code in [200, 204]:
+                            deleted_count += 1
+                            try:
+                                bot.send_message(
+                                    ADMIN_CHAT_ID, 
+                                    f"🗑️ <b>Auto Delete Alert:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ၁ ရက်ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
+                                    parse_mode="HTML"
+                                )
+                            except:
+                                pass
+                    except:
+                        pass
+                    continue 
+
+                # 📢 ဒီနေ့ ရက်စေ့သူ သို့မဟုတ် GB ပြည့်သူများအား Noti ပို့ခြင်း
                 if is_gb_full or is_expired_today:
                     clean_name = full_name
                     if date_match:
@@ -437,14 +546,19 @@ def cron_check():
 
                     target_chat_id = key_mappings.get(clean_name)
 
-                    reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
+                    if is_gb_full:
+                        reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ"
+                        user_warning = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ ခင်ဗျာ။"
+                    else:
+                        reason_text = "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
+                        user_warning = "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ ခင်ဗျာ။ (မနက်ဖြန်တွင် အသုံးပြုခွင့် ပိတ်သိမ်းပါမည်)"
 
                     # Customer ထံ Noti ပို့ခြင်း
                     if target_chat_id:
                         try:
                             user_noti = (
                                 f"⚠️ <b>သတိပေးချက်:</b>\n\n"
-                                f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် <b>{reason_text}</b> ခင်ဗျာ။\n\n"
+                                f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် <b>{user_warning}</b>\n\n"
                                 f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '💳 Plan များ ကြည့်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
                             )
                             bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
@@ -466,7 +580,7 @@ def cron_check():
         except:
             pass
 
-    return jsonify({"status": "cron completed", "notified_users": notified_count}), 200
+    return jsonify({"status": "cron completed", "notified": notified_count, "deleted": deleted_count}), 200
 
 # Catch-all Webhook Route
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
