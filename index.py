@@ -108,7 +108,7 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimted) - 10,000 Ks", callback_data="buy_ultimate"))
     return markup
 
-# 🔍 Customer ဝယ်ယူထားသော Key စေ ရေတွက်ပေးသည့် Function
+# 🔍 Customer ဝယ်ယူထားသော Key အရေအတွက် စစ်ပေးသည့် Function
 def get_user_key_count(user_name):
     count = 0
     clean_user = user_name.strip().lower()
@@ -125,15 +125,18 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# ⚡ Server 1 သို့မဟုတ် Server 2 ထဲ (1), (2) နံပါတ်စဉ်ပါ Key အသစ် အလိုအလျောက် မွေးပေးသည့် Function
+# ⚡ Server 1 သို့မဟုတ် Server 2 ထဲ (1) မပါဘဲ ဒုတိယတစ်ခုမှစ၍ (2), (3) နံပါတ်စဉ်ပါ Key အသစ် မွေးပေးသည့် Function
 def create_outline_key(server_num, user_name, plan_info):
     today = datetime.now()
     expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
     
-    # Cus ဝယ်ထားပြီးသား Key အရေအတွက် စစ်ယူပြီး နံပါတ်စဉ် တပ်ခြင်း
     existing_count = get_user_key_count(user_name)
-    key_number = existing_count + 1
-    key_name = f"{user_name} ({key_number}) {expire_date}"
+    
+    if existing_count == 0:
+        key_name = f"{user_name} {expire_date}"
+    else:
+        key_number = existing_count + 1
+        key_name = f"{user_name} ({key_number}) {expire_date}"
     
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     
@@ -377,11 +380,11 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
-    # 🔄 Bot Refresh Logic
+    # 🔄 Bot Refresh Logic (ခလုတ်နှိပ်ပါက စာပြန်မည့်နေရာ)
     if input_value == "🔄 Bot Refresh" or input_value == "/refresh":
         refresh_text = (
             "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
-            "✨ နောက်ဆုံးထွက် Menu ခလုတ်များအား အောက်တွင် အသုံးပြုနိုင်ပါပြီ။"
+            "✨ Update စနစ်သစ်ဖြင့် စတင် အသုံးပြုနိုင်ပါပြီ။"
         )
         bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard())
         return
@@ -429,7 +432,8 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
-            save_key_mapping(re.sub(r'\(\d+\)', '', display_name).strip(), chat_id)
+            clean_mapping_name = re.sub(r'\(\d+\)', '', display_name).strip()
+            save_key_mapping(clean_mapping_name, chat_id)
 
             if date_match:
                 end_date_raw = date_match.group(0)
