@@ -242,7 +242,7 @@ def handle_approve_callback(call):
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n"
                 f"<code>{vpn_key}</code>\n\n"
-                f"☝️ အပေါ်က Key Link ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+                f"☝️ အပေါ်က Key  ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
             )
             bot.send_message(target_chat_id, success_message, parse_mode="HTML")
             
@@ -252,7 +252,7 @@ def handle_approve_callback(call):
             bot.edit_message_caption(
                 chat_id=ADMIN_CHAT_ID,
                 message_id=call.message.message_id,
-                caption=call.message.caption + f"\n\n✅ <b>အတည်ပြုပြီးပါပြီ (Server {server_num} မှ ထုတ်ထားသော Key):</b>\n🔑 {key_name}",
+                caption=call.message.caption + f"\n\n✅ <b>အတည်ပြုပြီးပါပြီ (Server {server_num})</b>\n🔑 {key_name}",
                 parse_mode="HTML"
             )
             bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key ထုတ်ပြီး Customer ထံ ပို့ပြီးပါပြီ!")
