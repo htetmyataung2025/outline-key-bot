@@ -120,7 +120,7 @@ def get_main_menu_keyboard(chat_id=None):
     
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
-        btn_gen_code = KeyboardButton("🎁 Gen Redeem Code")
+        btn_gen_code = KeyboardButton("🎁 Gen RD Code")
         markup.add(btn_total_usage, btn_gen_code)
         
     return markup
@@ -544,7 +544,7 @@ def handle_all_messages(message):
         return
 
     # 🎁 Admin သီးသန့် Code Auto Gen ခလုတ်
-    if input_value == "🎁 Gen Redeem Code":
+    if input_value == "🎁 Gen RD Code":
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
