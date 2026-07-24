@@ -525,7 +525,7 @@ def handle_approve_callback(call):
             bot.edit_message_caption(
                 chat_id=ADMIN_CHAT_ID,
                 message_id=call.message.message_id,
-                caption=call.message.caption + f"\n\n✅ <b>DONE (📡Server {server_num} 🇸🇬)</b>\n🔑 {key_name}",
+                caption=call.message.caption + f"\n\n✅ <b>DONE (📡 Server {server_num} 🇸🇬)</b>\n\n🔑 {key_name}",
                 parse_mode="HTML"
             )
             bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key ထုတ်ပြီး Customer ထံ ပို့ပြီးပါပြီ!")
