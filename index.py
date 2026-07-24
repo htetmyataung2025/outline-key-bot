@@ -23,7 +23,7 @@ OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
 # 🔑 Admin Telegram Chat ID
 ADMIN_CHAT_ID = "8778394176"  
-# 🌐 Cloudflare Worker AI လင့်ခ် (အဆင့် ၃ မှ Copy ကူးလာသော လင့်ခ် ထည့်ပါ)
+# 🌐 Cloudflare Worker AI လင့်ခ်
 CF_WORKER_URL = "https://h-e-feature-ai.htetmyath83.workers.dev"
 
 def get_cf_ai_response(user_message, chat_id):
@@ -39,6 +39,7 @@ def get_cf_ai_response(user_message, chat_id):
     except Exception as e:
         print("CF AI Error:", e)
     return None
+
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
@@ -924,21 +925,15 @@ def handle_all_messages(message):
             return
 
         except Exception as e:
-            bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
-            return
-# 💡 Key / Redeem / Command မဟုတ်သော အခြား စာများ ရောက်လာပါက AI မှ စကားပြန်ပေးခြင်း
+            print(f"Data Checking Error: {str(e)}")
+
+    # 💡 Key / Redeem / Command မဟုတ်သော အခြား စာများ ရောက်လာပါက AI မှ စကားပြန်ပေးခြင်း
     ai_reply = get_cf_ai_response(input_value, chat_id)
     if ai_reply:
         bot.reply_to(message, ai_reply)
         return
 
     # Not Found Noti (AI မဖြေနိုင်ခဲ့ပါကမှသာ ပေါ်မည်)
-    not_found_msg = (
-        "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
-        "💡 <i> Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
-    )
-    bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
-    # Not Found Noti
     not_found_msg = (
         "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
         "💡 <i> Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
