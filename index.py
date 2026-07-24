@@ -33,7 +33,7 @@ def get_cf_ai_response(user_message, chat_id):
         "is_admin": is_admin
     }
     try:
-        res = requests.post(CF_WORKER_URL, json=payload, timeout=10)
+        res = requests.post(CF_WORKER_URL, json=payload, timeout=15)
         if res.status_code == 200:
             return res.json().get("result")
     except Exception as e:
@@ -715,7 +715,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
-    # 🔍 Admin သီးသန့် User နာမည်အစ (Initial Letter) ဖြင့် ရှာဖွေသည့် ခလုတ်
+    # 🔍 Admin သီးသန့် User ရှာဖွေသည့် ခလုတ်
     if input_value == "🔍 Cus ရှာရန်":
         set_redeem_state(chat_id, False)
         if str(chat_id) != str(ADMIN_CHAT_ID):
@@ -746,7 +746,7 @@ def handle_all_messages(message):
         )
         return
 
-    # 🔍 Admin Search State ဖြစ်နေပါက နာမည်အစ တိုက်စစ်ပြီး List ထုတ်ပေးခြင်း
+    # 🔍 Admin Search State
     if str(chat_id) == str(ADMIN_CHAT_ID) and get_search_state(chat_id):
         set_search_state(chat_id, False)
         bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော Cus များကို 📡 Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
@@ -763,7 +763,7 @@ def handle_all_messages(message):
             bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
 
-    # 🎁 Redeem Code စစ်ဆေးသည့် Logic (ခလုတ်နှိပ်ထားသော User ဖြစ်မှသာ စစ်ဆေးမည်)
+    # 🎁 Redeem Code စစ်ဆေးခြင်း
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)
         codes = load_redeem_codes()
@@ -812,7 +812,7 @@ def handle_all_messages(message):
             bot.send_message(chat_id, "❌ <b>ထည့်သွင်းထားသော Redeem Code မှားယွင်းနေပါသည် (သို့မဟုတ်) အသုံးပြုပြီးသား ဖြစ်နေပါသည်ခင်ဗျာ။</b>", parse_mode="HTML")
             return
 
-    # 📊 Admin သီးသန့် Total Usage ခလုတ်
+    # 📊 Admin Total Usage ခလုတ်
     if input_value == "📊 Total Data Usage":
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
@@ -859,81 +859,77 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # Multi-Server Key Usage Checking
-    target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
-    if not target_key:
-        target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
+    # 🔑 VPN Key စစ်ဆေးခြင်း (Key အစစ်ဖြစ်မှသာ တုံ့ပြန်မည်)
+    if input_value.startswith("ss://") or "#" in input_value:
+        target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
+        if not target_key:
+            target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
 
-    if target_key:
-        try:
-            full_name = target_key.get("name", "HMA User")
-            key_id = str(target_key.get("id"))
-            
-            date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
-            
-            display_name = full_name
-            if date_match:
-                display_name = display_name.replace(date_match.group(0), "")
-            
-            display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
-            if not display_name:
-                display_name = "HMA Customer"
-            
-            clean_mapping_name = re.sub(r'\(\d+\)', '', display_name).strip()
-            save_key_mapping(clean_mapping_name, chat_id)
-
-            if date_match:
-                end_date_raw = date_match.group(0)
-                try:
-                    e_parts = end_date_raw.split('.')
-                    day = int(e_parts[0])
-                    month = int(e_parts[1])
-                    year_str = e_parts[2]
-                    
-                    if len(year_str) == 2:
-                        year = int("20" + year_str)
-                    else:
-                        year = int(year_str)
-                        
-                    end_date = f"{day}.{month}.{year}"
-                    has_date = True
-                except:
-                    has_date = False
-            else:
-                has_date = False
-
-            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
-            usage_bytes = bytes_transferred.get(str(key_id), 0)
-            usage_gb = bytes_to_gb(usage_bytes)
-            
-            if has_date:
-                result_text = (
-                    f"👤 အသုံးပြုသူ : {display_name}\n"
-                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
-                    f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
-                )
-            else:
-                result_text = (
-                    f"👤 အသုံးပြုသူ : {display_name}\n"
-                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB"
-                )
+        if target_key:
+            try:
+                full_name = target_key.get("name", "HMA User")
+                key_id = str(target_key.get("id"))
                 
-            bot.reply_to(message, result_text)
-            return
+                date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
+                
+                display_name = full_name
+                if date_match:
+                    display_name = display_name.replace(date_match.group(0), "")
+                
+                display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
+                if not display_name:
+                    display_name = "HMA Customer"
+                
+                clean_mapping_name = re.sub(r'\(\d+\)', '', display_name).strip()
+                save_key_mapping(clean_mapping_name, chat_id)
 
-        except Exception as e:
-            print(f"Data Checking Error: {str(e)}")
+                if date_match:
+                    end_date_raw = date_match.group(0)
+                    try:
+                        e_parts = end_date_raw.split('.')
+                        day = int(e_parts[0])
+                        month = int(e_parts[1])
+                        year_str = e_parts[2]
+                        year = int("20" + year_str) if len(year_str) == 2 else int(year_str)
+                        end_date = f"{day}.{month}.{year}"
+                        has_date = True
+                    except:
+                        has_date = False
+                else:
+                    has_date = False
 
-    # 💡 Key / Redeem / Command မဟုတ်သော အခြား စာများ ရောက်လာပါက AI မှ စကားပြန်ပေးခြင်း
+                limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+                plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+                usage_bytes = bytes_transferred.get(str(key_id), 0)
+                usage_gb = bytes_to_gb(usage_bytes)
+                
+                if has_date:
+                    result_text = (
+                        f"👤 အသုံးပြုသူ : {display_name}\n"
+                        f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                        f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                        f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
+                    )
+                else:
+                    result_text = (
+                        f"👤 အသုံးပြုသူ : {display_name}\n"
+                        f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                        f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB"
+                    )
+                    
+                bot.reply_to(message, result_text)
+                return
+
+            except Exception as e:
+                print(f"Data Checking Error: {str(e)}")
+
+    # 🤖 Key / Command / Button မဟုတ်ပါက Cloudflare Worker AI ထံ စာပို့ဖြေခိုင်းခြင်း
     ai_reply = get_cf_ai_response(input_value, chat_id)
     if ai_reply:
         bot.reply_to(message, ai_reply)
         return
 
-    # Not Found Noti (AI မဖြေနိုင်ခဲ့ပါကမှသာ ပေါ်မည်)
+    # AI ဖြေကြား၍ မရပါကမှ မူလ Error Noti ကို ပြမည်
     not_found_msg = (
         "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
         "💡 <i> Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
