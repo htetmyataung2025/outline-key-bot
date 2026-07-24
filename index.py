@@ -146,7 +146,7 @@ def get_servers_total_usage():
     overall_tb = round(overall_gb / 1000, 2)
 
     report = (
-        f"📊 <b>SERVER DATA & USER STATS REPORT</b>\n\n"
+        f"📊 <b>SERVER DATA STATS REPORT</b>\n\n"
         f"🟢 <b>Server 1 🇸🇬</b>\n"
         f"👥 Total Keys: <b>{s1_total}</b>\n"
         f"⚡️ Total Usage: <b>{s1_gb} GB</b>\n\n"
