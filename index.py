@@ -83,8 +83,8 @@ def clean_ss_url(url_str):
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
-# 🔄 Main Menu Keyboard (Refresh ခလုတ် ပါဝင်သည်)
-def get_main_menu_keyboard():
+# 🔄 Main Menu Keyboard (Admin သီးသန့် Button အပါအဝင်)
+def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
@@ -95,6 +95,11 @@ def get_main_menu_keyboard():
     markup.add(btn_buy, btn_check)
     markup.add(btn_free, btn_refresh)
     markup.add(btn_admin)
+
+    if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
+        btn_total_usage = KeyboardButton("📊 Total Data Usage (Admin Only)")
+        markup.add(btn_total_usage)
+
     return markup
 
 def get_plan_keyboard():
@@ -107,6 +112,65 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="buy_pro"))
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimted) - 10,000 Ks", callback_data="buy_ultimate"))
     return markup
+
+# 📊 Server 1 နှင့် Server 2 Total Usage, Users, Online & Offline Keys တွက်ချက်ပေးသည့် Function
+def get_servers_total_usage():
+    def get_server_stats(api_url):
+        total_keys = 0
+        online_keys = 0
+        offline_keys = 0
+        total_bytes = 0
+
+        try:
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+
+            if keys_resp.status_code == 200:
+                keys_data = keys_resp.json().get("accessKeys", [])
+                total_keys = len(keys_data)
+
+            if metrics_resp.status_code == 200:
+                bytes_dict = metrics_resp.json().get("bytesTransferredByUserId", {})
+                total_bytes = sum(bytes_dict.values())
+                
+                # Data သုံးစွဲမှု 0 ထက်ပိုသော Key များကို Online (အသုံးပြုနေဆဲ) အဖြစ် စစ်ဆေးခြင်း
+                for k in keys_data:
+                    k_id = str(k.get("id"))
+                    if bytes_dict.get(k_id, 0) > 0:
+                        online_keys += 1
+                
+                offline_keys = total_keys - online_keys
+        except:
+            pass
+
+        return total_keys, online_keys, offline_keys, total_bytes
+
+    s1_total, s1_online, s1_offline, s1_bytes = get_server_stats(OUTLINE_API_URL_1)
+    s2_total, s2_online, s2_offline, s2_bytes = get_server_stats(OUTLINE_API_URL_2)
+
+    s1_gb = bytes_to_gb(s1_bytes)
+    s2_gb = bytes_to_gb(s2_bytes)
+    
+    overall_bytes = s1_bytes + s2_bytes
+    overall_gb = bytes_to_gb(overall_bytes)
+    overall_tb = round(overall_gb / 1000, 2)
+
+    report = (
+        f"📊 <b>SERVER DATA & USER STATS REPORT</b>\n\n"
+        f"🟢 <b>Server 1 🇸🇬</b>\n"
+        f"👥 Total Keys: <b>{s1_total}</b>\n"
+        f"🟢 Online Keys: <b>{s1_online}</b>\n"
+        f"⚪️ Offline Keys: <b>{s1_offline}</b>\n"
+        f"⚡️ Total Usage: <b>{s1_gb} GB</b>\n\n"
+        f"🔵 <b>Server 2 🇸🇬</b>\n"
+        f"👥 Total Keys: <b>{s2_total}</b>\n"
+        f"🟢 Online Keys: <b>{s2_online}</b>\n"
+        f"⚪️ Offline Keys: <b>{s2_offline}</b>\n"
+        f"⚡️ Total Usage: <b>{s2_gb} GB</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"🌐 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
+    )
+    return report
 
 # 🔍 Customer ဝယ်ယူထားသော Key အရေအတွက် စစ်ပေးသည့် Function
 def get_user_key_count(user_name):
@@ -176,7 +240,7 @@ def send_welcome(message):
     except:
         pass
         
-    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard())
+    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(message.chat.id))
 
 # /buy Command
 @bot.message_handler(commands=['buy'])
@@ -352,11 +416,11 @@ def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
 
-    if input_value == "💳 Plan များ ကြည့်ရန်":
+    if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
-    if input_value == "⚡️ Data Usage စစ်ရန်":
+    if input_value in ["⚡️ Data Usage စစ်ရန်", "Data Usage စစ်ရန်", "⚡ Data Usage စစ်ရန်"]:
         check_guide = (
             "👇 ဝယ်ယူထားသော VPN Key ကို ဒီမှာ Paste ချပေးပါ:\n\n"
             " 🫶 Key ကို Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ခင်ဗျာ။"
@@ -364,7 +428,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
-    if input_value == "🎁 Public Free Key":
+    if input_value in ["🎁 Public Free Key", "Public Free Key"]:
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
             f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TBအထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
@@ -374,19 +438,30 @@ def handle_all_messages(message):
         bot.send_message(chat_id, free_text, parse_mode="HTML")
         return
 
-    if input_value == "👨‍💻 Admin သို့ ဆက်သွယ်ရန်":
+    if input_value in ["👨‍💻 Admin သို့ ဆက်သွယ်ရန်", "Admin သို့ ဆက်သွယ်ရန်"]:
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
+    # 📊 Admin သီးသန့် Total Usage & User Stats စစ်ဆေးသည့် ခလုတ်
+    if input_value == "📊 Total Data Usage (Admin Only)":
+        if str(chat_id) != str(ADMIN_CHAT_ID):
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
+            return
+        
+        bot.send_message(chat_id, "⏳ Server 1 & Server 2 Data Usage နှင့် User စာရင်းများကို တွက်ချက်နေပါသည်...")
+        report_text = get_servers_total_usage()
+        bot.send_message(chat_id, report_text, parse_mode="HTML")
+        return
+
     # 🔄 Bot Refresh Logic (ခလုတ်နှိပ်ပါက စာပြန်မည့်နေရာ)
-    if input_value == "🔄 Bot Refresh" or input_value == "/refresh":
+    if input_value in ["🔄 Bot Refresh", "/refresh"]:
         refresh_text = (
             "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
             "✨ Update စနစ်သစ်ဖြင့် စတင် အသုံးပြုနိုင်ပါပြီ။"
         )
-        bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard())
+        bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
         return
 
     # ADMIN MANUAL REPLY BYPASS SYSTEM
@@ -475,11 +550,18 @@ def handle_all_messages(message):
                 )
                 
             bot.reply_to(message, result_text)
+            return
 
         except Exception as e:
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
-    else:
-        bot.reply_to(message, "⚠️ လက်ရှိ Bot ကို Update လုပ်ထားပါသည်။ အသစ်ပြင်ဆင်ထားသော Menu မပေါ်သေးပါက /start လို့ တစ်ချက်ရိုက်ပို့ပေးပါခင်ဗျာ။")
+            return
+
+    # 💡 Key မဟုတ်သော/ခလုတ်အဟောင်း/အခြား စာများ ရောက်လာပါက ပြသမည့် Auto Refresh Noti
+    not_found_msg = (
+        "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို စနစ်တွင် ရှာမတွေ့ပါခင်ဗျာ။</b>\n\n"
+        "💡 <i>အကယ်၍ မီးခိုးရောင် Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
+    )
+    bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
 # ⏰ နေ့စဉ် အလိုအလျောက် သက်တမ်း စစ်ဆေးခြင်း၊ Noti ပို့ခြင်း နှင့် ၁ ရက်ကျော်သူများအား Auto Delete ဖျက်ဆီးခြင်း Route
 @app.route('/cron-check', methods=['GET', 'POST'])
@@ -551,15 +633,13 @@ def cron_check():
                         pass
                     continue 
 
-                # 📢 Noti ပို့ခြင်း
+                # 📢 Noti ပို့ခြင်း (Emoji နှင့် Extra Clean Logic ပါဝင်သည်)
                 if is_gb_full or is_expired_today:
-                                        # Emojis, tg, viber, mess နဲ့ (1) စတာတွေကို Auto ရှင်းထုတ်ပေးသည့် စနစ်
                     clean_name = full_name
                     if date_match:
                         clean_name = clean_name.replace(date_match.group(0), "")
                     
-                    # Regex ဖြင့် Emoji များ၊ ဂဏန်းစဉ်များနှင့် tg/viber စသည်တို့ကို ရှင်းထုတ်ခြင်း
-                    clean_name = re.sub(r'[^\w\s]', '', clean_name) # Emoji နှင့် Special characters များဖျက်မည်
+                    clean_name = re.sub(r'[^\w\s]', '', clean_name)
                     clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
                     clean_name = clean_name.strip().lower()
 
