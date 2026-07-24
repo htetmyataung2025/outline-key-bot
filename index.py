@@ -553,13 +553,17 @@ def cron_check():
 
                 # 📢 Noti ပို့ခြင်း
                 if is_gb_full or is_expired_today:
+                                        # Emojis, tg, viber, mess နဲ့ (1) စတာတွေကို Auto ရှင်းထုတ်ပေးသည့် စနစ်
                     clean_name = full_name
                     if date_match:
                         clean_name = clean_name.replace(date_match.group(0), "")
-                    clean_name = re.sub(r'\(\d+\)', '', clean_name).split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip().lower()
+                    
+                    # Regex ဖြင့် Emoji များ၊ ဂဏန်းစဉ်များနှင့် tg/viber စသည်တို့ကို ရှင်းထုတ်ခြင်း
+                    clean_name = re.sub(r'[^\w\s]', '', clean_name) # Emoji နှင့် Special characters များဖျက်မည်
+                    clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
+                    clean_name = clean_name.strip().lower()
 
                     target_chat_id = key_mappings.get(clean_name)
-
                     if is_gb_full:
                         reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ"
                         user_warning = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ ခင်ဗျာ။"
