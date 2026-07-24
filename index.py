@@ -314,7 +314,7 @@ def handle_view_key_detail(call):
                 detail_msg = (
                     f"👤 <b>USER Information✅ </b>\n\n"
                     f"🤖 <b>Name:</b> {html.escape(full_name)}\n"
-                    f"🇸🇬 <b>Server:</b> {server_name}\n"
+                    f"📡 <b>Server:</b> {server_name}\n"
                     f"⚡️ <b>Data Usage :</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
                     f"⏰ <b>Expired Date:</b> {end_date}\n"
                     f"🔑 <b>VPN Key Link:</b>\n\n"
