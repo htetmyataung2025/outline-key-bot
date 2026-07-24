@@ -31,6 +31,7 @@ requests.packages.urllib3.disable_warnings()
 STATE_FILE = "/tmp/user_plans.json"
 MAPPING_FILE = "/tmp/key_mappings.json"
 REDEEM_FILE = "/tmp/redeem_codes.json"
+SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 
 def load_user_plans():
     if os.path.exists(STATE_FILE):
@@ -85,6 +86,29 @@ def save_redeem_codes(codes):
     except:
         pass
 
+# 🔍 Admin Search State
+def set_search_state(chat_id, is_searching=True):
+    try:
+        states = {}
+        if os.path.exists(SEARCH_STATE_FILE):
+            with open(SEARCH_STATE_FILE, 'r') as f:
+                states = json.load(f)
+        states[str(chat_id)] = is_searching
+        with open(SEARCH_STATE_FILE, 'w') as f:
+            json.dump(states, f)
+    except:
+        pass
+
+def get_search_state(chat_id):
+    if os.path.exists(SEARCH_STATE_FILE):
+        try:
+            with open(SEARCH_STATE_FILE, 'r') as f:
+                states = json.load(f)
+                return states.get(str(chat_id), False)
+        except:
+            return False
+    return False
+
 PLANS = {
     "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": "1,000 Ks"},
     "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": "2,000 Ks"},
@@ -123,8 +147,9 @@ def get_main_menu_keyboard(chat_id=None):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
         btn_list_keys = KeyboardButton("🔑 Active Keys စာရင်း စစ်ရန်")
+        btn_search_user = KeyboardButton("🔍 User ရှာရန်")
         markup.add(btn_total_usage, btn_gen_code)
-        markup.add(btn_list_keys)
+        markup.add(btn_list_keys, btn_search_user)
         
     return markup
 
@@ -233,7 +258,6 @@ def send_all_active_keys_report(chat_id, server_num, api_url):
 
         server_icon = "🟢 Server 1 🇸🇬" if str(server_num) == "1" else "🔵 Server 2 🇸🇬"
         
-        # စာကြောင်း အရှည်လွန်မသွားအောင် (၁၀) ခုစီ ခွဲထုတ်ခြင်း
         chunk_size = 10
         for i in range(0, len(keys_data), chunk_size):
             chunk = keys_data[i:i + chunk_size]
@@ -263,6 +287,97 @@ def send_all_active_keys_report(chat_id, server_num, api_url):
 
     except Exception as e:
         bot.send_message(chat_id, f"❌ Server {server_num} Error: {str(e)}")
+
+# 🔍 User နာမည်အစ (Initial Letter e.g., 'H', 'T', 'A') ဖြင့် တိတိကျကျ ရှာဖွေပေးသည့် Function
+def search_users_by_query(query):
+    query_clean = query.strip().lower()
+    markup = InlineKeyboardMarkup()
+    found_matches = []
+
+    for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2)]:
+        try:
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+            if res.status_code == 200:
+                keys = res.json().get("accessKeys", [])
+                for k in keys:
+                    k_name = k.get("name", "").strip()
+                    k_name_lower = k_name.lower()
+
+                    # အက္ခရာ ၁ လုံးတည်း ရိုက်ပါက - အဆိုပါ အက္ခရာဖြင့် စသော User Name များကိုသာ စစ်ထုတ်သည်
+                    if len(query_clean) == 1:
+                        if k_name_lower.startswith(query_clean):
+                            found_matches.append((server_num, str(k.get("id")), k_name))
+                    else:
+                        # စာလုံးရေ ၂ လုံးနှင့်အထက် ရိုက်ပါက - ပါဝင်သော စာသားကို ရှာဖွေပေးသည်
+                        if query_clean in k_name_lower:
+                            found_matches.append((server_num, str(k.get("id")), k_name))
+        except:
+            pass
+
+    for server_num, key_id, k_name in found_matches[:30]:  # Maximum 30 buttons
+        srv_icon = "🟢 S1" if server_num == "1" else "🔵 S2"
+        btn_text = f"{srv_icon} | {k_name}"
+        markup.add(InlineKeyboardButton(btn_text, callback_data=f"viewkey_{server_num}_{key_id}"))
+
+    return found_matches, markup
+
+# 🔑 ရွေးချယ်ထားသော User ၏ အသေးစိတ် အချက်အလက် ထုတ်ပြသည့် Callback Handler
+@bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
+def handle_view_key_detail(call):
+    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+        bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
+        return
+    
+    parts = call.data.split("_")
+    server_num = parts[1]
+    key_id = parts[2]
+    
+    api_url = OUTLINE_API_URL_1 if server_num == "1" else OUTLINE_API_URL_2
+    
+    try:
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+        
+        if keys_resp.status_code == 200:
+            keys_data = keys_resp.json().get("accessKeys", [])
+            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
+            
+            target_key = None
+            for k in keys_data:
+                if str(k.get("id")) == str(key_id):
+                    target_key = k
+                    break
+                    
+            if target_key:
+                full_name = target_key.get("name", "Unnamed Key")
+                raw_access_url = target_key.get("accessUrl", "")
+                final_key = f"{raw_access_url}#{full_name}" if full_name else raw_access_url
+                
+                limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+                plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+                usage_bytes = bytes_transferred.get(str(key_id), 0)
+                usage_gb = bytes_to_gb(usage_bytes)
+                
+                date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
+                end_date = date_match.group(0) if date_match else "မသိရှိပါ"
+                
+                server_name = "Server 1 🇸🇬" if server_num == "1" else "Server 2 🇸🇬"
+                
+                detail_msg = (
+                    f"👤 <b>USER အသေးစိတ် အချက်အလက်</b>\n\n"
+                    f"📌 <b>အမည်:</b> {html.escape(full_name)}\n"
+                    f"🌐 <b>Server:</b> {server_name}\n"
+                    f"⚡️ <b>အသုံးပြုထားသည့် Data:</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
+                    f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {end_date}\n\n"
+                    f"🔑 <b>VPN Key Link:</b>\n"
+                    f"<code>{final_key}</code>"
+                )
+                bot.send_message(call.message.chat.id, detail_msg, parse_mode="HTML")
+                bot.answer_callback_query(call.id)
+                return
+    except Exception as e:
+        bot.send_message(call.message.chat.id, f"❌ Error: {str(e)}")
+        bot.answer_callback_query(call.id)
 
 # 🔍 Customer ဝယ်ယူထားသော Key အရေအတွက် စစ်ပေးသည့် Function
 def get_user_key_count(user_name):
@@ -370,6 +485,7 @@ def handle_admin_code_generate(call):
 # /start Command
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    set_search_state(message.chat.id, False)
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
         "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
@@ -389,6 +505,7 @@ def send_welcome(message):
 # /buy Command
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
+    set_search_state(message.chat.id, False)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 # Plan Button Callback
@@ -472,6 +589,7 @@ def handle_approve_callback(call):
 # Screenshot Received
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
+    set_search_state(message.chat.id, False)
     chat_id = message.chat.id
     user_name = message.from_user.first_name if message.from_user.first_name else "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
@@ -561,10 +679,12 @@ def handle_all_messages(message):
     chat_id = message.chat.id
 
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
+        set_search_state(chat_id, False)
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
     if input_value in ["⚡️ Data Usage စစ်ရန်", "Data Usage စစ်ရန်", "⚡ Data Usage စစ်ရန်"]:
+        set_search_state(chat_id, False)
         check_guide = (
             "👇 ဝယ်ယူထားသော VPN Key ကို ဒီမှာ Paste ချပေးပါ:\n\n"
             " 🫶 Key ကို Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ခင်ဗျာ။"
@@ -573,6 +693,7 @@ def handle_all_messages(message):
         return
 
     if input_value in ["🎁 Public Free Key", "Public Free Key"]:
+        set_search_state(chat_id, False)
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
             f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TB အထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
@@ -583,6 +704,7 @@ def handle_all_messages(message):
         return
 
     if input_value in ["🎁 Redeem Code", "Redeem Code"]:
+        set_search_state(chat_id, False)
         redeem_guide = (
             "🎁 <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
             "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>H&E-50GB-XXXXXX</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
@@ -591,6 +713,7 @@ def handle_all_messages(message):
         return
 
     if input_value in ["👨‍💻 Admin သို့ ဆက်သွယ်ရန်", "Admin သို့ ဆက်သွယ်ရန်"]:
+        set_search_state(chat_id, False)
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
@@ -598,21 +721,33 @@ def handle_all_messages(message):
 
     # 🔑 Admin သီးသန့် Active Keys စာရင်း စစ်ရန် ခလုတ်
     if input_value == "🔑 Active Keys စာရင်း စစ်ရန်":
+        set_search_state(chat_id, False)
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
 
         bot.send_message(chat_id, "⏳ Server 1 & Server 2 ပေါ်ရှိ Key စာရင်းများကို ရယူနေပါသည်...")
-        
-        # Server 1 Keys ပို့ပေးခြင်း
         send_all_active_keys_report(chat_id, "1", OUTLINE_API_URL_1)
-
-        # Server 2 Keys ပို့ပေးခြင်း
         send_all_active_keys_report(chat_id, "2", OUTLINE_API_URL_2)
+        return
+
+    # 🔍 Admin သီးသန့် User နာမည်အစ (Initial Letter) ဖြင့် ရှာဖွေသည့် ခလုတ်
+    if input_value == "🔍 User ရှာရန်":
+        if str(chat_id) != str(ADMIN_CHAT_ID):
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
+            return
+        
+        set_search_state(chat_id, True)
+        bot.send_message(
+            chat_id, 
+            "🔍 <b>User ရှာဖွေရန်:</b>\n\n👇 ရှာဖွေလိုသော <b>User နာမည်အစ စာလုံး (ဥပမာ - H, T, A)</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:", 
+            parse_mode="HTML"
+        )
         return
 
     # 🎁 Admin သီးသန့် Code Auto Gen ခလုတ်
     if input_value == "🎁 Gen RD Code":
+        set_search_state(chat_id, False)
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -623,6 +758,23 @@ def handle_all_messages(message):
             parse_mode="HTML", 
             reply_markup=get_admin_gb_keyboard()
         )
+        return
+
+    # 🔍 Admin Search State ဖြစ်နေပါက နာမည်အစ တိုက်စစ်ပြီး List ထုတ်ပေးခြင်း
+    if str(chat_id) == str(ADMIN_CHAT_ID) and get_search_state(chat_id):
+        set_search_state(chat_id, False)
+        bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော User များကို Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
+        
+        matches, search_markup = search_users_by_query(input_value)
+        if matches:
+            bot.send_message(
+                chat_id, 
+                f"🔎 <b>ရှာဖွေတွေ့ရှိသော User စာရင်း ({len(matches)} ခု):</b>\n\n👇 အောက်ပါ ခလုတ်များထဲမှ အသေးစိတ်ကြည့်လိုသော User ကို နှိပ်ပါ -", 
+                parse_mode="HTML", 
+                reply_markup=search_markup
+            )
+        else:
+            bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
 
     # 🎁 Redeem Code စစ်ဆေးသည့် Logic
@@ -670,6 +822,7 @@ def handle_all_messages(message):
 
     # 📊 Admin သီးသန့် Total Usage ခလုတ်
     if input_value == "📊 Total Data Usage":
+        set_search_state(chat_id, False)
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -681,6 +834,7 @@ def handle_all_messages(message):
 
     # 🔄 Bot Refresh Logic
     if input_value in ["🔄 Bot Refresh", "/refresh"]:
+        set_search_state(chat_id, False)
         refresh_text = (
             "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
             "✨ Update စနစ်သစ်ဖြင့် စတင် အသုံးပြုနိုင်ပါပြီ။"
