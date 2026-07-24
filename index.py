@@ -146,7 +146,7 @@ def get_main_menu_keyboard(chat_id=None):
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
-        btn_search_user = KeyboardButton("🔍 User ရှာရန်")
+        btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
         markup.add(btn_total_usage, btn_gen_code)
         markup.add(btn_search_user)
         
@@ -313,11 +313,11 @@ def handle_view_key_detail(call):
                 
                 detail_msg = (
                     f"👤 <b>USER အသေးစိတ် အချက်အလက်</b>\n\n"
-                    f"📌 <b>အမည်:</b> {html.escape(full_name)}\n"
-                    f"🌐 <b>Server:</b> {server_name}\n"
+                    f"🤖 <b>အမည်:</b> {html.escape(full_name)}\n"
+                    f"🇸🇬 <b>Server:</b> {server_name}\n"
                     f"⚡️ <b>အသုံးပြုထားသည့် Data:</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
                     f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {end_date}\n\n"
-                    f"🔑 <b>VPN Key Link:</b>\n"
+                    f"🔑 <b>VPN Key Link:</b>\n\n"
                     f"<code>{final_key}</code>"
                 )
                 bot.send_message(call.message.chat.id, detail_msg, parse_mode="HTML")
