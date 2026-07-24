@@ -24,29 +24,6 @@ OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 # 🔑 Admin Telegram Chat ID
 ADMIN_CHAT_ID = "8778394176"  
 
-# 🌐 Cloudflare Worker AI လင့်ခ် (အနောက်တွင် Slash မပါပါ)
-CF_WORKER_URL = "https://h-e-feature-ai.htetmyath83.workers.dev"
-
-def get_cf_ai_response(user_message, chat_id):
-    is_admin = (str(chat_id) == str(ADMIN_CHAT_ID))
-    payload = {
-        "message": user_message,
-        "is_admin": is_admin
-    }
-    headers = {
-        "Content-Type": "application/json"
-    }
-    try:
-        # Timeout 10 စက္ကန့်ထားရှိပါသည်
-        res = requests.post(CF_WORKER_URL, json=payload, headers=headers, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            if "result" in data and data["result"]:
-                return data["result"]
-    except Exception as e:
-        print("CF AI Exception Error:", e)
-    return None
-
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
@@ -93,6 +70,7 @@ def save_key_mapping(clean_name, chat_id):
     except:
         pass
 
+# 🎁 Redeem Code သိမ်းဆည်း/ခေါ်ယူသည့် စနစ်
 def load_redeem_codes():
     if os.path.exists(REDEEM_FILE):
         try:
@@ -109,6 +87,7 @@ def save_redeem_codes(codes):
     except:
         pass
 
+# 🔍 Admin Search State
 def set_search_state(chat_id, is_searching=True):
     try:
         states = {}
@@ -131,6 +110,7 @@ def get_search_state(chat_id):
             return False
     return False
 
+# 🎁 User Redeem State
 def set_redeem_state(chat_id, is_waiting=True):
     try:
         states = {}
@@ -172,6 +152,7 @@ def clean_ss_url(url_str):
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
+# 🔄 Main Menu Keyboard
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
@@ -206,6 +187,7 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimted) - 10,000 Ks", callback_data="buy_ultimate"))
     return markup
 
+# 🎁 Admin အတွက် GB ရွေးချယ်သည့် Keyboard
 def get_admin_gb_keyboard():
     markup = InlineKeyboardMarkup()
     markup.row(
@@ -222,6 +204,7 @@ def get_admin_gb_keyboard():
     )
     return markup
 
+# 🎁 Admin အတွက် အရေအတွက် ရွေးချယ်သည့် Keyboard
 def get_admin_count_keyboard(gb):
     markup = InlineKeyboardMarkup()
     markup.row(
@@ -234,10 +217,12 @@ def get_admin_count_keyboard(gb):
     )
     return markup
 
+# 📊 Server 1 နှင့် Server 2 Total Usage & Keys တွက်ချက်ပေးသည့် Function
 def get_servers_total_usage():
     def get_server_stats(api_url):
         total_keys = 0
         total_bytes = 0
+
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
@@ -277,6 +262,7 @@ def get_servers_total_usage():
     )
     return report
 
+# 🔍 User နာမည်အစ (Initial Letter e.g., 'H', 'T', 'A') ဖြင့် ရှာဖွေပေးသည့် Function
 def search_users_by_query(query):
     query_clean = query.strip().lower()
     markup = InlineKeyboardMarkup()
@@ -307,6 +293,7 @@ def search_users_by_query(query):
 
     return found_matches, markup
 
+# 🔑 ရွေးချယ်ထားသော User ၏ အသေးစိတ် အချက်အလက် ထုတ်ပြသည့် Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
 def handle_view_key_detail(call):
     if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
@@ -364,6 +351,7 @@ def handle_view_key_detail(call):
         bot.send_message(call.message.chat.id, f"❌ Error: {str(e)}")
         bot.answer_callback_query(call.id)
 
+# 🔍 Customer ဝယ်ယူထားသော Key အရေအတွက် စစ်ပေးသည့် Function
 def get_user_key_count(user_name):
     count = 0
     clean_user = user_name.strip().lower()
@@ -380,6 +368,7 @@ def get_user_key_count(user_name):
             pass
     return count
 
+# ⚡ Key အသစ် မွေးပေးသည့် Function
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None):
     today = datetime.now()
     expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
@@ -418,6 +407,7 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None):
         print("Key Generation Error:", e)
     return None, None, None
 
+# 🎁 Admin GB ရွေးချယ်မှု Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_gb_"))
 def handle_admin_gb_select(call):
     if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
@@ -434,6 +424,7 @@ def handle_admin_gb_select(call):
     )
     bot.answer_callback_query(call.id)
 
+# 🎁 Admin Code မွေးထုတ်ပေးမှု Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_cnt_"))
 def handle_admin_code_generate(call):
     if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
@@ -463,6 +454,7 @@ def handle_admin_code_generate(call):
     bot.edit_message_text(reply_msg, chat_id=ADMIN_CHAT_ID, message_id=call.message.message_id, parse_mode="HTML")
     bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
 
+# /start Command
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     set_search_state(message.chat.id, False)
@@ -471,6 +463,7 @@ def send_welcome(message):
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
         "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
     )
+    
     try:
         bot.set_chat_menu_button(message.chat.id, telebot.types.MenuButtonWebApp(
             type="web_app",
@@ -482,12 +475,14 @@ def send_welcome(message):
         
     bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(message.chat.id))
 
+# /buy Command
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
     set_search_state(message.chat.id, False)
     set_redeem_state(message.chat.id, False)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
+# Plan Button Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
 def handle_buy_callback(call):
     plan_code = call.data.replace("buy_", "")
@@ -518,6 +513,7 @@ def handle_buy_callback(call):
         bot.send_message(chat_id, payment_text)
         bot.answer_callback_query(call.id)
 
+# Admin Server 1 / Server 2 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
 def handle_approve_callback(call):
     if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
@@ -545,7 +541,7 @@ def handle_approve_callback(call):
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                 f"<code>{vpn_key}</code>\n\n"
-                f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+                f"☝️ အပေါ်က Key  ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
             )
             bot.send_message(target_chat_id, success_message, parse_mode="HTML")
             
@@ -564,6 +560,7 @@ def handle_approve_callback(call):
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
+# Screenshot Received
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     set_search_state(message.chat.id, False)
@@ -603,6 +600,7 @@ def handle_payment_screenshot(message):
     except Exception as e:
         bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
+# Multi-Server Data Checking Function
 def fetch_key_from_server(api_url, input_value):
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -649,6 +647,7 @@ def fetch_key_from_server(api_url, input_value):
         pass
     return None, None
 
+# Text/Key Handler
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     input_value = message.text.strip()
@@ -657,7 +656,7 @@ def handle_all_messages(message):
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
-        bot.send_message(chat_id, "🧸 လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
+        bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
     if input_value in ["⚡️ Data Usage စစ်ရန်", "Data Usage စစ်ရန်", "⚡ Data Usage စစ်ရန်"]:
@@ -700,6 +699,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
+    # 🔍 Admin သီးသန့် User နာမည်အစ (Initial Letter) ဖြင့် ရှာဖွေသည့် ခလုတ်
     if input_value == "🔍 Cus ရှာရန်":
         set_redeem_state(chat_id, False)
         if str(chat_id) != str(ADMIN_CHAT_ID):
@@ -714,6 +714,7 @@ def handle_all_messages(message):
         )
         return
 
+    # 🎁 Admin သီးသန့် Code Auto Gen ခလုတ်
     if input_value == "🎁 Gen RD Code":
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
@@ -729,6 +730,7 @@ def handle_all_messages(message):
         )
         return
 
+    # 🔍 Admin Search State ဖြစ်နေပါက နာမည်အစ တိုက်စစ်ပြီး List ထုတ်ပေးခြင်း
     if str(chat_id) == str(ADMIN_CHAT_ID) and get_search_state(chat_id):
         set_search_state(chat_id, False)
         bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော Cus များကို 📡 Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
@@ -745,6 +747,7 @@ def handle_all_messages(message):
             bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
 
+    # 🎁 Redeem Code စစ်ဆေးသည့် Logic (ခလုတ်နှိပ်ထားသော User ဖြစ်မှသာ စစ်ဆေးမည်)
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)
         codes = load_redeem_codes()
@@ -793,6 +796,7 @@ def handle_all_messages(message):
             bot.send_message(chat_id, "❌ <b>ထည့်သွင်းထားသော Redeem Code မှားယွင်းနေပါသည် (သို့မဟုတ်) အသုံးပြုပြီးသား ဖြစ်နေပါသည်ခင်ဗျာ။</b>", parse_mode="HTML")
             return
 
+    # 📊 Admin သီးသန့် Total Usage ခလုတ်
     if input_value == "📊 Total Data Usage":
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
@@ -805,6 +809,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, report_text, parse_mode="HTML")
         return
 
+    # 🔄 Bot Refresh Logic
     if input_value in ["🔄 Bot Refresh", "/refresh"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
@@ -815,6 +820,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
         return
 
+    # ADMIN MANUAL REPLY BYPASS SYSTEM
     if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
         reply_caption = message.reply_to_message.caption
         if reply_caption and "User Chat ID:" in reply_caption:
@@ -837,86 +843,83 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # 🔑 VPN Key စစ်ဆေးခြင်း
-    if input_value.startswith("ss://") or "#" in input_value:
-        target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
-        if not target_key:
-            target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
+    # Multi-Server Key Usage Checking
+    target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
+    if not target_key:
+        target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
 
-        if target_key:
-            try:
-                full_name = target_key.get("name", "HMA User")
-                key_id = str(target_key.get("id"))
-                
-                date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
-                
-                display_name = full_name
-                if date_match:
-                    display_name = display_name.replace(date_match.group(0), "")
-                
-                display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
-                if not display_name:
-                    display_name = "HMA Customer"
-                
-                clean_mapping_name = re.sub(r'\(\d+\)', '', display_name).strip()
-                save_key_mapping(clean_mapping_name, chat_id)
+    if target_key:
+        try:
+            full_name = target_key.get("name", "HMA User")
+            key_id = str(target_key.get("id"))
+            
+            date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
+            
+            display_name = full_name
+            if date_match:
+                display_name = display_name.replace(date_match.group(0), "")
+            
+            display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
+            if not display_name:
+                display_name = "HMA Customer"
+            
+            clean_mapping_name = re.sub(r'\(\d+\)', '', display_name).strip()
+            save_key_mapping(clean_mapping_name, chat_id)
 
-                if date_match:
-                    end_date_raw = date_match.group(0)
-                    try:
-                        e_parts = end_date_raw.split('.')
-                        day = int(e_parts[0])
-                        month = int(e_parts[1])
-                        year_str = e_parts[2]
-                        year = int("20" + year_str) if len(year_str) == 2 else int(year_str)
-                        end_date = f"{day}.{month}.{year}"
-                        has_date = True
-                    except:
-                        has_date = False
-                else:
-                    has_date = False
-
-                limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-                plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
-                usage_bytes = bytes_transferred.get(str(key_id), 0)
-                usage_gb = bytes_to_gb(usage_bytes)
-                
-                if has_date:
-                    result_text = (
-                        f"👤 အသုံးပြုသူ : {display_name}\n"
-                        f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                        f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
-                        f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
-                    )
-                else:
-                    result_text = (
-                        f"👤 အသုံးပြုသူ : {display_name}\n"
-                        f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                        f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB"
-                    )
+            if date_match:
+                end_date_raw = date_match.group(0)
+                try:
+                    e_parts = end_date_raw.split('.')
+                    day = int(e_parts[0])
+                    month = int(e_parts[1])
+                    year_str = e_parts[2]
                     
-                bot.reply_to(message, result_text)
-                return
+                    if len(year_str) == 2:
+                        year = int("20" + year_str)
+                    else:
+                        year = int(year_str)
+                        
+                    end_date = f"{day}.{month}.{year}"
+                    has_date = True
+                except:
+                    has_date = False
+            else:
+                has_date = False
 
-            except Exception as e:
-                print(f"Data Checking Error: {str(e)}")
-
-    # 🤖 Cloudflare Worker AI ထံ စာပို့ဖြေခိုင်းခြင်း
-    try:
-        ai_reply = get_cf_ai_response(input_value, chat_id)
-        if ai_reply:
-            bot.reply_to(message, ai_reply)
+            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+            usage_bytes = bytes_transferred.get(str(key_id), 0)
+            usage_gb = bytes_to_gb(usage_bytes)
+            
+            if has_date:
+                result_text = (
+                    f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
+                )
+            else:
+                result_text = (
+                    f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB"
+                )
+                
+            bot.reply_to(message, result_text)
             return
-    except Exception as e:
-        print("AI Call Error:", e)
 
-    # Error သို့မဟုတ် AI မဖြေနိုင်ပါက
+        except Exception as e:
+            bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
+            return
+
+    # Not Found Noti
     not_found_msg = (
         "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
         "💡 <i> Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
+# Cron Check Route
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
@@ -1029,6 +1032,7 @@ def cron_check():
 
     return jsonify({"status": "cron completed", "notified": notified_count, "deleted": deleted_count}), 200
 
+# Catch-all Webhook Route
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
 @app.route('/<path:path>', methods=['POST', 'GET'])
 def index(path):
