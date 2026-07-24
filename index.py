@@ -114,52 +114,53 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimted) - 10,000 Ks", callback_data="buy_ultimate"))
     return markup
 
-# 📊 Real-time Active Sampling ဖြင့် Online/Offline စစ်ပေးသည့် Function
+# 📊 Android Outline Manager နည်းတူ Real-time Speed/Traffic စစ်ပြီး Online/Offline အမှန်တကယ် စစ်ပေးသည့် Function
 def get_servers_total_usage():
     def get_server_stats(api_url):
-        total_keys = 0
-        online_keys = 0
-        offline_keys = 0
+        access_keys_count = 0
+        online_now = 0
+        offline_now = 0
         total_bytes = 0
 
         try:
-            # 1st Sample
-            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
-            metrics_resp1 = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+            # 1. Access Keys စာရင်းနှင့် Step 1 Data Bytes ယူခြင်း
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)
+            metrics_resp1 = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=5)
 
             if keys_resp.status_code == 200:
                 keys_data = keys_resp.json().get("accessKeys", [])
-                total_keys = len(keys_data)
+                access_keys_count = len(keys_data)
 
             bytes1 = metrics_resp1.json().get("bytesTransferredByUserId", {}) if metrics_resp1.status_code == 200 else {}
 
-            # ၃ စက္ကန့် စောင့်ပြီး Real-time Data Sampling ပြုလုပ်ခြင်း
-            time.sleep(3)
-
-            # 2nd Sample
-            metrics_resp2 = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+            # 2. ၁ စက္ကန့် စောင့်၍ Real-time Current Speed/Traffic စစ်ရန် Step 2 Bytes ယူခြင်း
+            time.sleep(1)
+            metrics_resp2 = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=5)
             bytes2 = metrics_resp2.json().get("bytesTransferredByUserId", {}) if metrics_resp2.status_code == 200 else {}
 
             total_bytes = sum(bytes2.values())
 
-            # Data ပြောင်းလဲမှုကို စစ်ဆေး၍ Real-time Active Key ကို ရှာခြင်း
-            for k in keys_data:
-                k_id = str(k.get("id"))
-                b1 = bytes1.get(k_id, 0)
-                b2 = bytes2.get(k_id, 0)
+            # 3. လက်ရှိ တကယ် အင်တာနက် သုံးစွဲနေသူ (b2 > b1) ကိုသာ Online အဖြစ် စစ်ဆေးခြင်း
+            if keys_resp.status_code == 200:
+                for k in keys_data:
+                    k_id = str(k.get("id"))
+                    b1 = bytes1.get(k_id, 0)
+                    b2 = bytes2.get(k_id, 0)
 
-                # ၃ စက္ကန့်အတွင်း Traffic တက်နေပါက Online (Active) ဟု သတ်မှတ်သည်
-                if b2 > b1:
-                    online_keys += 1
+                    # ၁ စက္ကန့်အတွင်း Data စီးဆင်းမှု (Speed) တကယ် ရှိနေပါက Online ပါ
+                    if b2 > b1:
+                        online_now += 1
 
-            offline_keys = total_keys - online_keys
+            # မသုံးဘဲ ထားသူအားလုံး Offline ဖြစ်သည်
+            offline_now = access_keys_count - online_now
+
         except Exception as e:
             print("Server Stats Error:", e)
 
-        return total_keys, online_keys, offline_keys, total_bytes
+        return access_keys_count, online_now, offline_now, total_bytes
 
-    s1_total, s1_online, s1_offline, s1_bytes = get_server_stats(OUTLINE_API_URL_1)
-    s2_total, s2_online, s2_offline, s2_bytes = get_server_stats(OUTLINE_API_URL_2)
+    s1_keys, s1_online, s1_offline, s1_bytes = get_server_stats(OUTLINE_API_URL_1)
+    s2_keys, s2_online, s2_offline, s2_bytes = get_server_stats(OUTLINE_API_URL_2)
 
     s1_gb = bytes_to_gb(s1_bytes)
     s2_gb = bytes_to_gb(s2_bytes)
@@ -169,19 +170,19 @@ def get_servers_total_usage():
     overall_tb = round(overall_gb / 1000, 2)
 
     report = (
-        f"⚡ <b>SERVER DATA & USER STATS REPORT</b>\n\n"
+        f"📊 <b>SERVER DATA & USER STATS REPORT</b>\n\n"
         f"🟢 <b>Server 1 🇸🇬</b>\n"
-        f"👥 Total Keys: <b>{s1_total}</b>\n"
-        f"🟢 Online (Active): <b>{s1_online}</b>\n"
-        f"🔴 Offline: <b>{s1_offline}</b>\n"
-        f"⚡️ Total Usage: <b>{s1_gb} GB</b>\n\n"
+        f"🔑 Total Keys: <b>{s1_keys}</b>\n"
+        f"🟢 Online (လက်ရှိ သုံးနေသူ): <b>{s1_online}</b>\n"
+        f"🔴 Offline (မသုံးဘဲ ထားသူ): <b>{s1_offline}</b>\n"
+        f"⚡️ Data Transferred: <b>{s1_gb} GB</b>\n\n"
         f"🔵 <b>Server 2 🇸🇬</b>\n"
-        f"👥 Total Keys: <b>{s2_total}</b>\n"
-        f"🟢 Online (Active): <b>{s2_online}</b>\n"
-        f"🔴 Offline: <b>{s2_offline}</b>\n"
-        f"⚡️ Total Usage: <b>{s2_gb} GB</b>\n"
+        f"🔑 Total Keys: <b>{s2_keys}</b>\n"
+        f"🟢 Online (လက်ရှိ သုံးနေသူ): <b>{s2_online}</b>\n"
+        f"🔴 Offline (မသုံးဘဲ ထားသူ): <b>{s2_offline}</b>\n"
+        f"⚡️ Data Transferred: <b>{s2_gb} GB</b>\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
+        f"🌟 <b>Overall Data Transferred:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
     return report
 
