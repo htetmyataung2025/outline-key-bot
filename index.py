@@ -1,5 +1,7 @@
 import os
 import requests
+import random
+import string
 from flask import Flask, request, jsonify
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
@@ -24,9 +26,10 @@ ADMIN_CHAT_ID = "8778394176"
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# Temp Files ဖြင့် Plan နှင့် Key Map များ သိမ်းဆည်းသည့်စနစ်
+# Temp Files ဖြင့် Plan, Key Map နှင့် Redeem Code များ သိမ်းဆည်းသည့်စနစ်
 STATE_FILE = "/tmp/user_plans.json"
 MAPPING_FILE = "/tmp/key_mappings.json"
+REDEEM_FILE = "/tmp/redeem_codes.json"
 
 def load_user_plans():
     if os.path.exists(STATE_FILE):
@@ -64,6 +67,23 @@ def save_key_mapping(clean_name, chat_id):
     except:
         pass
 
+# 🎁 Redeem Code သိမ်းဆည်း/ခေါ်ယူသည့် စနစ်
+def load_redeem_codes():
+    if os.path.exists(REDEEM_FILE):
+        try:
+            with open(REDEEM_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_redeem_codes(codes):
+    try:
+        with open(REDEEM_FILE, 'w') as f:
+            json.dump(codes, f)
+    except:
+        pass
+
 PLANS = {
     "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": "1,000 Ks"},
     "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": "2,000 Ks"},
@@ -83,22 +103,24 @@ def clean_ss_url(url_str):
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
-# 🔄 Main Menu Keyboard (Admin သီးသန့် Button အပါအဝင်)
+# 🔄 Main Menu Keyboard (Admin သီးသန့် Button များ အပါအဝင်)
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
+    btn_redeem = KeyboardButton("🎁 Redeem Code သုံးရန်")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
     btn_refresh = KeyboardButton("🔄 Bot Refresh")
     
     markup.add(btn_buy, btn_check)
-    markup.add(btn_free, btn_refresh)
-    markup.add(btn_admin)
+    markup.add(btn_free, btn_redeem)
+    markup.add(btn_admin, btn_refresh)
 
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage (Admin Only)")
-        markup.add(btn_total_usage)
+        btn_gen_code = KeyboardButton("🎁 Gen Redeem Code (Admin Only)")
+        markup.add(btn_total_usage, btn_gen_code)
 
     return markup
 
@@ -111,6 +133,36 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("👑 VIP (150 GB) - 5,000 Ks", callback_data="buy_vip"))
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="buy_pro"))
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimted) - 10,000 Ks", callback_data="buy_ultimate"))
+    return markup
+
+# 🎁 Admin အတွက် GB ရွေးချယ်သည့် Keyboard
+def get_admin_gb_keyboard():
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("⚡️ 25 GB", callback_data="adm_gb_25"),
+        InlineKeyboardButton("⚡️ 50 GB", callback_data="adm_gb_50")
+    )
+    markup.row(
+        InlineKeyboardButton("⚡️ 75 GB", callback_data="adm_gb_75"),
+        InlineKeyboardButton("⚡️ 100 GB", callback_data="adm_gb_100")
+    )
+    markup.row(
+        InlineKeyboardButton("⚡️ 150 GB", callback_data="adm_gb_150"),
+        InlineKeyboardButton("⚡️ 200 GB", callback_data="adm_gb_200")
+    )
+    return markup
+
+# 🎁 Admin အတွက် အရေအတွက် ရွေးချယ်သည့် Keyboard
+def get_admin_count_keyboard(gb):
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("1 ခု", callback_data=f"adm_cnt_{gb}_1"),
+        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_3")
+    )
+    markup.row(
+        InlineKeyboardButton("5 ခု", callback_data=f"adm_cnt_{gb}_5"),
+        InlineKeyboardButton("10 ခု", callback_data=f"adm_cnt_{gb}_10")
+    )
     return markup
 
 # 📊 Server 1 နှင့် Server 2 Total Usage & Keys တွက်ချက်ပေးသည့် Function
@@ -176,7 +228,7 @@ def get_user_key_count(user_name):
     return count
 
 # ⚡ Server 1 သို့မဟုတ် Server 2 ထဲ (1) မပါဘဲ ဒုတိယတစ်ခုမှစ၍ (2), (3) နံပါတ်စဉ်ပါ Key အသစ် မွေးပေးသည့် Function
-def create_outline_key(server_num, user_name, plan_info):
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None):
     today = datetime.now()
     expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
     
@@ -198,7 +250,12 @@ def create_outline_key(server_num, user_name, plan_info):
             
             requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": key_name}, verify=False, timeout=8)
             
-            limit_bytes = plan_info.get("bytes")
+            limit_bytes = None
+            if custom_gb:
+                limit_bytes = custom_gb * 1000**3
+            elif plan_info:
+                limit_bytes = plan_info.get("bytes")
+
             if limit_bytes:
                 requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
             
@@ -208,6 +265,53 @@ def create_outline_key(server_num, user_name, plan_info):
     except Exception as e:
         print("Key Generation Error:", e)
     return None, None, None
+
+# 🎁 Admin GB ရွေးချယ်မှု Callback
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_gb_"))
+def handle_admin_gb_select(call):
+    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+        bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
+        return
+    
+    gb = call.data.replace("adm_gb_", "")
+    bot.edit_message_text(
+        f"🎁 <b>{gb} GB</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?",
+        chat_id=ADMIN_CHAT_ID,
+        message_id=call.message.message_id,
+        parse_mode="HTML",
+        reply_markup=get_admin_count_keyboard(gb)
+    )
+    bot.answer_callback_query(call.id)
+
+# 🎁 Admin Code မွေးထုတ်ပေးမှု Callback
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_cnt_"))
+def handle_admin_code_generate(call):
+    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+        bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
+        return
+    
+    parts = call.data.split("_")
+    gb_amount = int(parts[2])
+    count = int(parts[3])
+    
+    codes = load_redeem_codes()
+    generated_list = []
+    
+    for _ in range(count):
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        code = f"HMA-{gb_amount}GB-{random_str}"
+        codes[code] = gb_amount
+        generated_list.append(f"<code>{code}</code>")
+        
+    save_redeem_codes(codes)
+    
+    reply_msg = (
+        f"🎉 <b>{gb_amount} GB Giveaway Code ({count} ခု) ထုတ်ပြီးပါပြီ:</b>\n\n" +
+        "\n".join(generated_list) +
+        "\n\n💡 <i>အဆိုပါ Code များကို တစ်ကြိမ်သုံးအဖြစ် အသုံးပြုနိုင်ပါပြီဗျာ။</i>"
+    )
+    bot.edit_message_text(reply_msg, chat_id=ADMIN_CHAT_ID, message_id=call.message.message_id, parse_mode="HTML")
+    bot.answer_callback_query(call.id, "✅ Code များ မွေးထုတ်ပြီးပါပြီ!")
 
 # /start Command
 @bot.message_handler(commands=['start'])
@@ -282,7 +386,7 @@ def handle_approve_callback(call):
         chat_info = bot.get_chat(target_chat_id)
         user_name = chat_info.first_name if chat_info.first_name else "HMA Customer"
         
-        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info)
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info)
         
         if vpn_key:
             success_message = (
@@ -424,11 +528,77 @@ def handle_all_messages(message):
         bot.send_message(chat_id, free_text, parse_mode="HTML")
         return
 
+    if input_value in ["🎁 Redeem Code သုံးရန်", "Redeem Code သုံးရန်"]:
+        redeem_guide = (
+            "🎁 <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
+            "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>HMA-50GB-XXXXXX</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
+        )
+        bot.send_message(chat_id, redeem_guide, parse_mode="HTML")
+        return
+
     if input_value in ["👨‍💻 Admin သို့ ဆက်သွယ်ရန်", "Admin သို့ ဆက်သွယ်ရန်"]:
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
+
+    # 🎁 Admin သီးသန့် Code Auto Gen ခလုတ်
+    if input_value == "🎁 Gen Redeem Code (Admin Only)":
+        if str(chat_id) != str(ADMIN_CHAT_ID):
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
+            return
+        
+        bot.send_message(
+            chat_id, 
+            "🎁 <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးပြု၍ ဖန်တီးလိုသော <b>GB ပမာဏ</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:", 
+            parse_mode="HTML", 
+            reply_markup=get_admin_gb_keyboard()
+        )
+        return
+
+    # 🎁 Redeem Code စစ်ဆေးသည့် Logic (Single-Use Protection)
+    codes = load_redeem_codes()
+    if input_value in codes:
+        gb_val = codes[input_value]
+        user_name = message.from_user.first_name if message.from_user.first_name else "Giveaway Winner"
+        
+        # Code ကို တစ်ကြိမ်သုံးပြီးသည်နှင့် Auto Delete ဖျက်ဆီးပစ်မည်
+        del codes[input_value]
+        save_redeem_codes(codes)
+
+        bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို မွေးထုတ်ပေးနေပါသည်...")
+        
+        vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val)
+        if not vpn_key:
+            vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val)
+
+        if vpn_key:
+            success_msg = (
+                f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
+                f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
+                f"🎁 <b>ရရှိသော Data GB:</b> {gb_val} GB\n"
+                f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
+                f"<code>{vpn_key}</code>\n\n"
+                f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
+            )
+            bot.send_message(chat_id, success_msg, parse_mode="HTML")
+            
+            clean_name = user_name.strip().lower()
+            save_key_mapping(clean_name, chat_id)
+
+            try:
+                bot.send_message(
+                    ADMIN_CHAT_ID, 
+                    f"🎁 <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ရယူသွားပါပြီခင်ဗျာ။",
+                    parse_mode="HTML"
+                )
+            except:
+                pass
+            return
+        else:
+            bot.send_message(chat_id, "❌ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ Admin ထံ ဆက်သွယ်ပေးပါခင်ဗျာ။")
+            return
 
     # 📊 Admin သီးသန့် Total Usage & User Stats စစ်ဆေးသည့် ခလုတ်
     if input_value == "📊 Total Data Usage (Admin Only)":
