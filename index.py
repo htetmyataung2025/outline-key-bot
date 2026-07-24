@@ -676,7 +676,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, True)
         bot.send_message(
             chat_id, 
-            "🔍 <b>User ရှာဖွေရန်:</b>\n\n👇 ရှာဖွေလိုသော <b>User နာမည်အစ စာလုံး (ဥပမာ - H, T, A)</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:", 
+            "🔍 <b>Customer ရှာဖွေရန်:</b>\n\n👇 ရှာဖွေလိုသော <b>Cus နာမည်အစ စာလုံး (ဥပမာ - H, T, A)</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:", 
             parse_mode="HTML"
         )
         return
@@ -699,13 +699,13 @@ def handle_all_messages(message):
     # 🔍 Admin Search State ဖြစ်နေပါက နာမည်အစ တိုက်စစ်ပြီး List ထုတ်ပေးခြင်း
     if str(chat_id) == str(ADMIN_CHAT_ID) and get_search_state(chat_id):
         set_search_state(chat_id, False)
-        bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော User များကို Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
+        bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော Cus များကို 📡Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
         
         matches, search_markup = search_users_by_query(input_value)
         if matches:
             bot.send_message(
                 chat_id, 
-                f"🔎 <b>ရှာဖွေတွေ့ရှိသော User စာရင်း ({len(matches)} ခု):</b>\n\n👇 အောက်ပါ ခလုတ်များထဲမှ အသေးစိတ်ကြည့်လိုသော User ကို နှိပ်ပါ -", 
+                f"🔎 <b>ရှာဖွေတွေ့ရှိသော Customer စာရင်း ({len(matches)} ခု):</b>\n\n👇 အောက်ပါ ခလုတ်များထဲမှ အသေးစိတ်ကြည့်လိုသော Cus ကို နှိပ်ပါ -", 
                 parse_mode="HTML", 
                 reply_markup=search_markup
             )
