@@ -529,7 +529,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, free_text, parse_mode="HTML")
         return
 
-    if input_value in ["🎁 Redeem Code သုံးရန်", "Redeem Code သုံးရန်"]:
+    if input_value in ["🎁 Redeem Code", "Redeem Code"]:
         redeem_guide = (
             "🎁 <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
             "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>H&E-50GB-XXXXXX</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
@@ -544,7 +544,7 @@ def handle_all_messages(message):
         return
 
     # 🎁 Admin သီးသန့် Code Auto Gen ခလုတ်
-    if input_value == "🎁 Gen Redeem Code (Admin Only)":
+    if input_value == "🎁 Gen Redeem Code":
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -602,7 +602,7 @@ def handle_all_messages(message):
             return
 
     # 📊 Admin သီးသန့် Total Usage & User Stats စစ်ဆေးသည့် ခလုတ်
-    if input_value == "📊 Total Data Usage (Admin Only)":
+    if input_value == "📊 Total Data Usage":
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
