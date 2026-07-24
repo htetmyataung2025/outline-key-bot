@@ -153,7 +153,7 @@ def get_servers_total_usage():
         f"🔵 <b>Server 2 🇸🇬</b>\n"
         f"🔑 Total Keys: <b>{s2_total}</b>\n"
         f"⚡️ Total Usage: <b>{s2_gb} GB</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
     return report
