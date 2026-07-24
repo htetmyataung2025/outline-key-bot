@@ -1,5 +1,6 @@
 import os
 import requests
+import time
 from flask import Flask, request, jsonify
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
@@ -113,7 +114,7 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimted) - 10,000 Ks", callback_data="buy_ultimate"))
     return markup
 
-# 📊 Server 1 နှင့် Server 2 Total Usage, Users, Online & Offline Keys တွက်ချက်ပေးသည့် Function
+# 📊 Real-time Active Sampling ဖြင့် Online/Offline စစ်ပေးသည့် Function
 def get_servers_total_usage():
     def get_server_stats(api_url):
         total_keys = 0
@@ -122,26 +123,38 @@ def get_servers_total_usage():
         total_bytes = 0
 
         try:
+            # 1st Sample
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
-            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+            metrics_resp1 = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
 
             if keys_resp.status_code == 200:
                 keys_data = keys_resp.json().get("accessKeys", [])
                 total_keys = len(keys_data)
 
-            if metrics_resp.status_code == 200:
-                bytes_dict = metrics_resp.json().get("bytesTransferredByUserId", {})
-                total_bytes = sum(bytes_dict.values())
-                
-                # Data သုံးစွဲမှု 0 ထက်ပိုသော Key များကို Online (အသုံးပြုနေဆဲ) အဖြစ် စစ်ဆေးခြင်း
-                for k in keys_data:
-                    k_id = str(k.get("id"))
-                    if bytes_dict.get(k_id, 0) > 0:
-                        online_keys += 1
-                
-                offline_keys = total_keys - online_keys
-        except:
-            pass
+            bytes1 = metrics_resp1.json().get("bytesTransferredByUserId", {}) if metrics_resp1.status_code == 200 else {}
+
+            # ၃ စက္ကန့် စောင့်ပြီး Real-time Data Sampling ပြုလုပ်ခြင်း
+            time.sleep(3)
+
+            # 2nd Sample
+            metrics_resp2 = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+            bytes2 = metrics_resp2.json().get("bytesTransferredByUserId", {}) if metrics_resp2.status_code == 200 else {}
+
+            total_bytes = sum(bytes2.values())
+
+            # Data ပြောင်းလဲမှုကို စစ်ဆေး၍ Real-time Active Key ကို ရှာခြင်း
+            for k in keys_data:
+                k_id = str(k.get("id"))
+                b1 = bytes1.get(k_id, 0)
+                b2 = bytes2.get(k_id, 0)
+
+                # ၃ စက္ကန့်အတွင်း Traffic တက်နေပါက Online (Active) ဟု သတ်မှတ်သည်
+                if b2 > b1:
+                    online_keys += 1
+
+            offline_keys = total_keys - online_keys
+        except Exception as e:
+            print("Server Stats Error:", e)
 
         return total_keys, online_keys, offline_keys, total_bytes
 
@@ -156,19 +169,19 @@ def get_servers_total_usage():
     overall_tb = round(overall_gb / 1000, 2)
 
     report = (
-        f"📊 <b>SERVER DATA & USER STATS REPORT</b>\n\n"
+        f"⚡ <b>SERVER DATA & USER STATS REPORT</b>\n\n"
         f"🟢 <b>Server 1 🇸🇬</b>\n"
         f"👥 Total Keys: <b>{s1_total}</b>\n"
-        f"🟢 Online Keys: <b>{s1_online}</b>\n"
-        f"⚪️ Offline Keys: <b>{s1_offline}</b>\n"
+        f"🟢 Online (Active): <b>{s1_online}</b>\n"
+        f"🔴 Offline: <b>{s1_offline}</b>\n"
         f"⚡️ Total Usage: <b>{s1_gb} GB</b>\n\n"
         f"🔵 <b>Server 2 🇸🇬</b>\n"
         f"👥 Total Keys: <b>{s2_total}</b>\n"
-        f"🟢 Online Keys: <b>{s2_online}</b>\n"
-        f"⚪️ Offline Keys: <b>{s2_offline}</b>\n"
+        f"🟢 Online (Active): <b>{s2_online}</b>\n"
+        f"🔴 Offline: <b>{s2_offline}</b>\n"
         f"⚡️ Total Usage: <b>{s2_gb} GB</b>\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"🌐 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
+        f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
     return report
 
@@ -189,7 +202,7 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# ⚡ Server 1 သို့မဟုတ် Server 2 ထဲ (1) မပါဘဲ ဒုတိယတစ်ခုမှစ၍ (2), (3) နံပါတ်စဉ်ပါ Key အသစ် မွေးပေးသည့် Function
+# ⚡ Key အသစ် မွေးပေးသည့် Function
 def create_outline_key(server_num, user_name, plan_info):
     today = datetime.now()
     expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
@@ -444,18 +457,18 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
-    # 📊 Admin သီးသန့် Total Usage & User Stats စစ်ဆေးသည့် ခလုတ်
+    # 📊 Admin သီးသန့် Total Usage & Real-time Active User Stats စစ်ဆေးသည့် ခလုတ်
     if input_value == "📊 Total Data Usage (Admin Only)":
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
-        bot.send_message(chat_id, "⏳ Server 1 & Server 2 Data Usage နှင့် User စာရင်းများကို တွက်ချက်နေပါသည်...")
+        bot.send_message(chat_id, "⏳ Server 1 & Server 2 ၏ Real-time Active Connections များကို စစ်ဆေးတွက်ချက်နေပါသည် (၃ စက္ကန့်ခန့် ကြာနိုင်ပါသည်)...")
         report_text = get_servers_total_usage()
         bot.send_message(chat_id, report_text, parse_mode="HTML")
         return
 
-    # 🔄 Bot Refresh Logic (ခလုတ်နှိပ်ပါက စာပြန်မည့်နေရာ)
+    # 🔄 Bot Refresh Logic
     if input_value in ["🔄 Bot Refresh", "/refresh"]:
         refresh_text = (
             "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
@@ -556,14 +569,14 @@ def handle_all_messages(message):
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
             return
 
-    # 💡 Key မဟုတ်သော/ခလုတ်အဟောင်း/အခြား စာများ ရောက်လာပါက ပြသမည့် Auto Refresh Noti
+    # Not Found Noti
     not_found_msg = (
         "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို စနစ်တွင် ရှာမတွေ့ပါခင်ဗျာ။</b>\n\n"
         "💡 <i>အကယ်၍ မီးခိုးရောင် Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
-# ⏰ နေ့စဉ် အလိုအလျောက် သက်တမ်း စစ်ဆေးခြင်း၊ Noti ပို့ခြင်း နှင့် ၁ ရက်ကျော်သူများအား Auto Delete ဖျက်ဆီးခြင်း Route
+# Cron Check Route
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
@@ -615,7 +628,6 @@ def cron_check():
                     except:
                         pass
 
-                # 🚨 ၁ ရက်ကျော်သူများအား Server ပေါ်မှ အလိုအလျောက် Key ဖျက်ဆီးခြင်း
                 if should_delete:
                     try:
                         del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
@@ -633,7 +645,6 @@ def cron_check():
                         pass
                     continue 
 
-                # 📢 Noti ပို့ခြင်း (Emoji နှင့် Extra Clean Logic ပါဝင်သည်)
                 if is_gb_full or is_expired_today:
                     clean_name = full_name
                     if date_match:
