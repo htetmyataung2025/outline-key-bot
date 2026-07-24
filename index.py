@@ -312,11 +312,11 @@ def handle_view_key_detail(call):
                 server_name = "Server 1 🇸🇬" if server_num == "1" else "Server 2 🇸🇬"
                 
                 detail_msg = (
-                    f"👤 <b>USER အသေးစိတ် အချက်အလက်</b>\n\n"
-                    f"🤖 <b>အမည်:</b> {html.escape(full_name)}\n"
+                    f"👤 <b>USER Information✅ </b>\n\n"
+                    f"🤖 <b>Name:</b> {html.escape(full_name)}\n"
                     f"🇸🇬 <b>Server:</b> {server_name}\n"
-                    f"⚡️ <b>အသုံးပြုထားသည့် Data:</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
-                    f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {end_date}\n\n"
+                    f"⚡️ <b>Data Usage :</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
+                    f"⏰ <b>Expired Date:</b> {end_date}\n"
                     f"🔑 <b>VPN Key Link:</b>\n\n"
                     f"<code>{final_key}</code>"
                 )
