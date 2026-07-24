@@ -146,7 +146,7 @@ def get_main_menu_keyboard(chat_id=None):
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
-        btn_search_user = KeyboardButton("🔍 Cusရှာရန်")
+        btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
         markup.add(btn_total_usage, btn_gen_code)
         markup.add(btn_search_user)
         
@@ -668,7 +668,7 @@ def handle_all_messages(message):
         return
 
     # 🔍 Admin သီးသန့် User နာမည်အစ (Initial Letter) ဖြင့် ရှာဖွေသည့် ခလုတ်
-    if input_value == "🔍 User ရှာရန်":
+    if input_value == "🔍 Cus ရှာရန်":
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
