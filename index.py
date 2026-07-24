@@ -121,9 +121,8 @@ def get_main_menu_keyboard(chat_id=None):
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_gen_code = KeyboardButton("🎁 Gen Redeem Code")
-        markup.add(btn_total_usage)
-        markup.add(btn_gen_code)
-
+        markup.add(btn_total_usage, btn_gen_code)
+        
     return markup
 
 def get_plan_keyboard():
