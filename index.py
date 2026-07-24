@@ -227,10 +227,10 @@ def get_servers_total_usage():
 
     report = (
         f"📊 <b>SERVER DATA STATS REPORT</b>\n\n"
-        f"📡 <b>Server 1 🇸🇬</b>\n"
+        f"🛰️ <b>Server 1 🇸🇬</b>\n"
         f"🔑 Total Keys: <b>{s1_total}</b>\n"
         f"⚡️ Total Usage: <b>{s1_gb} GB</b>\n\n"
-        f"📡 <b>Server 2 🇸🇬</b>\n"
+        f"🛰️ <b>Server 2 🇸🇬</b>\n"
         f"🔑 Total Keys: <b>{s2_total}</b>\n"
         f"⚡️ Total Usage: <b>{s2_gb} GB</b>\n"
         f"━━━━━━━━━━━━━━━━━\n"
@@ -263,7 +263,7 @@ def search_users_by_query(query):
             pass
 
     for server_num, key_id, k_name in found_matches[:30]:
-        srv_icon = "📡 S1🇸🇬" if server_num == "1" else "📡 S2🇸🇬"
+        srv_icon = "🛰️ S1🇸🇬" if server_num == "1" else "🛰️ S2🇸🇬"
         btn_text = f"{srv_icon} | {k_name}"
         markup.add(InlineKeyboardButton(btn_text, callback_data=f"viewkey_{server_num}_{key_id}"))
 
@@ -314,7 +314,7 @@ def handle_view_key_detail(call):
                 detail_msg = (
                     f"👤 <b>Customer Information✅ </b>\n\n"
                     f"🤖 <b>Name:</b> {html.escape(full_name)}\n"
-                    f"📡 <b>Server:</b> {server_name}\n"
+                    f"🛰️ <b>Server:</b> {server_name}\n"
                     f"⚡️ <b>Data Usage :</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
                     f"⏰ <b>Expired Date:</b> {end_date}\n"
                     f"🔑 <b>VPN Key Link:</b>\n\n"
@@ -525,7 +525,7 @@ def handle_approve_callback(call):
             bot.edit_message_caption(
                 chat_id=ADMIN_CHAT_ID,
                 message_id=call.message.message_id,
-                caption=call.message.caption + f"\n\n✅ <b>အတည်ပြုပြီးပါပြီ (📡Server {server_num} 🇸🇬)</b>\n🔑 {key_name}",
+                caption=call.message.caption + f"\n\n✅ <b>DONE (🛰️Server {server_num} 🇸🇬)</b>\n🔑 {key_name}",
                 parse_mode="HTML"
             )
             bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key ထုတ်ပြီး Customer ထံ ပို့ပြီးပါပြီ!")
@@ -563,8 +563,8 @@ def handle_payment_screenshot(message):
     
     approve_markup = InlineKeyboardMarkup()
     approve_markup.row(
-        InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}"),
-        InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}")
+        InlineKeyboardButton("🛰️ Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}"),
+        InlineKeyboardButton("🛰️ Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}")
     )
     
     try:
@@ -699,7 +699,7 @@ def handle_all_messages(message):
     # 🔍 Admin Search State ဖြစ်နေပါက နာမည်အစ တိုက်စစ်ပြီး List ထုတ်ပေးခြင်း
     if str(chat_id) == str(ADMIN_CHAT_ID) and get_search_state(chat_id):
         set_search_state(chat_id, False)
-        bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော Cus များကို 📡Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
+        bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော Cus များကို 🛰️ Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
         
         matches, search_markup = search_users_by_query(input_value)
         if matches:
@@ -763,7 +763,7 @@ def handle_all_messages(message):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
-        bot.send_message(chat_id, "📡 Server 1 🇸🇬 & 📡 Server 2 🇸🇬Data Usage များကို တွက်ချက်နေပါသည်...")
+        bot.send_message(chat_id, "🛰️ Server 1 🇸🇬 & 🛰️ Server 2 🇸🇬Data Usage များကို တွက်ချက်နေပါသည်...")
         report_text = get_servers_total_usage()
         bot.send_message(chat_id, report_text, parse_mode="HTML")
         return
