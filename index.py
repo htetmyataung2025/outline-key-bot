@@ -146,10 +146,9 @@ def get_main_menu_keyboard(chat_id=None):
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
-        btn_list_keys = KeyboardButton("🔑 Active Keys စာရင်း စစ်ရန်")
         btn_search_user = KeyboardButton("🔍 User ရှာရန်")
         markup.add(btn_total_usage, btn_gen_code)
-        markup.add(btn_list_keys, btn_search_user)
+        markup.add(btn_search_user)
         
     return markup
 
@@ -239,56 +238,7 @@ def get_servers_total_usage():
     )
     return report
 
-# 🔑 Admin အတွက် Server ပေါ်မှ Keys အားလုံးကို (၁၀ ခုစီ ခွဲ၍) စနစ်တကျ ပို့ပေးသည့် Function
-def send_all_active_keys_report(chat_id, server_num, api_url):
-    try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
-        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
-        
-        if keys_resp.status_code != 200:
-            bot.send_message(chat_id, f"❌ Server {server_num} အား ချိတ်ဆက်၍မရပါခင်ဗျာ။")
-            return
-
-        keys_data = keys_resp.json().get("accessKeys", [])
-        bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
-
-        if not keys_data:
-            bot.send_message(chat_id, f"🟢 <b>Server {server_num}</b> ထဲတွင် မည်သည့် Key မျှ မရှိသေးပါခင်ဗျာ။", parse_mode="HTML")
-            return
-
-        server_icon = "🟢 Server 1 🇸🇬" if str(server_num) == "1" else "🔵 Server 2 🇸🇬"
-        
-        chunk_size = 10
-        for i in range(0, len(keys_data), chunk_size):
-            chunk = keys_data[i:i + chunk_size]
-            report_text = f"<b>{server_icon} (Part {i//chunk_size + 1}) - Total Keys: {len(keys_data)}</b>\n━━━━━━━━━━━━━━━━━\n\n"
-
-            for idx, key in enumerate(chunk, i + 1):
-                key_id = str(key.get("id"))
-                raw_name = key.get("name", "Unnamed Key")
-                name = html.escape(raw_name)
-                
-                raw_access_url = key.get("accessUrl", "")
-                final_key = f"{raw_access_url}#{name}" if raw_name else raw_access_url
-
-                limit_bytes = key.get("dataLimit", {}).get("bytes")
-                plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
-                
-                usage_bytes = bytes_transferred.get(key_id, 0)
-                usage_gb = bytes_to_gb(usage_bytes)
-
-                report_text += (
-                    f"<b>{idx}. 👤 Name:</b> {name}\n"
-                    f"   ⚡️ Usage: <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
-                    f"   🔑 Key: <code>{final_key}</code>\n\n"
-                )
-
-            bot.send_message(chat_id, report_text, parse_mode="HTML")
-
-    except Exception as e:
-        bot.send_message(chat_id, f"❌ Server {server_num} Error: {str(e)}")
-
-# 🔍 User နာမည်အစ (Initial Letter e.g., 'H', 'T', 'A') ဖြင့် တိတိကျကျ ရှာဖွေပေးသည့် Function
+# 🔍 User နာမည်အစ (Initial Letter e.g., 'H', 'T', 'A') ဖြင့် ရှာဖွေပေးသည့် Function
 def search_users_by_query(query):
     query_clean = query.strip().lower()
     markup = InlineKeyboardMarkup()
@@ -303,18 +253,16 @@ def search_users_by_query(query):
                     k_name = k.get("name", "").strip()
                     k_name_lower = k_name.lower()
 
-                    # အက္ခရာ ၁ လုံးတည်း ရိုက်ပါက - အဆိုပါ အက္ခရာဖြင့် စသော User Name များကိုသာ စစ်ထုတ်သည်
                     if len(query_clean) == 1:
                         if k_name_lower.startswith(query_clean):
                             found_matches.append((server_num, str(k.get("id")), k_name))
                     else:
-                        # စာလုံးရေ ၂ လုံးနှင့်အထက် ရိုက်ပါက - ပါဝင်သော စာသားကို ရှာဖွေပေးသည်
                         if query_clean in k_name_lower:
                             found_matches.append((server_num, str(k.get("id")), k_name))
         except:
             pass
 
-    for server_num, key_id, k_name in found_matches[:30]:  # Maximum 30 buttons
+    for server_num, key_id, k_name in found_matches[:30]:
         srv_icon = "🟢 S1" if server_num == "1" else "🔵 S2"
         btn_text = f"{srv_icon} | {k_name}"
         markup.add(InlineKeyboardButton(btn_text, callback_data=f"viewkey_{server_num}_{key_id}"))
@@ -717,18 +665,6 @@ def handle_all_messages(message):
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
-        return
-
-    # 🔑 Admin သီးသန့် Active Keys စာရင်း စစ်ရန် ခလုတ်
-    if input_value == "🔑 Active Keys စာရင်း စစ်ရန်":
-        set_search_state(chat_id, False)
-        if str(chat_id) != str(ADMIN_CHAT_ID):
-            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
-            return
-
-        bot.send_message(chat_id, "⏳ Server 1 & Server 2 ပေါ်ရှိ Key စာရင်းများကို ရယူနေပါသည်...")
-        send_all_active_keys_report(chat_id, "1", OUTLINE_API_URL_1)
-        send_all_active_keys_report(chat_id, "2", OUTLINE_API_URL_2)
         return
 
     # 🔍 Admin သီးသန့် User နာမည်အစ (Initial Letter) ဖြင့် ရှာဖွေသည့် ခလုတ်
