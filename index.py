@@ -121,7 +121,9 @@ def get_main_menu_keyboard(chat_id=None):
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
+        btn_list_keys = KeyboardButton("🔑 Active Keys စာရင်း စစ်ရန်")
         markup.add(btn_total_usage, btn_gen_code)
+        markup.add(btn_list_keys)
         
     return markup
 
@@ -210,6 +212,46 @@ def get_servers_total_usage():
         f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
     return report
+
+# 🔑 Admin အတွက် Server ပေါ်မှ Keys အားလုံးကို ထုတ်ပေးသည့် Function
+def get_all_active_keys_report(server_num, api_url):
+    try:
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=10)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=10)
+        
+        if keys_resp.status_code != 200:
+            return f"❌ Server {server_num} အား ချိတ်ဆက်၍မရပါခင်ဗျာ။"
+
+        keys_data = keys_resp.json().get("accessKeys", [])
+        bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
+
+        if not keys_data:
+            return f"🟢 <b>Server {server_num}</b> ထဲတွင် မည်သည့် Key မျှ မရှိသေးပါခင်ဗျာ။"
+
+        server_icon = "🟢 Server 1 🇸🇬" if str(server_num) == "1" else "🔵 Server 2 🇸🇬"
+        report_text = f"<b>{server_icon} (Total Keys: {len(keys_data)})</b>\n━━━━━━━━━━━━━━━━━\n\n"
+
+        for idx, key in enumerate(keys_data, 1):
+            key_id = str(key.get("id"))
+            name = key.get("name", "Unnamed Key")
+            raw_access_url = key.get("accessUrl", "")
+            final_key = f"{raw_access_url}#{name}" if name else raw_access_url
+
+            limit_bytes = key.get("dataLimit", {}).get("bytes")
+            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+            
+            usage_bytes = bytes_transferred.get(key_id, 0)
+            usage_gb = bytes_to_gb(usage_bytes)
+
+            report_text += (
+                f"<b>{idx}. 👤 Name:</b> {name}\n"
+                f"   ⚡️ Usage: <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
+                f"   🔑 Key: <code>{final_key}</code>\n\n"
+            )
+
+        return report_text
+    except Exception as e:
+        return f"❌ Server {server_num} Error: {str(e)}"
 
 # 🔍 Customer ဝယ်ယူထားသော Key အရေအတွက် စစ်ပေးသည့် Function
 def get_user_key_count(user_name):
@@ -541,6 +583,23 @@ def handle_all_messages(message):
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
+        return
+
+    # 🔑 Admin သီးသန့် Active Keys စာရင်းအားလုံး ထုတ်ကြည့်သည့် ခလုတ်
+    if input_value == "🔑 Active Keys စာရင်း စစ်ရန်":
+        if str(chat_id) != str(ADMIN_CHAT_ID):
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
+            return
+
+        bot.send_message(chat_id, "⏳ Server 1 & Server 2 ပေါ်ရှိ Key စာရင်းများကို ရယူနေပါသည်...")
+        
+        # Server 1 Keys
+        s1_report = get_all_active_keys_report("1", OUTLINE_API_URL_1)
+        bot.send_message(chat_id, s1_report, parse_mode="HTML")
+
+        # Server 2 Keys
+        s2_report = get_all_active_keys_report("2", OUTLINE_API_URL_2)
+        bot.send_message(chat_id, s2_report, parse_mode="HTML")
         return
 
     # 🎁 Admin သီးသန့် Code Auto Gen ခလုတ်
