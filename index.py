@@ -23,7 +23,8 @@ OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
 # 🔑 Admin Telegram Chat ID
 ADMIN_CHAT_ID = "8778394176"  
-# 🌐 Cloudflare Worker AI လင့်ခ်
+
+# 🌐 Cloudflare Worker AI လင့်ခ် (အနောက်တွင် Slash မပါပါ)
 CF_WORKER_URL = "https://h-e-feature-ai.htetmyath83.workers.dev"
 
 def get_cf_ai_response(user_message, chat_id):
@@ -32,12 +33,15 @@ def get_cf_ai_response(user_message, chat_id):
         "message": user_message,
         "is_admin": is_admin
     }
+    headers = {
+        "Content-Type": "application/json"
+    }
     try:
-        res = requests.post(CF_WORKER_URL, json=payload, timeout=15)
+        res = requests.post(CF_WORKER_URL, json=payload, headers=headers, timeout=15)
         if res.status_code == 200:
             return res.json().get("result")
     except Exception as e:
-        print("CF AI Error:", e)
+        print("CF AI Exception Error:", e)
     return None
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
