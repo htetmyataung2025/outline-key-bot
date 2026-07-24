@@ -24,7 +24,7 @@ OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 # 🔑 Admin Telegram Chat ID
 ADMIN_CHAT_ID = "8778394176"  
 # 🌐 Cloudflare Worker AI လင့်ခ်
-CF_WORKER_URL = "https://h-e-feature-ai.htetmyath83.workers.dev"
+CF_WORKER_URL = "https://h-e-feature-ai.htetmyath83.workers.dev/"
 
 def get_cf_ai_response(user_message, chat_id):
     is_admin = (str(chat_id) == str(ADMIN_CHAT_ID))
