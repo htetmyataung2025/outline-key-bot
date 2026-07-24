@@ -114,9 +114,10 @@ def get_main_menu_keyboard(chat_id=None):
     btn_refresh = KeyboardButton("🔄 Bot Refresh")
     
     markup.add(btn_buy, btn_check)
+    markup.add(btn_refresh)
     markup.add(btn_free, btn_redeem)
-    markup.add(btn_admin, btn_refresh)
-
+    markup.add(btn_admin)
+    
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_gen_code = KeyboardButton("🎁 Gen Redeem Code")
