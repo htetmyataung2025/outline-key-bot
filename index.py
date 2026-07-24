@@ -27,11 +27,12 @@ ADMIN_CHAT_ID = "8778394176"
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# Temp Files ဖြင့် Plan, Key Map နှင့် Redeem Code များ သိမ်းဆည်းသည့်စနစ်
+# Temp Files ဖြင့် Plan, Key Map, Redeem Code နှင့် State များ သိမ်းဆည်းသည့်စနစ်
 STATE_FILE = "/tmp/user_plans.json"
 MAPPING_FILE = "/tmp/key_mappings.json"
 REDEEM_FILE = "/tmp/redeem_codes.json"
 SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
+REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 
 def load_user_plans():
     if os.path.exists(STATE_FILE):
@@ -103,6 +104,29 @@ def get_search_state(chat_id):
     if os.path.exists(SEARCH_STATE_FILE):
         try:
             with open(SEARCH_STATE_FILE, 'r') as f:
+                states = json.load(f)
+                return states.get(str(chat_id), False)
+        except:
+            return False
+    return False
+
+# 🎁 User Redeem State
+def set_redeem_state(chat_id, is_waiting=True):
+    try:
+        states = {}
+        if os.path.exists(REDEEM_STATE_FILE):
+            with open(REDEEM_STATE_FILE, 'r') as f:
+                states = json.load(f)
+        states[str(chat_id)] = is_waiting
+        with open(REDEEM_STATE_FILE, 'w') as f:
+            json.dump(states, f)
+    except:
+        pass
+
+def get_redeem_state(chat_id):
+    if os.path.exists(REDEEM_STATE_FILE):
+        try:
+            with open(REDEEM_STATE_FILE, 'r') as f:
                 states = json.load(f)
                 return states.get(str(chat_id), False)
         except:
@@ -434,6 +458,7 @@ def handle_admin_code_generate(call):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     set_search_state(message.chat.id, False)
+    set_redeem_state(message.chat.id, False)
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
         "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
@@ -454,6 +479,7 @@ def send_welcome(message):
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
     set_search_state(message.chat.id, False)
+    set_redeem_state(message.chat.id, False)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 # Plan Button Callback
@@ -538,6 +564,7 @@ def handle_approve_callback(call):
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
     set_search_state(message.chat.id, False)
+    set_redeem_state(message.chat.id, False)
     chat_id = message.chat.id
     user_name = message.from_user.first_name if message.from_user.first_name else "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
@@ -628,11 +655,13 @@ def handle_all_messages(message):
 
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
     if input_value in ["⚡️ Data Usage စစ်ရန်", "Data Usage စစ်ရန်", "⚡ Data Usage စစ်ရန်"]:
         set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
         check_guide = (
             "👇 ဝယ်ယူထားသော VPN Key ကို ဒီမှာ Paste ချပေးပါ:\n\n"
             " 🫶 Key ကို Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ခင်ဗျာ။"
@@ -642,6 +671,7 @@ def handle_all_messages(message):
 
     if input_value in ["🎁 Public Free Key", "Public Free Key"]:
         set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
             f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TB အထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
@@ -653,6 +683,7 @@ def handle_all_messages(message):
 
     if input_value in ["🎁 Redeem Code", "Redeem Code"]:
         set_search_state(chat_id, False)
+        set_redeem_state(chat_id, True)
         redeem_guide = (
             "🎁 <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
             "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>H&E-50GB-XXXXXX</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
@@ -662,6 +693,7 @@ def handle_all_messages(message):
 
     if input_value in ["👨‍💻 Admin သို့ ဆက်သွယ်ရန်", "Admin သို့ ဆက်သွယ်ရန်"]:
         set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
@@ -669,6 +701,7 @@ def handle_all_messages(message):
 
     # 🔍 Admin သီးသန့် User နာမည်အစ (Initial Letter) ဖြင့် ရှာဖွေသည့် ခလုတ်
     if input_value == "🔍 Cus ရှာရန်":
+        set_redeem_state(chat_id, False)
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -684,6 +717,7 @@ def handle_all_messages(message):
     # 🎁 Admin သီးသန့် Code Auto Gen ခလုတ်
     if input_value == "🎁 Gen RD Code":
         set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -713,52 +747,59 @@ def handle_all_messages(message):
             bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
 
-    # 🎁 Redeem Code စစ်ဆေးသည့် Logic
-    codes = load_redeem_codes()
-    if input_value in codes:
-        gb_val = codes[input_value]
-        user_name = message.from_user.first_name if message.from_user.first_name else "Giveaway Winner"
+    # 🎁 Redeem Code စစ်ဆေးသည့် Logic (ခလုတ်နှိပ်ထားသော User ဖြစ်မှသာ စစ်ဆေးမည်)
+    if get_redeem_state(chat_id):
+        set_redeem_state(chat_id, False)
+        codes = load_redeem_codes()
         
-        del codes[input_value]
-        save_redeem_codes(codes)
-
-        bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
-        
-        vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val)
-        if not vpn_key:
-            vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val)
-
-        if vpn_key:
-            success_msg = (
-                f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
-                f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
-                f"🎁 <b>ရရှိသော Data GB:</b> {gb_val} GB\n"
-                f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
-                f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
-                f"<code>{vpn_key}</code>\n\n"
-                f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
-            )
-            bot.send_message(chat_id, success_msg, parse_mode="HTML")
+        if input_value in codes:
+            gb_val = codes[input_value]
+            user_name = message.from_user.first_name if message.from_user.first_name else "Giveaway Winner"
             
-            clean_name = user_name.strip().lower()
-            save_key_mapping(clean_name, chat_id)
+            del codes[input_value]
+            save_redeem_codes(codes)
 
-            try:
-                bot.send_message(
-                    ADMIN_CHAT_ID, 
-                    f"🎁 <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ရယူသွားပါပြီခင်ဗျာ။",
-                    parse_mode="HTML"
+            bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
+            
+            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val)
+            if not vpn_key:
+                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val)
+
+            if vpn_key:
+                success_msg = (
+                    f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
+                    f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
+                    f"🎁 <b>ရရှိသော Data GB:</b> {gb_val} GB\n"
+                    f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                    f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
+                    f"<code>{vpn_key}</code>\n\n"
+                    f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
                 )
-            except:
-                pass
-            return
+                bot.send_message(chat_id, success_msg, parse_mode="HTML")
+                
+                clean_name = user_name.strip().lower()
+                save_key_mapping(clean_name, chat_id)
+
+                try:
+                    bot.send_message(
+                        ADMIN_CHAT_ID, 
+                        f"🎁 <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ရယူသွားပါပြီခင်ဗျာ။",
+                        parse_mode="HTML"
+                    )
+                except:
+                    pass
+                return
+            else:
+                bot.send_message(chat_id, "❌ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ Admin ထံ ဆက်သွယ်ပေးပါခင်ဗျာ။")
+                return
         else:
-            bot.send_message(chat_id, "❌ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ Admin ထံ ဆက်သွယ်ပေးပါခင်ဗျာ။")
+            bot.send_message(chat_id, "❌ <b>ထည့်သွင်းထားသော Redeem Code မှားယွင်းနေပါသည် (သို့မဟုတ်) အသုံးပြုပြီးသား ဖြစ်နေပါသည်ခင်ဗျာ။</b>", parse_mode="HTML")
             return
 
     # 📊 Admin သီးသန့် Total Usage ခလုတ်
     if input_value == "📊 Total Data Usage":
         set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
         if str(chat_id) != str(ADMIN_CHAT_ID):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -771,6 +812,7 @@ def handle_all_messages(message):
     # 🔄 Bot Refresh Logic
     if input_value in ["🔄 Bot Refresh", "/refresh"]:
         set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
         refresh_text = (
             "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
             "✨ Update စနစ်သစ်ဖြင့် စတင် အသုံးပြုနိုင်ပါပြီ။"
