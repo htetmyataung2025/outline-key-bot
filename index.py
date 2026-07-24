@@ -109,7 +109,7 @@ def get_main_menu_keyboard(chat_id=None):
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
-    btn_redeem = KeyboardButton("🎁 Redeem Code သုံးရန်")
+    btn_redeem = KeyboardButton("🎁 Redeem Code")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
     btn_refresh = KeyboardButton("🔄 Bot Refresh")
     
@@ -118,9 +118,10 @@ def get_main_menu_keyboard(chat_id=None):
     markup.add(btn_admin, btn_refresh)
 
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
-        btn_total_usage = KeyboardButton("📊 Total Data Usage (Admin Only)")
-        btn_gen_code = KeyboardButton("🎁 Gen Redeem Code (Admin Only)")
-        markup.add(btn_total_usage, btn_gen_code)
+        btn_total_usage = KeyboardButton("📊 Total Data Usage")
+        btn_gen_code = KeyboardButton("🎁 Gen Redeem Code")
+        markup.add(btn_total_usage)
+        markup.add(btn_gen_code)
 
     return markup
 
@@ -206,7 +207,7 @@ def get_servers_total_usage():
         f"🔑 Total Keys: <b>{s2_total}</b>\n"
         f"⚡️ Total Usage: <b>{s2_gb} GB</b>\n"
         f"━━━━━━━━━━━━━━━━━\n"
-        f"🌐 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
+        f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
     return report
 
@@ -299,7 +300,7 @@ def handle_admin_code_generate(call):
     
     for _ in range(count):
         random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        code = f"HMA-{gb_amount}GB-{random_str}"
+        code = f"H&E-{gb_amount}GB-{random_str}"
         codes[code] = gb_amount
         generated_list.append(f"<code>{code}</code>")
         
@@ -311,7 +312,7 @@ def handle_admin_code_generate(call):
         "\n\n💡 <i>အဆိုပါ Code များကို တစ်ကြိမ်သုံးအဖြစ် အသုံးပြုနိုင်ပါပြီဗျာ။</i>"
     )
     bot.edit_message_text(reply_msg, chat_id=ADMIN_CHAT_ID, message_id=call.message.message_id, parse_mode="HTML")
-    bot.answer_callback_query(call.id, "✅ Code များ မွေးထုတ်ပြီးပါပြီ!")
+    bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
 
 # /start Command
 @bot.message_handler(commands=['start'])
@@ -521,7 +522,7 @@ def handle_all_messages(message):
     if input_value in ["🎁 Public Free Key", "Public Free Key"]:
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
-            f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TBအထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
+            f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TB အထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
             f"<code>{free_key}</code>\n\n"
             f"☝️ အပေါ်က ကီးလေးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
         )
@@ -531,7 +532,7 @@ def handle_all_messages(message):
     if input_value in ["🎁 Redeem Code သုံးရန်", "Redeem Code သုံးရန်"]:
         redeem_guide = (
             "🎁 <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
-            "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>HMA-50GB-XXXXXX</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
+            "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>H&E-50GB-XXXXXX</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
         )
         bot.send_message(chat_id, redeem_guide, parse_mode="HTML")
         return
@@ -566,7 +567,7 @@ def handle_all_messages(message):
         del codes[input_value]
         save_redeem_codes(codes)
 
-        bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို မွေးထုတ်ပေးနေပါသည်...")
+        bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
         
         vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val)
         if not vpn_key:
@@ -714,8 +715,8 @@ def handle_all_messages(message):
 
     # 💡 Key မဟုတ်သော/ခလုတ်အဟောင်း/အခြား စာများ ရောက်လာပါက ပြသမည့် Auto Refresh Noti
     not_found_msg = (
-        "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ ထည့်သွင်းထားသော Key Link ကို စနစ်တွင် ရှာမတွေ့ပါခင်ဗျာ။</b>\n\n"
-        "💡 <i>အကယ်၍ မီးခိုးရောင် Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
+        "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
+        "💡 <i> Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
