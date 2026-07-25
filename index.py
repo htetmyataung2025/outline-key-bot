@@ -529,7 +529,11 @@ def handle_approve_callback(call):
         plan_info = PLANS.get(plan_code, PLANS["starter"])
         
         chat_info = bot.get_chat(target_chat_id)
-        user_name = chat_info.first_name if chat_info.first_name else "HMA Customer"
+        user_first = chat_info.first_name if chat_info.first_name else ""
+        user_last = chat_info.last_name if chat_info.last_name else ""
+        user_name = f"{user_first} {user_last}".strip()
+        if not user_name:
+            user_name = "HMA Customer"
         
         vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info)
         
