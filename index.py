@@ -566,7 +566,11 @@ def handle_payment_screenshot(message):
     set_search_state(message.chat.id, False)
     set_redeem_state(message.chat.id, False)
     chat_id = message.chat.id
-    user_name = message.from_user.first_name if message.from_user.first_name else "HMA User"
+        user_first = message.from_user.first_name if message.from_user.first_name else ""
+    user_last = message.from_user.last_name if message.from_user.last_name else ""
+    user_name = f"{user_first} {user_last}".strip()
+    if not user_name:
+        user_name = "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
     
     user_plans = load_user_plans()
