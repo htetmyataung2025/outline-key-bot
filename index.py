@@ -33,6 +33,8 @@ MAPPING_FILE = "/tmp/key_mappings.json"
 REDEEM_FILE = "/tmp/redeem_codes.json"
 SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
+REPLY_STATE_FILE = "/tmp/admin_reply_target.json"
+CRON_TRACK_FILE = "/tmp/cron_notification_track.json"
 
 def load_user_plans():
     if os.path.exists(STATE_FILE):
@@ -63,10 +65,48 @@ def load_key_mappings():
 
 def save_key_mapping(clean_name, chat_id):
     mappings = load_key_mappings()
-    mappings[clean_name.lower()] = str(chat_id)
+    mappings[clean_name.strip().lower()] = str(chat_id)
     try:
         with open(MAPPING_FILE, 'w') as f:
             json.dump(mappings, f)
+    except:
+        pass
+
+def set_reply_target(admin_chat_id, target_chat_id):
+    try:
+        states = {}
+        if os.path.exists(REPLY_STATE_FILE):
+            with open(REPLY_STATE_FILE, 'r') as f:
+                states = json.load(f)
+        states[str(admin_chat_id)] = str(target_chat_id)
+        with open(REPLY_STATE_FILE, 'w') as f:
+            json.dump(states, f)
+    except:
+        pass
+
+def get_reply_target(admin_chat_id):
+    if os.path.exists(REPLY_STATE_FILE):
+        try:
+            with open(REPLY_STATE_FILE, 'r') as f:
+                states = json.load(f)
+                return states.get(str(admin_chat_id), None)
+        except:
+            return None
+    return None
+
+def load_cron_tracks():
+    if os.path.exists(CRON_TRACK_FILE):
+        try:
+            with open(CRON_TRACK_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_cron_tracks(tracks):
+    try:
+        with open(CRON_TRACK_FILE, 'w') as f:
+            json.dump(tracks, f)
     except:
         pass
 
@@ -454,6 +494,23 @@ def handle_admin_code_generate(call):
     bot.edit_message_text(reply_msg, chat_id=ADMIN_CHAT_ID, message_id=call.message.message_id, parse_mode="HTML")
     bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
 
+# ✉️ Admin မှ "ဤ Cus ထံ စာပို့ရန်" ခလုတ်ကို နှိပ်လိုက်သောအခါ
+@bot.callback_query_handler(func=lambda call: call.data.startswith("reply_cus_"))
+def handle_reply_cus_callback(call):
+    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+        bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
+        return
+        
+    target_id = call.data.replace("reply_cus_", "")
+    set_reply_target(ADMIN_CHAT_ID, target_id)
+    
+    bot.answer_callback_query(call.id, "✍️ အဆင်သင့်ဖြစ်ပါပြီ။ ဤ Cus ထံ ပို့လိုသော စာကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါဗျာ။")
+    bot.send_message(
+        ADMIN_CHAT_ID, 
+        f"📩 <b>Target Customer ID: <code>{target_id}</code></b>\n\n👇 ဤသူ့ထံ ပို့လိုသော စာသား (သို့မဟုတ်) ကြော်ငြာကို ဆက်လက် ရိုက်ပို့ပေးပါခင်ဗျာ:", 
+        parse_mode="HTML"
+    )
+
 # /start Command
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -461,7 +518,7 @@ def send_welcome(message):
     set_redeem_state(message.chat.id, False)
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
     
     try:
@@ -660,6 +717,18 @@ def fetch_key_from_server(api_url, input_value):
 def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
+
+    # ✉️ Admin မှ Target ID သတ်မှတ်ပြီး စာပို့ခြင်း (ပထဆုံး စစ်ဆေးရန်)
+    if str(chat_id) == str(ADMIN_CHAT_ID):
+        current_target = get_reply_target(ADMIN_CHAT_ID)
+        if current_target:
+            set_reply_target(ADMIN_CHAT_ID, None)  # ပို့ပြီးတာနဲ့ State ပြန်ဖြုတ်မည်
+            try:
+                bot.send_message(current_target, f"📢 <b>Admin ထံမှ မက်ဆေ့ခ်ျ:</b>\n\n{input_value}", parse_mode="HTML")
+                bot.reply_to(message, f"✅ <b>Chat ID ({current_target})</b> ထံသို့ စာ အောင်မြင်စွာ ပို့ပြီးပါပြီခင်ဗျာ!")
+            except Exception as e:
+                bot.reply_to(message, f"❌ စာပို့၍ မရပါ: {str(e)}")
+            return
 
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         set_search_state(chat_id, False)
@@ -871,7 +940,7 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
-            clean_mapping_name = re.sub(r'\(\d+\)', '', display_name).strip()
+            clean_mapping_name = display_name.strip().lower()
             save_key_mapping(clean_mapping_name, chat_id)
 
             if date_match:
@@ -927,13 +996,16 @@ def handle_all_messages(message):
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
-# Cron Check Route
+# Cron Check Route (၄ နာရီခြား တစ်ခါစီဖြင့် တစ်နေ့ ၃ ကြိမ် ပို့ပေးမည့်စနစ်)
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
+    today_date_str = today.strftime("%Y-%m-%d")
     today_date = today.date()
     
     key_mappings = load_key_mappings()
+    cron_tracks = load_cron_tracks()
+    
     notified_count = 0
     deleted_count = 0
 
@@ -997,11 +1069,16 @@ def cron_check():
                     continue 
 
                 if is_gb_full or is_expired_today:
+                    track_key = f"{key_id}_{today_date_str}"
+                    sent_times = cron_tracks.get(track_key, 0)
+                    
+                    if sent_times >= 3:
+                        continue  # တစ်နေ့ ၃ ကြိမ်ပြည့်သွားပါက ကျော်သွားမည်
+
                     clean_name = full_name
                     if date_match:
                         clean_name = clean_name.replace(date_match.group(0), "")
                     
-                    clean_name = re.sub(r'[^\w\s]', '', clean_name)
                     clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
                     clean_name = clean_name.strip().lower()
 
@@ -1021,18 +1098,25 @@ def cron_check():
                                 f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '💳 Plan များ ကြည့်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
                             )
                             bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
-                            notified_count += 1
                         except:
                             pass
 
                     try:
                         admin_noti = (
-                            f"📢 <b>Notification Alert</b>\n"
+                            f"📢 <b>Notification Alert ({sent_times + 1}/3)</b>\n"
                             f"👤 အသုံးပြုသူ: {full_name}\n"
                             f"📌 အခြေအနေ: {reason_text}\n"
                             f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
                         )
-                        bot.send_message(ADMIN_CHAT_ID, admin_noti, parse_mode="HTML")
+                        admin_btn_markup = InlineKeyboardMarkup()
+                        if target_chat_id:
+                            admin_btn_markup.add(InlineKeyboardButton("✉️ ဤ Cus ထံ စာပို့ရန်", callback_data=f"reply_cus_{target_chat_id}"))
+                            
+                        bot.send_message(ADMIN_CHAT_ID, admin_noti, parse_mode="HTML", reply_markup=admin_btn_markup)
+                        
+                        cron_tracks[track_key] = sent_times + 1
+                        save_cron_tracks(cron_tracks)
+                        notified_count += 1
                     except:
                         pass
         except:
