@@ -34,6 +34,7 @@ REDEEM_FILE = "/tmp/redeem_codes.json"
 SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 REPLY_STATE_FILE = "/tmp/admin_reply_target.json"
+CRON_TRACK_FILE = "/tmp/cron_notification_track.json"
 
 def load_user_plans():
     if os.path.exists(STATE_FILE):
@@ -92,6 +93,22 @@ def get_reply_target(admin_chat_id):
         except:
             return None
     return None
+
+def load_cron_tracks():
+    if os.path.exists(CRON_TRACK_FILE):
+        try:
+            with open(CRON_TRACK_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_cron_tracks(tracks):
+    try:
+        with open(CRON_TRACK_FILE, 'w') as f:
+            json.dump(tracks, f)
+    except:
+        pass
 
 # 🎁 Redeem Code သိမ်းဆည်း/ခေါ်ယူသည့် စနစ်
 def load_redeem_codes():
@@ -501,7 +518,7 @@ def send_welcome(message):
     set_redeem_state(message.chat.id, False)
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
     
     try:
@@ -979,13 +996,16 @@ def handle_all_messages(message):
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
-# Cron Check Route
+# Cron Check Route (၄ နာရီခြား တစ်ခါစီဖြင့် တစ်နေ့ ၃ ကြိမ် ပို့ပေးမည့်စနစ်)
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
+    today_date_str = today.strftime("%Y-%m-%d")
     today_date = today.date()
     
     key_mappings = load_key_mappings()
+    cron_tracks = load_cron_tracks()
+    
     notified_count = 0
     deleted_count = 0
 
@@ -1049,6 +1069,12 @@ def cron_check():
                     continue 
 
                 if is_gb_full or is_expired_today:
+                    track_key = f"{key_id}_{today_date_str}"
+                    sent_times = cron_tracks.get(track_key, 0)
+                    
+                    if sent_times >= 3:
+                        continue  # တစ်နေ့ ၃ ကြိမ်ပြည့်သွားပါက ကျော်သွားမည်
+
                     clean_name = full_name
                     if date_match:
                         clean_name = clean_name.replace(date_match.group(0), "")
@@ -1072,13 +1098,12 @@ def cron_check():
                                 f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '💳 Plan များ ကြည့်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
                             )
                             bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
-                            notified_count += 1
                         except:
                             pass
 
                     try:
                         admin_noti = (
-                            f"📢 <b>Notification Alert</b>\n"
+                            f"📢 <b>Notification Alert ({sent_times + 1}/3)</b>\n"
                             f"👤 အသုံးပြုသူ: {full_name}\n"
                             f"📌 အခြေအနေ: {reason_text}\n"
                             f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
@@ -1088,6 +1113,10 @@ def cron_check():
                             admin_btn_markup.add(InlineKeyboardButton("✉️ ဤ Cus ထံ စာပို့ရန်", callback_data=f"reply_cus_{target_chat_id}"))
                             
                         bot.send_message(ADMIN_CHAT_ID, admin_noti, parse_mode="HTML", reply_markup=admin_btn_markup)
+                        
+                        cron_tracks[track_key] = sent_times + 1
+                        save_cron_tracks(cron_tracks)
+                        notified_count += 1
                     except:
                         pass
         except:
