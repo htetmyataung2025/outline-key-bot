@@ -17,6 +17,9 @@ app = Flask(__name__)
 # Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 
+# 📢 Force Join Channel Configuration
+REQUIRED_CHANNEL = "@hefeature"
+
 # 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
@@ -155,6 +158,35 @@ def get_redeem_state(chat_id):
         except:
             return False
     return False
+
+# 📢 Force Join Verification Helper Functions
+def is_user_subscribed(user_id):
+    if str(user_id) == str(ADMIN_CHAT_ID):
+        return True
+    try:
+        member = bot.get_chat_member(REQUIRED_CHANNEL, user_id)
+        if member.status in ['creator', 'administrator', 'member']:
+            return True
+    except Exception as e:
+        print("Force Join Check Error:", e)
+        return True
+    return False
+
+def get_force_join_keyboard():
+    markup = InlineKeyboardMarkup()
+    channel_url = f"https://t.me/{REQUIRED_CHANNEL.replace('@', '')}"
+    markup.add(InlineKeyboardButton("📢 Channel သို့ Join ရန်", url=channel_url))
+    markup.add(InlineKeyboardButton("✅ Join ပြီးပါပြီ (Verify)", callback_data="verify_subscription"))
+    return markup
+
+def send_force_join_message(chat_id):
+    msg_text = (
+        f"⚠️ <b>သတိပေးချက်:</b>\n\n"
+        f"Bot အား စတင်အသုံးပြုရန်အတွက် အောက်ပါ ကျွန်ုပ်တို့၏ Telegram Channel ကို အရင်ဆုံး Join ပေးရန် လိုအပ်ပါသည်ခင်ဗျာ။\n\n"
+        f"👉 <b>Channel:</b> {REQUIRED_CHANNEL}\n\n"
+        f"Channel Join ပြီးပါက <b>'✅ Join ပြီးပါပြီ (Verify)'</b> ခလုတ်ကို နှိပ်၍ အသုံးပြုနိုင်ပါပြီ။"
+    )
+    bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
 PLANS = {
     "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": "1,000 Ks"},
@@ -495,18 +527,42 @@ def handle_reply_cus_callback(call):
         parse_mode="HTML"
     )
 
+# 📢 Force Join Verification Callback Handler
+@bot.callback_query_handler(func=lambda call: call.data == "verify_subscription")
+def handle_verify_subscription(call):
+    chat_id = call.message.chat.id
+    if is_user_subscribed(chat_id):
+        bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        welcome_text = (
+            "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        )
+        bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
+    else:
+        bot.answer_callback_query(call.id, "❌ Channel ထဲသို့ မဝင်ရောက်ရသေးပါခင်ဗျာ။ အရင်ဆုံး Join ပေးပါ။", show_alert=True)
+
 # /start Command
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    set_search_state(message.chat.id, False)
-    set_redeem_state(message.chat.id, False)
+    chat_id = message.chat.id
+    set_search_state(chat_id, False)
+    set_redeem_state(chat_id, False)
+
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
         "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
     )
     
     try:
-        bot.set_chat_menu_button(message.chat.id, telebot.types.MenuButtonWebApp(
+        bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
             type="web_app",
             text="Main Website",
             web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io"))
@@ -514,22 +570,31 @@ def send_welcome(message):
     except:
         pass
         
-    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(message.chat.id))
+    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
 
 # /buy Command
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
-    set_search_state(message.chat.id, False)
-    set_redeem_state(message.chat.id, False)
+    chat_id = message.chat.id
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    set_search_state(chat_id, False)
+    set_redeem_state(chat_id, False)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 # Plan Button Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
 def handle_buy_callback(call):
+    chat_id = call.message.chat.id
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
     plan_code = call.data.replace("buy_", "")
     plan = PLANS.get(plan_code)
     plan['code'] = plan_code
-    chat_id = call.message.chat.id
     
     if plan:
         save_user_plan(chat_id, plan)
@@ -608,9 +673,13 @@ def handle_approve_callback(call):
 # Screenshot Received
 @bot.message_handler(content_types=['photo'])
 def handle_payment_screenshot(message):
-    set_search_state(message.chat.id, False)
-    set_redeem_state(message.chat.id, False)
     chat_id = message.chat.id
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    set_search_state(chat_id, False)
+    set_redeem_state(chat_id, False)
     user_first = message.from_user.first_name if message.from_user.first_name else ""
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     user_name = f"{user_first} {user_last}".strip()
@@ -701,6 +770,11 @@ def fetch_key_from_server(api_url, input_value):
 def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
+
+    # Force Join Check
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
 
     # ✉️ Admin မှ Target ID သတ်မှတ်ပြီး စာပို့ခြင်း (ပထဆုံး စစ်ဆေးရန်)
     if str(chat_id) == str(ADMIN_CHAT_ID):
