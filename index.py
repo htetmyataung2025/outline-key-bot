@@ -501,7 +501,7 @@ def send_welcome(message):
     set_redeem_state(message.chat.id, False)
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
     
     try:
@@ -864,7 +864,7 @@ def handle_all_messages(message):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
-        bot.send_message(chat_id, "📡 Server 1 & Server 2 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
+        bot.send_message(chat_id, "📡 Server 1 🇸🇬 & Server 2 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
         report_text = get_servers_total_usage()
         bot.send_message(chat_id, report_text, parse_mode="HTML")
         return
@@ -979,7 +979,7 @@ def handle_all_messages(message):
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
-# Cron Check Route
+# Cron Check Route (Fixed mapping search to avoid 'မသိရှိပါ')
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
@@ -1056,7 +1056,14 @@ def cron_check():
                     clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
                     clean_name = clean_name.strip().lower()
 
+                    # Improved lookup: Check exact match first, then partial/fuzzy match in key_mappings
                     target_chat_id = key_mappings.get(clean_name)
+                    if not target_chat_id:
+                        for mapped_name, cid in key_mappings.items():
+                            if mapped_name in clean_name or clean_name in mapped_name:
+                                target_chat_id = cid
+                                break
+
                     if is_gb_full:
                         reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ"
                         user_warning = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ ခင်ဗျာ။"
