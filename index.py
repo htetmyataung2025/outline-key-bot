@@ -500,6 +500,36 @@ def handle_reply_cus_callback(call):
         parse_mode="HTML"
     )
 
+# 🤖 /ai COMMAND HANDLER (အစ်ကိုလိုချင်တဲ့ /ai နဲ့မေးမြန်းမှု စနစ်)
+@bot.message_handler(commands=['ai'])
+def handle_ai_command(message):
+    chat_id = str(message.chat.id)
+    prompt = message.text.replace('/ai', '', 1).strip()
+    
+    if not prompt:
+        bot.reply_to(message, "💡 <b>အသုံးပြုနည်း:</b> <code>/ai [မေးခွန်း သို့မဟုတ် ခိုင်းလိုသည့် စာသား]</code> ပုံစံဖြင့် မေးမြန်းပေးပါခင်ဗျာ။", parse_mode="HTML")
+        return
+
+    try:
+        bot.send_chat_action(chat_id, 'typing')
+        
+        # Admin မေးပါက Developer/Advisor AI အနေဖြင့် ဖြေပေးမည်
+        if chat_id == str(ADMIN_CHAT_ID):
+            full_prompt = f"You are an expert tech advisor and developer assistant for Htet Myat Aung. Help him clearly:\n\n{prompt}"
+        # Customer မေးပါက Customer Support AI အဖြစ် ဖြေပေးမည်
+        else:
+            full_prompt = (
+                "မင်းက H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု ရဲ့ Customer Support AI ဖြစ်ပါတယ်။ "
+                "Customer ၏ မေးခွန်းများကို မြန်မာလို အရမ်းယဉ်ကျေးစွာဖြင့် ရှင်းပြပေးပါ။ "
+                "VPN Plan ဝယ်လိုပါက '💳 Plan များ ကြည့်ရန်' ခလုတ်ကို နှိပ်ခိုင်းပါ။\n\n"
+                f"Customer Message: {prompt}"
+            )
+            
+        ai_response = ai_model.generate_content(full_prompt)
+        bot.reply_to(message, ai_response.text, parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(message, f"❌ AI Error: {str(e)}")
+
 # /start Command
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -507,7 +537,7 @@ def send_welcome(message):
     set_redeem_state(message.chat.id, False)
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ。"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
     )
     
     try:
@@ -977,28 +1007,6 @@ def handle_all_messages(message):
         except Exception as e:
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
             return
-
-    # 🤖 ADMIN & CUSTOMER DIRECT AI HANDLING (/ai မလိုဘဲ စာတိုက်ရိုက်ရိုက်မေးခြင်း)
-    try:
-        bot.send_chat_action(chat_id, 'typing')
-        
-        if str(chat_id) == str(ADMIN_CHAT_ID):
-            prompt = f"You are an expert tech advisor and developer assistant for Htet Myat Aung. Help him clearly:\n\n{input_value}"
-            ai_response = ai_model.generate_content(prompt)
-            bot.reply_to(message, ai_response.text, parse_mode="Markdown")
-            return
-        else:
-            prompt_for_customer = (
-                "မင်းက H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု ရဲ့ Customer Support AI ဖြစ်ပါတယ်။ "
-                "Customer ၏ မေးခွန်းများကို မြန်မာလို အရမ်းယဉ်ကျေးစွာဖြင့် ရှင်းပြပေးပါ။ "
-                "VPN Plan ဝယ်လိုပါက '💳 Plan များ ကြည့်ရန်' ခလုတ်ကို နှိပ်ခိုင်းပါ။\n\n"
-                f"Customer Message: {input_value}"
-            )
-            ai_response = ai_model.generate_content(prompt_for_customer)
-            bot.reply_to(message, ai_response.text, parse_mode="Markdown")
-            return
-    except Exception as e:
-        pass
 
     # Not Found Noti
     not_found_msg = (
