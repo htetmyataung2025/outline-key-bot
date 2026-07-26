@@ -391,18 +391,19 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# ⚡ Key အသစ် မွေးပေးသည့် Function
-def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None):
+# ⚡ Key အသစ် မွေးပေးသည့် Function (User ID ပါ တန်းပါအောင် ထည့်သွင်းထားသည်)
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None):
     today = datetime.now()
     expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
     
     existing_count = get_user_key_count(user_name)
+    id_str = f" ({target_chat_id})" if target_chat_id else ""
     
     if existing_count == 0:
-        key_name = f"{user_name} {expire_date}"
+        key_name = f"{user_name}{id_str} {expire_date}"
     else:
         key_number = existing_count + 1
-        key_name = f"{user_name} ({key_number}) {expire_date}"
+        key_name = f"{user_name}{id_str} ({key_number}) {expire_date}"
     
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     
@@ -501,7 +502,7 @@ def send_welcome(message):
     set_redeem_state(message.chat.id, False)
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
     )
     
     try:
@@ -575,7 +576,7 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
-        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info)
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id)
         
         if vpn_key:
             success_message = (
@@ -821,9 +822,9 @@ def handle_all_messages(message):
 
             bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
-            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val)
+            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id)
             if not vpn_key:
-                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val)
+                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id)
 
             if vpn_key:
                 success_msg = (
@@ -864,7 +865,7 @@ def handle_all_messages(message):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
-        bot.send_message(chat_id, "📡 Server 1 🇸🇬 & Server 2 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
+        bot.send_message(chat_id, "📡 Server 1 & Server 2 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
         report_text = get_servers_total_usage()
         bot.send_message(chat_id, report_text, parse_mode="HTML")
         return
@@ -979,7 +980,7 @@ def handle_all_messages(message):
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
-# Cron Check Route (Fixed mapping search to avoid 'မသိရှိပါ')
+# Cron Check Route (Key နာမည်ထဲမှ Chat ID ကို တန်းဆွဲထုတ်ယူသည့် စနစ်ပါဝင်သည်)
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
@@ -1049,20 +1050,27 @@ def cron_check():
                     continue 
 
                 if is_gb_full or is_expired_today:
-                    clean_name = full_name
-                    if date_match:
-                        clean_name = clean_name.replace(date_match.group(0), "")
+                    target_chat_id = None
                     
-                    clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
-                    clean_name = clean_name.strip().lower()
-
-                    # Improved lookup: Check exact match first, then partial/fuzzy match in key_mappings
-                    target_chat_id = key_mappings.get(clean_name)
+                    # 1. Direct ID extract from key name e.g., "Harlan (12345678) 26.07.2026"
+                    id_match = re.search(r'\((\d+)\)', full_name)
+                    if id_match:
+                        target_chat_id = id_match.group(1)
+                    
+                    # 2. Fallback to mapping file if ID not found in key name
                     if not target_chat_id:
-                        for mapped_name, cid in key_mappings.items():
-                            if mapped_name in clean_name or clean_name in mapped_name:
-                                target_chat_id = cid
-                                break
+                        clean_name = full_name
+                        if date_match:
+                            clean_name = clean_name.replace(date_match.group(0), "")
+                        clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
+                        clean_name = clean_name.strip().lower()
+
+                        target_chat_id = key_mappings.get(clean_name)
+                        if not target_chat_id:
+                            for mapped_name, cid in key_mappings.items():
+                                if mapped_name in clean_name or clean_name in mapped_name:
+                                    target_chat_id = cid
+                                    break
 
                     if is_gb_full:
                         reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ"
