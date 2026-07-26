@@ -21,7 +21,6 @@ TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 # 🌐 Gemini AI API Configuration
 GEMINI_API_KEY = "AQ.Ab8RN6Ih3G4N_Wr2Jq_qmlh7MAlSfMaVknNkiNRMsmuzgx1FEQ"
 genai.configure(api_key=GEMINI_API_KEY)
-ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 # 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
@@ -500,7 +499,7 @@ def handle_reply_cus_callback(call):
         parse_mode="HTML"
     )
 
-# 🤖 /ai COMMAND HANDLER (အစ်ကိုလိုချင်တဲ့ /ai နဲ့မေးမြန်းမှု စနစ်)
+# 🤖 /ai COMMAND HANDLER (Model Auto-fallback ထည့်သွင်းထားသည်)
 @bot.message_handler(commands=['ai'])
 def handle_ai_command(message):
     chat_id = str(message.chat.id)
@@ -513,10 +512,8 @@ def handle_ai_command(message):
     try:
         bot.send_chat_action(chat_id, 'typing')
         
-        # Admin မေးပါက Developer/Advisor AI အနေဖြင့် ဖြေပေးမည်
         if chat_id == str(ADMIN_CHAT_ID):
             full_prompt = f"You are an expert tech advisor and developer assistant for Htet Myat Aung. Help him clearly:\n\n{prompt}"
-        # Customer မေးပါက Customer Support AI အဖြစ် ဖြေပေးမည်
         else:
             full_prompt = (
                 "မင်းက H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု ရဲ့ Customer Support AI ဖြစ်ပါတယ်။ "
@@ -525,8 +522,21 @@ def handle_ai_command(message):
                 f"Customer Message: {prompt}"
             )
             
-        ai_response = ai_model.generate_content(full_prompt)
-        bot.reply_to(message, ai_response.text, parse_mode="Markdown")
+        # Try latest models dynamically to prevent 404
+        ai_response = None
+        for model_name in ['gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash']:
+            try:
+                ai_model = genai.GenerativeModel(model_name)
+                ai_response = ai_model.generate_content(full_prompt)
+                if ai_response:
+                    break
+            except:
+                continue
+
+        if ai_response and ai_response.text:
+            bot.reply_to(message, ai_response.text, parse_mode="Markdown")
+        else:
+            bot.reply_to(message, "❌ AI Response မရရှိပါခင်ဗျာ။")
     except Exception as e:
         bot.reply_to(message, f"❌ AI Error: {str(e)}")
 
