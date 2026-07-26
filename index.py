@@ -1,4 +1,4 @@
-import os
+mport os
 import requests
 import random
 import string
@@ -16,9 +16,6 @@ app = Flask(__name__)
 
 # Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
-
-# 🌐 Gemini AI API Key (AQ... နဲ့စသော Key ကို တိုက်ရိုက် သုံးနိုင်ပါသည်)
-GEMINI_API_KEY = "AQ.Ab8RN6Ih3G4N_Wr2Jq_qmlh7MAlSfMaVknNkiNRMsmuzgx1FEQ"
 
 # 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
@@ -394,18 +391,19 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# ⚡ Key အသစ် မွေးပေးသည့် Function
-def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None):
+# ⚡ Key အသစ် မွေးပေးသည့် Function (User ID ပါ တန်းပါအောင် ထည့်သွင်းထားသည်)
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None):
     today = datetime.now()
     expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
     
     existing_count = get_user_key_count(user_name)
+    id_str = f" ({target_chat_id})" if target_chat_id else ""
     
     if existing_count == 0:
-        key_name = f"{user_name} {expire_date}"
+        key_name = f"{user_name}{id_str} {expire_date}"
     else:
         key_number = existing_count + 1
-        key_name = f"{user_name} ({key_number}) {expire_date}"
+        key_name = f"{user_name}{id_str} ({key_number}) {expire_date}"
     
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     
@@ -497,63 +495,6 @@ def handle_reply_cus_callback(call):
         parse_mode="HTML"
     )
 
-# 🤖 DIRECT GEMINI REST API CALL FUNCTION (AQ... Key များအတွက် ၁၀၀% တိကျသည့် စနစ်)
-def fetch_gemini_ai_response(prompt_text):
-    models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
-    
-    for model in models:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "contents": [
-                    {
-                        "parts": [{"text": prompt_text}]
-                    }
-                ]
-            }
-            response = requests.post(url, headers=headers, json=payload, timeout=12)
-            if response.status_code == 200:
-                res_data = response.json()
-                text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-                return text
-        except:
-            continue
-            
-    return None
-
-# 🤖 /ai COMMAND HANDLER
-@bot.message_handler(commands=['ai'])
-def handle_ai_command(message):
-    chat_id = str(message.chat.id)
-    prompt = message.text.replace('/ai', '', 1).strip()
-    
-    if not prompt:
-        bot.reply_to(message, "💡 <b>အသုံးပြုနည်း:</b> <code>/ai [မေးခွန်း သို့မဟုတ် ခိုင်းလိုသည့် စာသား]</code> ပုံစံဖြင့် မေးမြန်းပေးပါခင်ဗျာ။", parse_mode="HTML")
-        return
-
-    try:
-        bot.send_chat_action(chat_id, 'typing')
-        
-        if chat_id == str(ADMIN_CHAT_ID):
-            full_prompt = f"You are an expert tech advisor and developer assistant for Htet Myat Aung. Help him clearly in Burmese or English as appropriate:\n\n{prompt}"
-        else:
-            full_prompt = (
-                "မင်းက H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု ရဲ့ Customer Support AI ဖြစ်ပါတယ်။ "
-                "Customer ၏ မေးခွန်းများကို မြန်မာလို အရမ်းယဉ်ကျေးစွာဖြင့် ရှင်းပြပေးပါ။ "
-                "VPN Plan ဝယ်လိုပါက '💳 Plan များ ကြည့်ရန်' ခလုတ်ကို နှိပ်ခိုင်းပါ။\n\n"
-                f"Customer Message: {prompt}"
-            )
-            
-        ai_reply = fetch_gemini_ai_response(full_prompt)
-
-        if ai_reply:
-            bot.reply_to(message, ai_reply, parse_mode="Markdown")
-        else:
-            bot.reply_to(message, "❌ AI Response မရရှိပါခင်ဗျာ။ ခဏအကြာမှ ပြန်လည်စမ်းသပ်ပေးပါခင်ဗျာ။")
-    except Exception as e:
-        bot.reply_to(message, f"❌ AI Error: {str(e)}")
-
 # /start Command
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -635,7 +576,7 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
-        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info)
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id)
         
         if vpn_key:
             success_message = (
@@ -881,9 +822,9 @@ def handle_all_messages(message):
 
             bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
-            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val)
+            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id)
             if not vpn_key:
-                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val)
+                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id)
 
             if vpn_key:
                 success_msg = (
@@ -1039,7 +980,7 @@ def handle_all_messages(message):
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
-# Cron Check Route
+# Cron Check Route (Key နာမည်ထဲမှ Chat ID ကို တန်းဆွဲထုတ်ယူသည့် စနစ်ပါဝင်သည်)
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
@@ -1109,19 +1050,27 @@ def cron_check():
                     continue 
 
                 if is_gb_full or is_expired_today:
-                    clean_name = full_name
-                    if date_match:
-                        clean_name = clean_name.replace(date_match.group(0), "")
+                    target_chat_id = None
                     
-                    clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
-                    clean_name = clean_name.strip().lower()
-
-                    target_chat_id = key_mappings.get(clean_name)
+                    # 1. Direct ID extract from key name e.g., "Harlan (12345678) 26.07.2026"
+                    id_match = re.search(r'\((\d+)\)', full_name)
+                    if id_match:
+                        target_chat_id = id_match.group(1)
+                    
+                    # 2. Fallback to mapping file if ID not found in key name
                     if not target_chat_id:
-                        for mapped_name, cid in key_mappings.items():
-                            if mapped_name in clean_name or clean_name in mapped_name:
-                                target_chat_id = cid
-                                break
+                        clean_name = full_name
+                        if date_match:
+                            clean_name = clean_name.replace(date_match.group(0), "")
+                        clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
+                        clean_name = clean_name.strip().lower()
+
+                        target_chat_id = key_mappings.get(clean_name)
+                        if not target_chat_id:
+                            for mapped_name, cid in key_mappings.items():
+                                if mapped_name in clean_name or clean_name in mapped_name:
+                                    target_chat_id = cid
+                                    break
 
                     if is_gb_full:
                         reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ"
