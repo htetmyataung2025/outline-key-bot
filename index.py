@@ -182,7 +182,7 @@ def get_force_join_keyboard():
 def send_force_join_message(chat_id):
     msg_text = (
         f"⚠️ <b>သတိပေးချက်:</b>\n\n"
-        f"Bot အား စတင်အသုံးပြုရန်အတွက် အောက်ပါ ကျွန်ုပ်တို့၏ Telegram Channel ကို အရင်ဆုံး Join ပေးရန် လိုအပ်ပါသည်ခင်ဗျာ။\n\n"
+        f"Bot အား စတင်အသုံးပြုရန်အတွက် ကျွ်တော်ရဲ့ Telegram Channel ကို အရင်ဆုံး Join ပေးရန် လိုအပ်ပါသည်ခင်ဗျာ။\n\n"
         f"👉 <b>Channel:</b> {REQUIRED_CHANNEL}\n\n"
         f"Channel Join ပြီးပါက <b>'✅ Join ပြီးပါပြီ (Verify)'</b> ခလုတ်ကို နှိပ်၍ အသုံးပြုနိုင်ပါပြီ။"
     )
