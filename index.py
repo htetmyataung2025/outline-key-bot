@@ -11,16 +11,14 @@ import json
 import html
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-import google.generativeai as genai
 
 app = Flask(__name__)
 
 # Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 
-# 🌐 Gemini AI API Configuration
+# 🌐 Gemini AI API Key (AQ... နဲ့စသော Key ကို တိုက်ရိုက် သုံးနိုင်ပါသည်)
 GEMINI_API_KEY = "AQ.Ab8RN6Ih3G4N_Wr2Jq_qmlh7MAlSfMaVknNkiNRMsmuzgx1FEQ"
-genai.configure(api_key=GEMINI_API_KEY)
 
 # 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
@@ -499,7 +497,32 @@ def handle_reply_cus_callback(call):
         parse_mode="HTML"
     )
 
-# 🤖 /ai COMMAND HANDLER (Model Auto-fallback ထည့်သွင်းထားသည်)
+# 🤖 DIRECT GEMINI REST API CALL FUNCTION (AQ... Key များအတွက် ၁၀၀% တိကျသည့် စနစ်)
+def fetch_gemini_ai_response(prompt_text):
+    models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
+    
+    for model in models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "contents": [
+                    {
+                        "parts": [{"text": prompt_text}]
+                    }
+                ]
+            }
+            response = requests.post(url, headers=headers, json=payload, timeout=12)
+            if response.status_code == 200:
+                res_data = response.json()
+                text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                return text
+        except:
+            continue
+            
+    return None
+
+# 🤖 /ai COMMAND HANDLER
 @bot.message_handler(commands=['ai'])
 def handle_ai_command(message):
     chat_id = str(message.chat.id)
@@ -513,7 +536,7 @@ def handle_ai_command(message):
         bot.send_chat_action(chat_id, 'typing')
         
         if chat_id == str(ADMIN_CHAT_ID):
-            full_prompt = f"You are an expert tech advisor and developer assistant for Htet Myat Aung. Help him clearly:\n\n{prompt}"
+            full_prompt = f"You are an expert tech advisor and developer assistant for Htet Myat Aung. Help him clearly in Burmese or English as appropriate:\n\n{prompt}"
         else:
             full_prompt = (
                 "မင်းက H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု ရဲ့ Customer Support AI ဖြစ်ပါတယ်။ "
@@ -522,21 +545,12 @@ def handle_ai_command(message):
                 f"Customer Message: {prompt}"
             )
             
-        # Try latest models dynamically to prevent 404
-        ai_response = None
-        for model_name in ['gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash']:
-            try:
-                ai_model = genai.GenerativeModel(model_name)
-                ai_response = ai_model.generate_content(full_prompt)
-                if ai_response:
-                    break
-            except:
-                continue
+        ai_reply = fetch_gemini_ai_response(full_prompt)
 
-        if ai_response and ai_response.text:
-            bot.reply_to(message, ai_response.text, parse_mode="Markdown")
+        if ai_reply:
+            bot.reply_to(message, ai_reply, parse_mode="Markdown")
         else:
-            bot.reply_to(message, "❌ AI Response မရရှိပါခင်ဗျာ။")
+            bot.reply_to(message, "❌ AI Response မရရှိပါခင်ဗျာ။ ခဏအကြာမှ ပြန်လည်စမ်းသပ်ပေးပါခင်ဗျာ။")
     except Exception as e:
         bot.reply_to(message, f"❌ AI Error: {str(e)}")
 
