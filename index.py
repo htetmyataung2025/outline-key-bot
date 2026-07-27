@@ -289,13 +289,13 @@ def get_admin_count_keyboard(gb, days):
     )
     return markup
 
-# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function
+# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function (Giveaway Keys များကို ဖယ်ထုတ်ထားသည်)
 def get_monthly_revenue_report():
     def get_server_revenue(api_url):
         plan_counts = {
             "25GB": 0, "50GB": 0, "75GB": 0,
             "100GB": 0, "150GB": 0, "200GB": 0,
-            "Unlimited": 0, "Other": 0
+            "Unlimited": 0, "Giveaway": 0, "Other": 0
         }
         total_rev = 0
         total_keys = 0
@@ -307,6 +307,13 @@ def get_monthly_revenue_report():
                 total_keys = len(keys_data)
 
                 for k in keys_data:
+                    k_name = k.get("name", "")
+                    
+                    # 🎁 Giveaway Key ဖြစ်နေပါက ဝင်ငွေထဲ မထည့်ဘဲ Giveaway Count အဖြစ်သာ မှတ်မည်
+                    if "[gw]" in k_name.lower() or "giveaway" in k_name.lower():
+                        plan_counts["Giveaway"] += 1
+                        continue
+
                     limit_bytes = k.get("dataLimit", {}).get("bytes")
                     if not limit_bytes:
                         plan_counts["Unlimited"] += 1
@@ -353,6 +360,7 @@ def get_monthly_revenue_report():
         if plans["150GB"] > 0: lines.append(f"   • 150 GB Keys (5,000 Ks): <b>{plans['150GB']}</b> ခု")
         if plans["200GB"] > 0: lines.append(f"   • 200 GB Keys (7,000 Ks): <b>{plans['200GB']}</b> ခု")
         if plans["Unlimited"] > 0: lines.append(f"   • Unlimited Keys (10,000 Ks): <b>{plans['Unlimited']}</b> ခု")
+        if plans["Giveaway"] > 0: lines.append(f"   • 🎁 Giveaway Keys (0 Ks): <b>{plans['Giveaway']}</b> ခု")
         if plans["Other"] > 0: lines.append(f"   • Custom Keys: <b>{plans['Other']}</b> ခု")
         return "\n".join(lines) if lines else "   • <i>Key မရှိသေးပါ</i>"
 
@@ -368,7 +376,7 @@ def get_monthly_revenue_report():
         f"💵 Server 2 စုစုပေါင်း: <b>{s2_rev:,} Ks</b>\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Total Active Keys:</b> <b>{total_keys} ခု</b>\n"
-        f"💎 <b>Overall Estimated Monthly Revenue:</b> <b>{total_rev:,} MMK</b>"
+        f"💎 <b>Overall Paid Monthly Revenue:</b> <b>{total_rev:,} MMK</b>"
     )
     return report
 
@@ -523,8 +531,8 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# ⚡ Key အသစ် မွေးပေးသည့် Function (User ID ပါ တန်းပါအောင် ထည့်သွင်းထားသည် + ရက်သတ်မှတ်မှုစနစ်)
-def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None):
+# ⚡ Key အသစ် မွေးပေးသည့် Function (Giveaway Tag စနစ်ပါဝင်သည်)
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, is_giveaway=False):
     today = datetime.now()
     if custom_days:
         expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
@@ -533,12 +541,13 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     
     existing_count = get_user_key_count(user_name)
     id_str = f" ({target_chat_id})" if target_chat_id else ""
+    gw_str = " [GW]" if is_giveaway else ""
     
     if existing_count == 0:
-        key_name = f"{user_name}{id_str} {expire_date}"
+        key_name = f"{user_name}{id_str}{gw_str} {expire_date}"
     else:
         key_number = existing_count + 1
-        key_name = f"{user_name}{id_str} ({key_number}) {expire_date}"
+        key_name = f"{user_name}{id_str}{gw_str} ({key_number}) {expire_date}"
     
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     
@@ -765,7 +774,7 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
-        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id)
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False)
         
         if vpn_key:
             success_message = (
@@ -1006,7 +1015,7 @@ def handle_all_messages(message):
             bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
 
-    # 🎁 Redeem Code စစ်ဆေးသည့် Logic (ခလုတ်နှိပ်ထားသော User ဖြစ်မှသာ စစ်ဆေးမည်)
+    # 🎁 Redeem Code စစ်ဆေးသည့် Logic (Giveaway Tag ပါဝင်သည်)
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)
         codes = load_redeem_codes()
@@ -1027,9 +1036,9 @@ def handle_all_messages(message):
 
             bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
-            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val)
+            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
             if not vpn_key:
-                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val)
+                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
 
             if vpn_key:
                 success_msg = (
@@ -1138,7 +1147,7 @@ def handle_all_messages(message):
             if date_match:
                 display_name = display_name.replace(date_match.group(0), "")
             
-            display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
+            display_name = display_name.replace("[GW]", "").replace("[gw]", "").split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             if not display_name:
                 display_name = "HMA Customer"
             
@@ -1281,7 +1290,7 @@ def cron_check():
                         if date_match:
                             clean_name = clean_name.replace(date_match.group(0), "")
                         clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
-                        clean_name = clean_name.strip().lower()
+                        clean_name = clean_name.replace("[GW]", "").replace("[gw]", "").strip().lower()
 
                         target_chat_id = key_mappings.get(clean_name)
                         if not target_chat_id:
