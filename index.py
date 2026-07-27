@@ -189,13 +189,13 @@ def send_force_join_message(chat_id):
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
 PLANS = {
-    "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": "1,000 Ks"},
-    "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": "2,000 Ks"},
-    "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": "3,000 Ks"},
-    "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": "4,000 Ks"},
-    "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": "5,000 Ks"},
-    "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": "7,000 Ks"},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited", "bytes": None, "price": "10,000 Ks"},
+    "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": "1,000 Ks", "price_int": 1000},
+    "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": "2,000 Ks", "price_int": 2000},
+    "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": "3,000 Ks", "price_int": 3000},
+    "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": "4,000 Ks", "price_int": 4000},
+    "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": "5,000 Ks", "price_int": 5000},
+    "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": "7,000 Ks", "price_int": 7000},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited", "bytes": None, "price": "10,000 Ks", "price_int": 10000},
 }
 
 def bytes_to_gb(bytes_value):
@@ -207,7 +207,7 @@ def clean_ss_url(url_str):
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
-# 🔄 Main Menu Keyboard
+# 🔄 Main Menu Keyboard (💰 လစဉ် ဝင်ငွေ ခလုတ် ပါဝင်သည်)
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
@@ -224,10 +224,11 @@ def get_main_menu_keyboard(chat_id=None):
     
     if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
+        btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
         btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
-        markup.add(btn_total_usage, btn_gen_code)
-        markup.add(btn_search_user)
+        markup.add(btn_total_usage, btn_monthly_income)
+        markup.add(btn_gen_code, btn_search_user)
         
     return markup
 
@@ -288,7 +289,90 @@ def get_admin_count_keyboard(gb, days):
     )
     return markup
 
-# 📊 Server 1 နှင့် Server 2 Total Usage & Keys တွက်ချက်ပေးသည့် Function
+# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function
+def get_monthly_revenue_report():
+    def get_server_revenue(api_url):
+        plan_counts = {
+            "25GB": 0, "50GB": 0, "75GB": 0,
+            "100GB": 0, "150GB": 0, "200GB": 0,
+            "Unlimited": 0, "Other": 0
+        }
+        total_rev = 0
+        total_keys = 0
+
+        try:
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+            if keys_resp.status_code == 200:
+                keys_data = keys_resp.json().get("accessKeys", [])
+                total_keys = len(keys_data)
+
+                for k in keys_data:
+                    limit_bytes = k.get("dataLimit", {}).get("bytes")
+                    if not limit_bytes:
+                        plan_counts["Unlimited"] += 1
+                        total_rev += 10000
+                    else:
+                        gb_val = round(limit_bytes / (1000 ** 3))
+                        if gb_val == 25:
+                            plan_counts["25GB"] += 1
+                            total_rev += 1000
+                        elif gb_val == 50:
+                            plan_counts["50GB"] += 1
+                            total_rev += 2000
+                        elif gb_val == 75:
+                            plan_counts["75GB"] += 1
+                            total_rev += 3000
+                        elif gb_val == 100:
+                            plan_counts["100GB"] += 1
+                            total_rev += 4000
+                        elif gb_val == 150:
+                            plan_counts["150GB"] += 1
+                            total_rev += 5000
+                        elif gb_val == 200:
+                            plan_counts["200GB"] += 1
+                            total_rev += 7000
+                        else:
+                            plan_counts["Other"] += 1
+        except:
+            pass
+
+        return total_keys, plan_counts, total_rev
+
+    s1_keys, s1_plans, s1_rev = get_server_revenue(OUTLINE_API_URL_1)
+    s2_keys, s2_plans, s2_rev = get_server_revenue(OUTLINE_API_URL_2)
+
+    total_keys = s1_keys + s2_keys
+    total_rev = s1_rev + s2_rev
+
+    def format_plan_breakdown(plans):
+        lines = []
+        if plans["25GB"] > 0: lines.append(f"   • 25 GB Keys (1,000 Ks): <b>{plans['25GB']}</b> ခု")
+        if plans["50GB"] > 0: lines.append(f"   • 50 GB Keys (2,000 Ks): <b>{plans['50GB']}</b> ခု")
+        if plans["75GB"] > 0: lines.append(f"   • 75 GB Keys (3,000 Ks): <b>{plans['75GB']}</b> ခု")
+        if plans["100GB"] > 0: lines.append(f"   • 100 GB Keys (4,000 Ks): <b>{plans['100GB']}</b> ခု")
+        if plans["150GB"] > 0: lines.append(f"   • 150 GB Keys (5,000 Ks): <b>{plans['150GB']}</b> ခု")
+        if plans["200GB"] > 0: lines.append(f"   • 200 GB Keys (7,000 Ks): <b>{plans['200GB']}</b> ခု")
+        if plans["Unlimited"] > 0: lines.append(f"   • Unlimited Keys (10,000 Ks): <b>{plans['Unlimited']}</b> ခု")
+        if plans["Other"] > 0: lines.append(f"   • Custom Keys: <b>{plans['Other']}</b> ခု")
+        return "\n".join(lines) if lines else "   • <i>Key မရှိသေးပါ</i>"
+
+    report = (
+        f"💰 <b>ESTIMATED MONTHLY SALES REVENUE REPORT</b>\n\n"
+        f"📡 <b>Server 1 🇸🇬 Revenue:</b>\n"
+        f"🔑 Total Keys: <b>{s1_keys} ခု</b>\n"
+        f"{format_plan_breakdown(s1_plans)}\n"
+        f"💵 Server 1 စုစုပေါင်း: <b>{s1_rev:,} Ks</b>\n\n"
+        f"📡 <b>Server 2 🇸🇬 Revenue:</b>\n"
+        f"🔑 Total Keys: <b>{s2_keys} ခု</b>\n"
+        f"{format_plan_breakdown(s2_plans)}\n"
+        f"💵 Server 2 စုစုပေါင်း: <b>{s2_rev:,} Ks</b>\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"🌐 <b>Total Active Keys:</b> <b>{total_keys} ခု</b>\n"
+        f"💎 <b>Overall Estimated Monthly Revenue:</b> <b>{total_rev:,} MMK</b>"
+    )
+    return report
+
+# 📊 Server 1 နှင့် Server 2 Total Data Usage တွက်ချက်ပေးသည့် Function
 def get_servers_total_usage():
     def get_server_stats(api_url):
         total_keys = 0
@@ -989,6 +1073,19 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "📡 Server 1 & Server 2 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
         report_text = get_servers_total_usage()
         bot.send_message(chat_id, report_text, parse_mode="HTML")
+        return
+
+    # 💰 Admin သီးသန့် လစဉ် ဝင်ငွေ ခလုတ်
+    if input_value in ["💰 လစဉ် ဝင်ငွေ", "လစဉ် ဝင်ငွေ"]:
+        set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
+        if str(chat_id) != str(ADMIN_CHAT_ID):
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
+            return
+        
+        bot.send_message(chat_id, "💰 Server 1 & Server 2 🇸🇬 လစဉ် ဝင်ငွေ တွက်ချက်နေပါသည်...")
+        rev_report = get_monthly_revenue_report()
+        bot.send_message(chat_id, rev_report, parse_mode="HTML")
         return
 
     # 🔄 Bot Refresh Logic
