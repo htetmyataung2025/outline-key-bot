@@ -243,8 +243,8 @@ def get_main_menu_keyboard(chat_id=None):
         btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
         btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
-        markup.add(btn_total_usage, btn_monthly_income)
-        markup.add(btn_gen_code, btn_search_user)
+        markup.add(btn_total_usage,btn_gen_code)
+        markup.add(btn_monthly_income, btn_search_user)
         
     return markup
 
