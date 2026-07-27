@@ -9,7 +9,7 @@ import re
 import base64
 import json
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
 app = Flask(__name__)
@@ -182,7 +182,7 @@ def get_force_join_keyboard():
 def send_force_join_message(chat_id):
     msg_text = (
         f"⚠️ <b>သတိပေးချက်:</b>\n\n"
-        f"Bot အား စတင်အသုံးပြုရန်အတွက် ကျွန်တော်ရဲ့ Telegram Channel ကို အရင်ဆုံး Join ပေးရန် လိုအပ်ပါသည်ခင်ဗျာ။\n\n"
+        f"Bot အား စတင်အသုံးပြုရန်အတွက် အောက်ပါ ကျွန်ုပ်တို့၏ Telegram Channel ကို အရင်ဆုံး Join ပေးရန် လိုအပ်ပါသည်ခင်ဗျာ။\n\n"
         f"👉 <b>Channel:</b> {REQUIRED_CHANNEL}\n\n"
         f"Channel Join ပြီးပါက <b>'✅ Join ပြီးပါပြီ (Verify)'</b> ခလုတ်ကို နှိပ်၍ အသုံးပြုနိုင်ပါပြီ။"
     )
@@ -259,16 +259,32 @@ def get_admin_gb_keyboard():
     )
     return markup
 
-# 🎁 Admin အတွက် အရေအတွက် ရွေးချယ်သည့် Keyboard
-def get_admin_count_keyboard(gb):
+# 🎁 Admin အတွက် သက်တမ်း (ရက်) ရွေးချယ်သည့် Keyboard
+def get_admin_days_keyboard(gb):
     markup = InlineKeyboardMarkup()
     markup.row(
-        InlineKeyboardButton("1 ခု", callback_data=f"adm_cnt_{gb}_1"),
-        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_3")
+        InlineKeyboardButton("📅 3 ရက်", callback_data=f"adm_dur_{gb}_3"),
+        InlineKeyboardButton("📅 5 ရက်", callback_data=f"adm_dur_{gb}_5")
     )
     markup.row(
-        InlineKeyboardButton("5 ခု", callback_data=f"adm_cnt_{gb}_5"),
-        InlineKeyboardButton("10 ခု", callback_data=f"adm_cnt_{gb}_10")
+        InlineKeyboardButton("📅 7 ရက်", callback_data=f"adm_dur_{gb}_7"),
+        InlineKeyboardButton("📅 10 ရက်", callback_data=f"adm_dur_{gb}_10")
+    )
+    markup.row(
+        InlineKeyboardButton("📅 30 ရက် (1 လ)", callback_data=f"adm_dur_{gb}_30")
+    )
+    return markup
+
+# 🎁 Admin အတွက် အရေအတွက် ရွေးချယ်သည့် Keyboard
+def get_admin_count_keyboard(gb, days):
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("1 ခု", callback_data=f"adm_cnt_{gb}_{days}_1"),
+        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_{days}_3")
+    )
+    markup.row(
+        InlineKeyboardButton("5 ခု", callback_data=f"adm_cnt_{gb}_{days}_5"),
+        InlineKeyboardButton("10 ခု", callback_data=f"adm_cnt_{gb}_{days}_10")
     )
     return markup
 
@@ -423,10 +439,13 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# ⚡ Key အသစ် မွေးပေးသည့် Function (User ID ပါ တန်းပါအောင် ထည့်သွင်းထားသည်)
-def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None):
+# ⚡ Key အသစ် မွေးပေးသည့် Function (User ID ပါ တန်းပါအောင် ထည့်သွင်းထားသည် + ရက်သတ်မှတ်မှုစနစ်)
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None):
     today = datetime.now()
-    expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
+    if custom_days:
+        expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
+    else:
+        expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
     
     existing_count = get_user_key_count(user_name)
     id_str = f" ({target_chat_id})" if target_chat_id else ""
@@ -472,11 +491,31 @@ def handle_admin_gb_select(call):
     
     gb = call.data.replace("adm_gb_", "")
     bot.edit_message_text(
-        f"🎁 <b>{gb} GB</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?",
+        f"🎁 <b>{gb} GB</b> အတွက် သက်တမ်း (ရက်) ရွေးချယ်ပေးပါခင်ဗျာ:",
         chat_id=ADMIN_CHAT_ID,
         message_id=call.message.message_id,
         parse_mode="HTML",
-        reply_markup=get_admin_count_keyboard(gb)
+        reply_markup=get_admin_days_keyboard(gb)
+    )
+    bot.answer_callback_query(call.id)
+
+# 🎁 Admin သက်တမ်း (ရက်) ရွေးချယ်မှု Callback
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_dur_"))
+def handle_admin_days_select(call):
+    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+        bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
+        return
+    
+    parts = call.data.split("_")
+    gb = parts[2]
+    days = parts[3]
+    
+    bot.edit_message_text(
+        f"🎁 <b>{gb} GB ({days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?",
+        chat_id=ADMIN_CHAT_ID,
+        message_id=call.message.message_id,
+        parse_mode="HTML",
+        reply_markup=get_admin_count_keyboard(gb, days)
     )
     bot.answer_callback_query(call.id)
 
@@ -489,7 +528,8 @@ def handle_admin_code_generate(call):
     
     parts = call.data.split("_")
     gb_amount = int(parts[2])
-    count = int(parts[3])
+    days_amount = int(parts[3])
+    count = int(parts[4])
     
     codes = load_redeem_codes()
     generated_list = []
@@ -497,13 +537,13 @@ def handle_admin_code_generate(call):
     for _ in range(count):
         random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
         code = f"H&E-{gb_amount}GB-{random_str}"
-        codes[code] = gb_amount
+        codes[code] = {"gb": gb_amount, "days": days_amount}
         generated_list.append(f"<code>{code}</code>")
         
     save_redeem_codes(codes)
     
     reply_msg = (
-        f"🎉 <b>{gb_amount} GB Giveaway Code ({count} ခု) ထုတ်ပြီးပါပြီ:</b>\n\n" +
+        f"🎉 <b>{gb_amount} GB ({days_amount} ရက်) Giveaway Code ({count} ခု) ထုတ်ပြီးပါပြီ:</b>\n\n" +
         "\n".join(generated_list) +
         "\n\n💡 <i>အဆိုပါ Code များကို တစ်ကြိမ်သုံးအဖြစ် အသုံးပြုနိုင်ပါပြီဗျာ။</i>"
     )
@@ -888,7 +928,14 @@ def handle_all_messages(message):
         codes = load_redeem_codes()
         
         if input_value in codes:
-            gb_val = codes[input_value]
+            code_info = codes[input_value]
+            if isinstance(code_info, dict):
+                gb_val = code_info.get("gb", 25)
+                days_val = code_info.get("days", 30)
+            else:
+                gb_val = int(code_info)
+                days_val = 30
+
             user_name = message.from_user.first_name if message.from_user.first_name else "Giveaway Winner"
             
             del codes[input_value]
@@ -896,9 +943,9 @@ def handle_all_messages(message):
 
             bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
-            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id)
+            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val)
             if not vpn_key:
-                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id)
+                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val)
 
             if vpn_key:
                 success_msg = (
@@ -918,7 +965,7 @@ def handle_all_messages(message):
                 try:
                     bot.send_message(
                         ADMIN_CHAT_ID, 
-                        f"🎁 <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ရယူသွားပါပြီခင်ဗျာ။",
+                        f"🎁 <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
                         parse_mode="HTML"
                     )
                 except:
