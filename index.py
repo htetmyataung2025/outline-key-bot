@@ -34,6 +34,7 @@ requests.packages.urllib3.disable_warnings()
 STATE_FILE = "/tmp/user_plans.json"
 MAPPING_FILE = "/tmp/key_mappings.json"
 REDEEM_FILE = "/tmp/redeem_codes.json"
+USED_REDEEMERS_FILE = "/tmp/used_redeemers.json"
 SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 REPLY_STATE_FILE = "/tmp/admin_reply_target.json"
@@ -113,6 +114,26 @@ def save_redeem_codes(codes):
     except:
         pass
 
+# 🛑 Redeem Code အသုံးပြုပြီးသား User ID များအား မှတ်သားသည့် စနစ်
+def load_used_redeemers():
+    if os.path.exists(USED_REDEEMERS_FILE):
+        try:
+            with open(USED_REDEEMERS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_used_redeemer(chat_id):
+    used_list = load_used_redeemers()
+    if str(chat_id) not in used_list:
+        used_list.append(str(chat_id))
+        try:
+            with open(USED_REDEEMERS_FILE, 'w') as f:
+                json.dump(used_list, f)
+        except:
+            pass
+
 # 🛑 User တစ်ဦးတွင် Active ဖြစ်နေသော Giveaway Key ရှိမရှိ စစ်ဆေးသည့် Function
 def has_active_giveaway_key(chat_id):
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
@@ -122,7 +143,6 @@ def has_active_giveaway_key(chat_id):
                 keys = res.json().get("accessKeys", [])
                 for k in keys:
                     k_name = k.get("name", "")
-                    # Key ထဲတွင် User ၏ Chat ID ပါဝင်ပြီး [GW] လည်း ပါဝင်နေပါက Active ဖြစ်နေသည်ဟု ယူဆမည်
                     if f"({chat_id})" in k_name and ("[gw]" in k_name.lower() or "giveaway" in k_name.lower()):
                         return True
         except:
@@ -243,8 +263,8 @@ def get_main_menu_keyboard(chat_id=None):
         btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
         btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
-        markup.add(btn_total_usage,btn_gen_code)
-        markup.add(btn_monthly_income, btn_search_user)
+        markup.add(btn_total_usage, btn_monthly_income)
+        markup.add(btn_gen_code, btn_search_user)
         
     return markup
 
@@ -305,10 +325,12 @@ def get_admin_count_keyboard(gb, days):
     )
     return markup
 
-# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function
+# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function (ဒီလက်ရှိလအတွင်း ဝယ်ယူခဲ့သော ကီးများကိုသာ လအလိုက် Reset ဖြစ်စေပြီး တွက်သည်)
 def get_monthly_revenue_report():
     now = datetime.now()
     now_str = now.strftime("%d/%m/%Y (%I:%M %p)")
+    current_year = now.year
+    current_month = now.month
     today_date = now.date()
 
     def get_server_revenue(api_url):
@@ -353,35 +375,37 @@ def get_monthly_revenue_report():
                         except:
                             pass
 
-                    is_today = (purchase_date == today_date) if purchase_date else False
+                    # 🛑 အဓိက အပြောင်းအလဲ: စဝယ်သည့်ရက်သည် "ဒီလက်ရှိလ (Current Month)" ထဲတွင်မှ ရှိရမည် (လကုန်ရင် အလိုအလျောက် Reset ဖြစ်မည်)
+                    if purchase_date and purchase_date.year == current_year and purchase_date.month == current_month:
+                        is_today = (purchase_date == today_date)
 
-                    limit_bytes = k.get("dataLimit", {}).get("bytes")
-                    is_standard = False
-                    price = 0
-                    gb_key = ""
-                    
-                    if not limit_bytes:
-                        gb_key = "Unlimited"
-                        price = 10000
-                        is_standard = True
-                    else:
-                        gb_val = round(limit_bytes / (1000 ** 3))
-                        if gb_val == 25: gb_key = "25GB"; price = 1000; is_standard = True
-                        elif gb_val == 50: gb_key = "50GB"; price = 2000; is_standard = True
-                        elif gb_val == 75: gb_key = "75GB"; price = 3000; is_standard = True
-                        elif gb_val == 100: gb_key = "100GB"; price = 4000; is_standard = True
-                        elif gb_val == 150: gb_key = "150GB"; price = 5000; is_standard = True
-                        elif gb_val == 200: gb_key = "200GB"; price = 7000; is_standard = True
-
-                    if is_standard:
-                        plan_counts[gb_key] += 1
-                        total_paid_keys += 1
-                        total_rev += price
+                        limit_bytes = k.get("dataLimit", {}).get("bytes")
+                        is_standard = False
+                        price = 0
+                        gb_key = ""
                         
-                        if is_today:
-                            srv_today_keys += 1
-                            srv_today_rev += price
-                            srv_today_plans[gb_key] += 1
+                        if not limit_bytes:
+                            gb_key = "Unlimited"
+                            price = 10000
+                            is_standard = True
+                        else:
+                            gb_val = round(limit_bytes / (1000 ** 3))
+                            if gb_val == 25: gb_key = "25GB"; price = 1000; is_standard = True
+                            elif gb_val == 50: gb_key = "50GB"; price = 2000; is_standard = True
+                            elif gb_val == 75: gb_key = "75GB"; price = 3000; is_standard = True
+                            elif gb_val == 100: gb_key = "100GB"; price = 4000; is_standard = True
+                            elif gb_val == 150: gb_key = "150GB"; price = 5000; is_standard = True
+                            elif gb_val == 200: gb_key = "200GB"; price = 7000; is_standard = True
+
+                        if is_standard:
+                            plan_counts[gb_key] += 1
+                            total_paid_keys += 1
+                            total_rev += price
+                            
+                            if is_today:
+                                srv_today_keys += 1
+                                srv_today_rev += price
+                                srv_today_plans[gb_key] += 1
         except:
             pass
 
@@ -411,7 +435,7 @@ def get_monthly_revenue_report():
     today_lines = format_plan_breakdown(today_plan_counts)
 
     report = (
-        f"💵 <b>SALES REVENUE REPORT</b>\n"
+        f"💵 <b>MONTHLY SALES REVENUE REPORT</b>\n"
         f"📅 <b>စစ်ဆေးသည့် ရက်စွဲ:</b> <code>{now_str}</code>\n"
         f"━━━━━━━━━━━━━━━━━\n\n"
         f"🔥 <b>ဒီနေ့ ရောင်းရငွေ (Today's Sales)</b>\n"
@@ -419,18 +443,18 @@ def get_monthly_revenue_report():
         f"{today_lines}\n"
         f"💰 ဒီနေ့ ဝင်ငွေ: <b>{today_rev:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n\n"
-        f"📡 <b>Server 1 🇸🇬 Sales:</b>\n"
+        f"📡 <b>Server 1 🇸🇬 (This Month Sales):</b>\n"
         f"🔑 Total Paid Keys: <b>{s1_keys} ခု</b>\n"
         f"{format_plan_breakdown(s1_plans)}\n"
-        f"💵 Server 1 ရောင်းရငွေ: <b>{s1_rev:,} Ks</b>\n\n"
-        f"📡 <b>Server 2 🇸🇬 Sales:</b>\n"
+        f"💵 Server 1 လစဉ်ဝင်ငွေ: <b>{s1_rev:,} Ks</b>\n\n"
+        f"📡 <b>Server 2 🇸🇬 (This Month Sales):</b>\n"
         f"🔑 Total Paid Keys: <b>{s2_keys} ခု</b>\n"
         f"{format_plan_breakdown(s2_plans)}\n"
-        f"💵 Server 2 ရောင်းရငွေ: <b>{s2_rev:,} Ks</b>\n\n"
+        f"💵 Server 2 လစဉ်ဝင်ငွေ: <b>{s2_rev:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n"
-        f"🌐 <b>Total Approved Paid Keys:</b> <b>{total_keys} ခု</b>\n"
-        f"💎 <b>စုစုပေါင်း ရောင်းရငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
-        f"<i>* မှတ်ချက်: Giveaway နှင့် Custom ကီးများကို ဝင်ငွေမှ ဖယ်ထုတ်ထားပြီး၊ တကယ်ရောင်းရသော ကီးများကိုသာ တိကျစွာ တွက်ချက်ထားပါသည်။</i>"
+        f"🌐 <b>Total This Month Paid Keys:</b> <b>{total_keys} ခု</b>\n"
+        f"💎 <b>ဒီလ စုစုပေါင်း ဝင်ငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
+        f"<i>* မှတ်ချက်: ဤလအတွင်း အသစ်ဝယ်ယူခဲ့သော ကီးများကိုသာ လအလိုက် Reset ဖြစ်စေပြီး တိကျစွာ တွက်ချက်ထားပါသည်။</i>"
     )
     return report
 
