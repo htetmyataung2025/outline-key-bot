@@ -310,11 +310,11 @@ def get_admin_count_keyboard(gb, days):
     )
     return markup
 
-# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function (ဒီနေ့ရောင်းရငွေ အပါအဝင်)
+# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function
 def get_monthly_revenue_report():
     now = datetime.now()
     now_str = now.strftime("%d/%m/%Y (%I:%M %p)")
-    today_str = now.strftime("%d.%m.%y")
+    today_date = now.date()
 
     def get_server_revenue(api_url):
         plan_counts = {
@@ -344,39 +344,49 @@ def get_monthly_revenue_report():
                     if "[gw]" in k_name.lower() or "giveaway" in k_name.lower():
                         continue
 
-                    # 💰 Admin Approve ဖြင့် ထုတ်ထားသော တကယ့် Paid Key များကိုသာ စစ်ဆေးမည်
-                    is_paid = "[p-" in k_name.lower()
-                    is_today = f"[p-{today_str}]" in k_name.lower()
+                    # ⏰ သက်တမ်းကုန်ရက်ကို ရှာဖွေပြီး စဝယ်သည့်ရက် (Purchase Date = Expire Date - 1 Month) တွက်ချက်သည်
+                    date_match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', k_name)
+                    purchase_date = None
+                    if date_match:
+                        try:
+                            k_day = int(date_match.group(1))
+                            k_month = int(date_match.group(2))
+                            k_year_raw = date_match.group(3)
+                            k_year = int("20" + k_year_raw) if len(k_year_raw) == 2 else int(k_year_raw)
+                            expire_dt = datetime(k_year, k_month, k_day).date()
+                            purchase_date = expire_dt - relativedelta(months=1)
+                        except:
+                            pass
+
+                    is_today = (purchase_date == today_date) if purchase_date else False
 
                     limit_bytes = k.get("dataLimit", {}).get("bytes")
+                    is_standard = False
+                    price = 0
+                    gb_key = ""
                     
-                    if is_paid:
-                        is_standard = False
-                        price = 0
-                        gb_key = ""
-                        
-                        if not limit_bytes:
-                            gb_key = "Unlimited"
-                            price = 10000
-                            is_standard = True
-                        else:
-                            gb_val = round(limit_bytes / (1000 ** 3))
-                            if gb_val == 25: gb_key = "25GB"; price = 1000; is_standard = True
-                            elif gb_val == 50: gb_key = "50GB"; price = 2000; is_standard = True
-                            elif gb_val == 75: gb_key = "75GB"; price = 3000; is_standard = True
-                            elif gb_val == 100: gb_key = "100GB"; price = 4000; is_standard = True
-                            elif gb_val == 150: gb_key = "150GB"; price = 5000; is_standard = True
-                            elif gb_val == 200: gb_key = "200GB"; price = 7000; is_standard = True
+                    if not limit_bytes:
+                        gb_key = "Unlimited"
+                        price = 10000
+                        is_standard = True
+                    else:
+                        gb_val = round(limit_bytes / (1000 ** 3))
+                        if gb_val == 25: gb_key = "25GB"; price = 1000; is_standard = True
+                        elif gb_val == 50: gb_key = "50GB"; price = 2000; is_standard = True
+                        elif gb_val == 75: gb_key = "75GB"; price = 3000; is_standard = True
+                        elif gb_val == 100: gb_key = "100GB"; price = 4000; is_standard = True
+                        elif gb_val == 150: gb_key = "150GB"; price = 5000; is_standard = True
+                        elif gb_val == 200: gb_key = "200GB"; price = 7000; is_standard = True
 
-                        if is_standard:
-                            plan_counts[gb_key] += 1
-                            total_paid_keys += 1
-                            total_rev += price
-                            
-                            if is_today:
-                                srv_today_keys += 1
-                                srv_today_rev += price
-                                srv_today_plans[gb_key] += 1
+                    if is_standard:
+                        plan_counts[gb_key] += 1
+                        total_paid_keys += 1
+                        total_rev += price
+                        
+                        if is_today:
+                            srv_today_keys += 1
+                            srv_today_rev += price
+                            srv_today_plans[gb_key] += 1
         except:
             pass
 
@@ -414,18 +424,18 @@ def get_monthly_revenue_report():
         f"{today_lines}\n"
         f"💰 ဒီနေ့ ဝင်ငွေ: <b>{today_rev:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n\n"
-        f"📡 <b>Server 1 🇸🇬 (Approved Sales):</b>\n"
+        f"📡 <b>Server 1 🇸🇬 Sales:</b>\n"
         f"🔑 Total Paid Keys: <b>{s1_keys} ခု</b>\n"
         f"{format_plan_breakdown(s1_plans)}\n"
         f"💵 Server 1 ရောင်းရငွေ: <b>{s1_rev:,} Ks</b>\n\n"
-        f"📡 <b>Server 2 🇸🇬 (Approved Sales):</b>\n"
+        f"📡 <b>Server 2 🇸🇬 Sales:</b>\n"
         f"🔑 Total Paid Keys: <b>{s2_keys} ခု</b>\n"
         f"{format_plan_breakdown(s2_plans)}\n"
         f"💵 Server 2 ရောင်းရငွေ: <b>{s2_rev:,} Ks</b>\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Total Approved Paid Keys:</b> <b>{total_keys} ခု</b>\n"
         f"💎 <b>စုစုပေါင်း ရောင်းရငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
-        f"<i>* မှတ်ချက်: Giveaway နှင့် Custom ကီးများကို ဝင်ငွေမှ ဖယ်ထုတ်ထားပြီး၊ Admin အတည်ပြုပြီးသော ကီးများကိုသာ တိကျစွာ တွက်ချက်ထားပါသည်။</i>"
+        f"<i>* မှတ်ချက်: Giveaway နှင့် Custom ကီးများကို ဝင်ငွေမှ ဖယ်ထုတ်ထားပြီး၊ တကယ်ရောင်းရသော ကီးများကိုသာ တိကျစွာ တွက်ချက်ထားပါသည်။</i>"
     )
     return report
 
@@ -580,8 +590,8 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# ⚡ Key အသစ် မွေးပေးသည့် Function (Paid Tag နှင့် Giveaway Tag စနစ်ပါဝင်သည် - စဝယ်ရက်လုံးဝမပါဘဲ နောက်၁လပြည့်ရက်သာပါသည်)
-def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, is_giveaway=False, is_paid=False):
+# ⚡ Key အသစ် မွေးပေးသည့် Function (စဝယ်ရက်လုံးဝမပါဘဲ သက်တမ်းကုန်မည့်ရက် အတိအကျသာ ပါဝင်သည်)
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, is_giveaway=False):
     today = datetime.now()
     if custom_days:
         expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
@@ -591,13 +601,12 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     existing_count = get_user_key_count(user_name)
     id_str = f" ({target_chat_id})" if target_chat_id else ""
     gw_str = " [GW]" if is_giveaway else ""
-    paid_str = f" [P-{today.strftime('%d.%m.%y')}]" if is_paid else ""
     
     if existing_count == 0:
-        key_name = f"{user_name}{id_str}{gw_str}{paid_str} {expire_date}"
+        key_name = f"{user_name}{id_str}{gw_str} {expire_date}"
     else:
         key_number = existing_count + 1
-        key_name = f"{user_name}{id_str}{gw_str}{paid_str} ({key_number}) {expire_date}"
+        key_name = f"{user_name}{id_str}{gw_str} ({key_number}) {expire_date}"
     
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     
@@ -824,8 +833,7 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
-        # 💰 ငွေလွှဲပြေစာဖြင့် Approve လုပ်သောကြောင့် Paid Key အဖြစ် is_paid=True ဖြင့်ထုတ်ပေးသည်
-        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False, is_paid=True)
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False)
         
         if vpn_key:
             success_message = (
@@ -1105,9 +1113,9 @@ def handle_all_messages(message):
             bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
             # Redeem Code မှ ထွက်သော ကီးဖြစ်၍ is_giveaway=True (ဝင်ငွေထဲမပါပါ)
-            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True, is_paid=False)
+            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
             if not vpn_key:
-                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True, is_paid=False)
+                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
 
             if vpn_key:
                 success_msg = (
@@ -1210,15 +1218,21 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
+            # သက်တမ်းကုန်ရက်ကို အတိအကျ ရှာဖွေခြင်း
+            date_matches = re.findall(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             
             display_name = full_name
-            if date_match:
-                display_name = display_name.replace(date_match.group(0), "")
             
-            # User အား ပြသရာတွင် [GW] နှင့် [P-XX.XX.XX] Tag များအား ဖျောက်ထားမည်
+            # နောက်ဆုံးပါသော ရက်စွဲ (သက်တမ်းကုန်ရက်) ကိုသာ ယူမည်
+            date_match_str = None
+            for m in re.finditer(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name):
+                date_match_str = m.group(0)
+
+            if date_match_str:
+                display_name = display_name.replace(date_match_str, "")
+            
+            # User အား ပြသရာတွင် [GW] Tag များအား ဖျောက်ထားမည်
             display_name = display_name.replace("[GW]", "").replace("[gw]", "")
-            display_name = re.sub(r'\[p-\d{2}\.\d{2}\.\d{2}\]', '', display_name, flags=re.IGNORECASE)
             display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             
             if not display_name:
@@ -1227,10 +1241,9 @@ def handle_all_messages(message):
             clean_mapping_name = display_name.strip().lower()
             save_key_mapping(clean_mapping_name, chat_id)
 
-            if date_match:
-                end_date_raw = date_match.group(0)
+            if date_match_str:
                 try:
-                    e_parts = end_date_raw.split('.')
+                    e_parts = date_match_str.split('.')
                     day = int(e_parts[0])
                     month = int(e_parts[1])
                     year_str = e_parts[2]
@@ -1314,9 +1327,10 @@ def cron_check():
                 is_expired_today = False
                 should_delete = False
                 
-                date_match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name)
+                date_matches = list(re.finditer(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name))
                 
-                if date_match:
+                if date_matches:
+                    date_match = date_matches[-1] # နောက်ဆုံးပါသော ရက်စွဲ (Exp Date) ကို ယူသည်
                     try:
                         k_day = int(date_match.group(1))
                         k_month = int(date_match.group(2))
@@ -1358,11 +1372,10 @@ def cron_check():
                     
                     if not target_chat_id:
                         clean_name = full_name
-                        if date_match:
-                            clean_name = clean_name.replace(date_match.group(0), "")
+                        if date_matches:
+                            clean_name = clean_name.replace(date_matches[-1].group(0), "")
                         clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
                         clean_name = clean_name.replace("[GW]", "").replace("[gw]", "")
-                        clean_name = re.sub(r'\[p-\d{2}\.\d{2}\.\d{2}\]', '', clean_name, flags=re.IGNORECASE)
                         clean_name = clean_name.strip().lower()
 
                         target_chat_id = key_mappings.get(clean_name)
