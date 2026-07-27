@@ -30,11 +30,10 @@ ADMIN_CHAT_ID = "8778394176"
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# Temp Files ဖြင့် Plan, Key Map, Redeem Code, Used Redeemers နှင့် State များ သိမ်းဆည်းသည့်စနစ်
+# Temp Files ဖြင့် Plan, Key Map, Redeem Code နှင့် State များ သိမ်းဆည်းသည့်စနစ်
 STATE_FILE = "/tmp/user_plans.json"
 MAPPING_FILE = "/tmp/key_mappings.json"
 REDEEM_FILE = "/tmp/redeem_codes.json"
-USED_REDEEMERS_FILE = "/tmp/used_redeemers.json"
 SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 REPLY_STATE_FILE = "/tmp/admin_reply_target.json"
@@ -114,25 +113,21 @@ def save_redeem_codes(codes):
     except:
         pass
 
-# 🛑 Redeem Code အသုံးပြုပြီးသား User ID များအား မှတ်သားသည့် စနစ်
-def load_used_redeemers():
-    if os.path.exists(USED_REDEEMERS_FILE):
+# 🛑 User တစ်ဦးတွင် Active ဖြစ်နေသော Giveaway Key ရှိမရှိ စစ်ဆေးသည့် Function
+def has_active_giveaway_key(chat_id):
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
         try:
-            with open(USED_REDEEMERS_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return []
-    return []
-
-def save_used_redeemer(chat_id):
-    used_list = load_used_redeemers()
-    if str(chat_id) not in used_list:
-        used_list.append(str(chat_id))
-        try:
-            with open(USED_REDEEMERS_FILE, 'w') as f:
-                json.dump(used_list, f)
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)
+            if res.status_code == 200:
+                keys = res.json().get("accessKeys", [])
+                for k in keys:
+                    k_name = k.get("name", "")
+                    # Key ထဲတွင် User ၏ Chat ID ပါဝင်ပြီး [GW] လည်း ပါဝင်နေပါက Active ဖြစ်နေသည်ဟု ယူဆမည်
+                    if f"({chat_id})" in k_name and ("[gw]" in k_name.lower() or "giveaway" in k_name.lower()):
+                        return True
         except:
             pass
+    return False
 
 # 🔍 Admin Search State
 def set_search_state(chat_id, is_searching=True):
@@ -431,7 +426,7 @@ def get_monthly_revenue_report():
         f"📡 <b>Server 2 🇸🇬 Sales:</b>\n"
         f"🔑 Total Paid Keys: <b>{s2_keys} ခု</b>\n"
         f"{format_plan_breakdown(s2_plans)}\n"
-        f"💵 Server 2 ရောင်းရငွေ: <b>{s2_rev:,} Ks</b>\n"
+        f"💵 Server 2 ရောင်းရငွေ: <b>{s2_rev:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Total Approved Paid Keys:</b> <b>{total_keys} ခု</b>\n"
         f"💎 <b>စုစုပေါင်း ရောင်းရငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
@@ -731,7 +726,7 @@ def handle_verify_subscription(call):
             pass
         welcome_text = (
             "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
         )
         bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
     else:
@@ -750,7 +745,7 @@ def send_welcome(message):
 
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
     
     try:
@@ -1011,10 +1006,9 @@ def handle_all_messages(message):
     if input_value in ["🎁 Redeem Code", "Redeem Code"]:
         set_search_state(chat_id, False)
         
-        # 🛑 တစ်ကြိမ်သုံးပြီးသား User ဖြစ်ပါက တန်းဆီးမည်
-        used_redeemers = load_used_redeemers()
-        if str(chat_id) in used_redeemers and str(chat_id) != str(ADMIN_CHAT_ID):
-            bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းသည် Redeem Code ကို တစ်ကြိမ် အသုံးပြုပြီးသွားပါပြီခင်ဗျာ။</b>", parse_mode="HTML")
+        # 🛑 User တွင် Active ဖြစ်နေသော Giveaway Key ရှိမရှိ စစ်ဆေးခြင်း
+        if has_active_giveaway_key(chat_id) and str(chat_id) != str(ADMIN_CHAT_ID):
+            bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML")
             return
 
         set_redeem_state(chat_id, True)
@@ -1081,13 +1075,12 @@ def handle_all_messages(message):
             bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
 
-    # 🎁 Redeem Code စစ်ဆေးသည့် Logic (တစ်ယောက်လျှင် ၁ ကြိမ်သာ သုံးနိုင်စေရန် စစ်ဆေးပေးသည်)
+    # 🎁 Redeem Code စစ်ဆေးသည့် Logic (လက်ရှိ Active Giveaway Key ရှိမရှိ ထပ်မံစစ်ဆေးသည်)
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)
         
-        used_redeemers = load_used_redeemers()
-        if str(chat_id) in used_redeemers and str(chat_id) != str(ADMIN_CHAT_ID):
-            bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းသည် Redeem Code ကို တစ်ကြိမ် အသုံးပြုပြီးသွားပါပြီခင်ဗျာ။</b>", parse_mode="HTML")
+        if has_active_giveaway_key(chat_id) and str(chat_id) != str(ADMIN_CHAT_ID):
+            bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML")
             return
 
         codes = load_redeem_codes()
@@ -1105,10 +1098,6 @@ def handle_all_messages(message):
             
             del codes[input_value]
             save_redeem_codes(codes)
-            
-            # User အား အသုံးပြုပြီးကြောင်း မှတ်သားမည်
-            if str(chat_id) != str(ADMIN_CHAT_ID):
-                save_used_redeemer(chat_id)
 
             bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
@@ -1196,7 +1185,7 @@ def handle_all_messages(message):
                     f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
                     f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Key ကို အောက်တွင် ရယူနိုင်ပါပြီ။</b>\n\n"
                     f"<code>{input_value}</code>\n\n"
-                    f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN Appထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
+                    f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
                 bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
@@ -1218,12 +1207,9 @@ def handle_all_messages(message):
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
             
-            # သက်တမ်းကုန်ရက်ကို အတိအကျ ရှာဖွေခြင်း
-            date_matches = re.findall(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
+            date_matches = list(re.finditer(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name))
             
             display_name = full_name
-            
-            # နောက်ဆုံးပါသော ရက်စွဲ (သက်တမ်းကုန်ရက်) ကိုသာ ယူမည်
             date_match_str = None
             for m in re.finditer(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name):
                 date_match_str = m.group(0)
@@ -1231,7 +1217,6 @@ def handle_all_messages(message):
             if date_match_str:
                 display_name = display_name.replace(date_match_str, "")
             
-            # User အား ပြသရာတွင် [GW] Tag များအား ဖျောက်ထားမည်
             display_name = display_name.replace("[GW]", "").replace("[gw]", "")
             display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             
@@ -1330,7 +1315,7 @@ def cron_check():
                 date_matches = list(re.finditer(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name))
                 
                 if date_matches:
-                    date_match = date_matches[-1] # နောက်ဆုံးပါသော ရက်စွဲ (Exp Date) ကို ယူသည်
+                    date_match = date_matches[-1]
                     try:
                         k_day = int(date_match.group(1))
                         k_month = int(date_match.group(2))
