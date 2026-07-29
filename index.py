@@ -609,7 +609,7 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function
+# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function (is_renew ဖြင့် ခွဲခြားသည်)
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     today = datetime.now()
@@ -639,11 +639,12 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id):
                 requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
                 raw_access_url = k.get("accessUrl", "")
                 final_key = f"{raw_access_url}#{updated_name}"
-                return final_key, updated_name, new_expire_date
+                return final_key, updated_name, new_expire_date, True
     except Exception as e:
         print("Unlimited Renewal Error:", e)
 
-    return create_outline_key(server_num, user_name, plan_info=PLANS["ultimate"], target_chat_id=target_chat_id, is_giveaway=False)
+    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=PLANS["ultimate"], target_chat_id=target_chat_id, is_giveaway=False)
+    return vpn_key, key_name, expire_date, False
 
 # ⚡ Key အသစ် မွေးပေးသည့် Function (စဝယ်ရက်လုံးဝမပါဘဲ သက်တမ်းကုန်မည့်ရက် အတိအကျသာ ပါဝင်သည်)
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, is_giveaway=False):
@@ -888,10 +889,13 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
-        # 🌟 Unlimited Plan ဖြစ်ပါက သက်တမ်းတိုးမည်၊ အခြား Plan ဖြစ်ပါက ကီးအသစ်ထုတ်မည်
+        # 🌟 Unlimited Plan ဖြစ်ပါက စစ်ဆေးမည်
         if plan_code == "ultimate":
-            vpn_key, key_name, expire_date = renew_or_create_unlimited_key(server_num, user_name, target_chat_id)
-            action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
+            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id)
+            if is_renew:
+                action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
+            else:
+                action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
         else:
             vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False)
             action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
