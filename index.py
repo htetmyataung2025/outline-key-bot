@@ -263,8 +263,8 @@ def get_main_menu_keyboard(chat_id=None):
         btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
         btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
-        markup.add(btn_total_usage, btn_monthly_income)
-        markup.add(btn_gen_code, btn_search_user)
+        markup.add(btn_total_usage, btn_gen_code)
+        markup.add(btn_monthly_income, btn_search_user)
         
     return markup
 
@@ -325,7 +325,7 @@ def get_admin_count_keyboard(gb, days):
     )
     return markup
 
-# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function
+# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function (ဒီလက်ရှိလအတွင်း ဝယ်ယူခဲ့သော ကီးများကိုသာ လအလိုက် Reset ဖြစ်စေပြီး တွက်သည်)
 def get_monthly_revenue_report():
     now = datetime.now()
     now_str = now.strftime("%d/%m/%Y (%I:%M %p)")
@@ -357,9 +357,11 @@ def get_monthly_revenue_report():
                 for k in keys_data:
                     k_name = k.get("name", "")
                     
+                    # 🎁 Giveaway Keys ကို ဖယ်ထုတ်ထားသည်
                     if "[gw]" in k_name.lower() or "giveaway" in k_name.lower():
                         continue
 
+                    # ⏰ သက်တမ်းကုန်ရက်ကို ရှာဖွေပြီး စဝယ်သည့်ရက် (Purchase Date = Expire Date - 1 Month) တွက်ချက်သည်
                     date_match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', k_name)
                     purchase_date = None
                     if date_match:
@@ -373,6 +375,7 @@ def get_monthly_revenue_report():
                         except:
                             pass
 
+                    # 🛑 အဓိက အပြောင်းအလဲ: စဝယ်သည့်ရက်သည် "ဒီလက်ရှိလ (Current Month)" ထဲတွင်မှ ရှိရမည် (လကုန်ရင် အလိုအလျောက် Reset ဖြစ်မည်)
                     if purchase_date and purchase_date.year == current_year and purchase_date.month == current_month:
                         is_today = (purchase_date == today_date)
 
@@ -606,49 +609,7 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# 🔄 Server ပေါ်တွင် User ၏ လက်ရှိ Unlimited Key ကို ရှာဖွေပြီး သက်တမ်းတိုးပေးသည့် Function (မရှိမှသာ ကီးအသစ်မွေးသည်)
-def renew_or_create_unlimited_key(server_num, user_name, target_chat_id):
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
-    today = datetime.now()
-    new_expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
-    
-    try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
-        if keys_resp.status_code == 200:
-            keys_data = keys_resp.json().get("accessKeys", [])
-            
-            # 1. User ၏ Chat ID (သို့မဟုတ် နာမည်) ဖြင့် Server ပေါ်တွင် ရှိပြီးသား Unlimited Key ကို ရှာမည်
-            target_key_id = None
-            target_key_name = None
-            
-            for k in keys_data:
-                k_name = k.get("name", "")
-                # Unlimited Plan ဖြစ်ပြီး (dataLimit မရှိပါက Unlimited ဖြစ်သည်) User ရဲ့ ID ပါနေရမည်
-                limit_bytes = k.get("dataLimit", {}).get("bytes")
-                if not limit_bytes and f"({target_chat_id})" in k_name and not "[gw]" in k_name.lower():
-                    target_key_id = k.get("id")
-                    target_key_name = k_name
-                    break
-            
-            # 2. ကီးအဟောင်း တွေ့ရှိပါက နာမည်ထဲပါ သက်တမ်းကုန်ရက်ကို အသစ် (နောက် ၁ လ) သို့ ပြောင်းလဲပေးမည်
-            if target_key_id:
-                # နှောင်းပိုင်းက ရက်စွဲအဟောင်းကို အသစ်ဖြင့် အစားထိုးမည်
-                updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
-                if updated_name == target_key_name:
-                    # ရက်စွဲပုံစံ မတူပါက အနောက်တွင် ဆက်ထည့်မည်
-                    updated_name = f"{target_key_name.split('(')[0].strip()} ({target_chat_id}) {new_expire_date}"
-                
-                requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
-                raw_access_url = k.get("accessUrl", "")
-                final_key = f"{raw_access_url}#{updated_name}"
-                return final_key, updated_name, new_expire_date
-    except Exception as e:
-        print("Unlimited Renewal Error:", e)
-
-    # 3. ကီးအဟောင်း မရှိသေးပါက ပုံမှန်အတိုင်း ကီးအသစ် အစအဆုံး မွေးထုတ်ပေးမည်
-    return create_outline_key(server_num, user_name, plan_info=PLANS["ultimate"], target_chat_id=target_chat_id, is_giveaway=False)
-
-# ⚡ ပုံမှန် Key အသစ် မွေးပေးသည့် Function (စဝယ်ရက်လုံးဝမပါဘဲ သက်တမ်းကုန်မည့်ရက် အတိအကျသာ ပါဝင်သည်)
+# ⚡ Key အသစ် မွေးပေးသည့် Function (စဝယ်ရက်လုံးဝမပါဘဲ သက်တမ်းကုန်မည့်ရက် အတိအကျသာ ပါဝင်သည်)
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, is_giveaway=False):
     today = datetime.now()
     if custom_days:
@@ -789,7 +750,7 @@ def handle_verify_subscription(call):
             pass
         welcome_text = (
             "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ。"
+            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
         )
         bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
     else:
@@ -891,17 +852,11 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
-        # 🌟 အဓိကအပြောင်းအလဲ: Unlimited Plan ဖြစ်ပါက ကီးအဟောင်းကို သက်တမ်းတိုးမည်၊ အခြား Plan များဆိုလျှင် ကီးအသစ်မွေးမည်
-        if plan_code == "ultimate":
-            vpn_key, key_name, expire_date = renew_or_create_unlimited_key(server_num, user_name, target_chat_id)
-            action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
-        else:
-            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False)
-            action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False)
         
         if vpn_key:
             success_message = (
-                f"{action_title}\n\n"
+                f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
                 f"💳 <b>Plan:</b> {plan_info['name']} ({plan_info['data']})\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
@@ -920,9 +875,9 @@ def handle_approve_callback(call):
                 caption=call.message.caption + f"\n\n✅ <b>DONE (📡 Server {server_num} 🇸🇬)</b>\n\n🔑 {key_name}",
                 parse_mode="HTML"
             )
-            bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key အောင်မြင်စွာ ဆောင်ရွက်ပြီးပါပြီ!")
+            bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key ထုတ်ပြီး Customer ထံ ပို့ပြီးပါပြီ!")
         else:
-            bot.answer_callback_query(call.id, f"❌ Server {server_num} မှ ဆောင်ရွက်ရာတွင် အမှားအယွင်း ရှိနေပါသည်။ API စစ်ပါ။", show_alert=True)
+            bot.answer_callback_query(call.id, f"❌ Server {server_num} မှ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ API စစ်ပါ။", show_alert=True)
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
@@ -1254,7 +1209,7 @@ def handle_all_messages(message):
                     f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
                     f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Key ကို အောက်တွင် ရယူနိုင်ပါပြီ။</b>\n\n"
                     f"<code>{input_value}</code>\n\n"
-                    f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN Appထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
+                    f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
                 bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
