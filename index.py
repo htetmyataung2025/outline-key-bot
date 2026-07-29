@@ -609,6 +609,42 @@ def get_user_key_count(user_name):
             pass
     return count
 
+# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function
+def renew_or_create_unlimited_key(server_num, user_name, target_chat_id):
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
+    today = datetime.now()
+    new_expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
+    
+    try:
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        if keys_resp.status_code == 200:
+            keys_data = keys_resp.json().get("accessKeys", [])
+            
+            target_key_id = None
+            target_key_name = None
+            
+            for k in keys_data:
+                k_name = k.get("name", "")
+                limit_bytes = k.get("dataLimit", {}).get("bytes")
+                if not limit_bytes and f"({target_chat_id})" in k_name and not "[gw]" in k_name.lower():
+                    target_key_id = k.get("id")
+                    target_key_name = k_name
+                    break
+            
+            if target_key_id:
+                updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
+                if updated_name == target_key_name:
+                    updated_name = f"{target_key_name.split('(')[0].strip()} ({target_chat_id}) {new_expire_date}"
+                
+                requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
+                raw_access_url = k.get("accessUrl", "")
+                final_key = f"{raw_access_url}#{updated_name}"
+                return final_key, updated_name, new_expire_date
+    except Exception as e:
+        print("Unlimited Renewal Error:", e)
+
+    return create_outline_key(server_num, user_name, plan_info=PLANS["ultimate"], target_chat_id=target_chat_id, is_giveaway=False)
+
 # ⚡ Key အသစ် မွေးပေးသည့် Function (စဝယ်ရက်လုံးဝမပါဘဲ သက်တမ်းကုန်မည့်ရက် အတိအကျသာ ပါဝင်သည်)
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, is_giveaway=False):
     today = datetime.now()
@@ -750,7 +786,7 @@ def handle_verify_subscription(call):
             pass
         welcome_text = (
             "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
+            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
         )
         bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
     else:
@@ -769,7 +805,7 @@ def send_welcome(message):
 
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
     )
     
     try:
@@ -852,11 +888,17 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
-        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False)
+        # 🌟 Unlimited Plan ဖြစ်ပါက သက်တမ်းတိုးမည်၊ အခြား Plan ဖြစ်ပါက ကီးအသစ်ထုတ်မည်
+        if plan_code == "ultimate":
+            vpn_key, key_name, expire_date = renew_or_create_unlimited_key(server_num, user_name, target_chat_id)
+            action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
+        else:
+            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False)
+            action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
         
         if vpn_key:
             success_message = (
-                f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
+                f"{action_title}\n\n"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
                 f"💳 <b>Plan:</b> {plan_info['name']} ({plan_info['data']})\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
