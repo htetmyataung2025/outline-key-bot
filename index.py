@@ -397,7 +397,7 @@ def get_monthly_revenue_report():
                         price = 0
                         gb_key = ""
                         
-                        if not limit_bytes:
+                        if not limit_bytes or round(limit_bytes / (1000 ** 3)) >= 1000:
                             gb_key = "Unlimited"
                             price = 10000
                             is_standard = True
@@ -622,11 +622,12 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function (months_count အလိုက် ပေါင်းတိုးပေးသည်)
+# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function (1000 GB x months_count FUP Limit ပါဝင်သည်)
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     today = datetime.now()
     new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+    fup_bytes = (1000 * months_count) * 1000**3  # 1 လ = 1000 GB, 2 လ = 2000 GB, 3 လ = 3000 GB
     
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -638,8 +639,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
             
             for k in keys_data:
                 k_name = k.get("name", "")
-                limit_bytes = k.get("dataLimit", {}).get("bytes")
-                if not limit_bytes and f"({target_chat_id})" in k_name and not "[gw]" in k_name.lower():
+                if f"({target_chat_id})" in k_name and not "[gw]" in k_name.lower():
                     target_key_id = k.get("id")
                     target_key_name = k_name
                     break
@@ -650,13 +650,15 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
                     updated_name = f"{target_key_name.split('(')[0].strip()} ({target_chat_id}) {new_expire_date}"
                 
                 requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
+                requests.put(f"{api_url}/access-keys/{target_key_id}/data-limit", json={"limit": {"bytes": fup_bytes}}, verify=False, timeout=8)
+                
                 raw_access_url = k.get("accessUrl", "")
                 final_key = f"{raw_access_url}#{updated_name}"
                 return final_key, updated_name, new_expire_date, True
     except Exception as e:
         print("Unlimited Renewal Error:", e)
 
-    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=PLANS["ultimate"], target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
+    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": fup_bytes}, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
     return vpn_key, key_name, expire_date, False
 
 # ⚡ Key အသစ် မွေးပေးသည့် Function (months_count သို့မဟုတ် custom_days အလိုက် တွက်သည်)
