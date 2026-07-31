@@ -264,7 +264,7 @@ PLANS = {
     "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000},
     "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000},
     "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited (1000 GB / လ)", "bytes": 1000 * 1000**3, "price": 10000},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited (1000 GB / လစဉ်)", "bytes": 1000 * 1000**3, "price": 10000},
 }
 
 def bytes_to_gb(bytes_value):
