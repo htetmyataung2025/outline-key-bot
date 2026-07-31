@@ -231,7 +231,7 @@ PLANS = {
     "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000},
     "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000},
     "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited", "bytes": None, "price": 10000},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited (1000 GB / လ)", "bytes": 1000 * 1000**3, "price": 10000},
 }
 
 def bytes_to_gb(bytes_value):
@@ -276,7 +276,7 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🔥 Premium (100 GB)", callback_data="selectplan_premium"))
     markup.row(InlineKeyboardButton("👑 VIP (150 GB)", callback_data="selectplan_vip"))
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB)", callback_data="selectplan_pro"))
-    markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimited)", callback_data="selectplan_ultimate"))
+    markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (1000 GB/လ)", callback_data="selectplan_ultimate"))
     return markup
 
 # 📅 Plan အတွက် သက်တမ်း (၁ လ၊ ၂ လ၊ ၃ လ) ရွေးချယ်သည့် Keyboard
@@ -290,9 +290,14 @@ def get_duration_keyboard(plan_code):
     price_3m = int(base_price * 3 * 0.90)
 
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton(f"📅 1 လ - {price_1m:,} Ks", callback_data=f"buy_{plan_code}_1"))
-    markup.row(InlineKeyboardButton(f"📅 2 လ - {price_2m:,} Ks (5% Off 🔥)", callback_data=f"buy_{plan_code}_2"))
-    markup.row(InlineKeyboardButton(f"📅 3 လ - {price_3m:,} Ks (10% Off 🚀)", callback_data=f"buy_{plan_code}_3"))
+    if plan_code == "ultimate":
+        markup.row(InlineKeyboardButton(f"📅 1 လ (1000 GB) - {price_1m:,} Ks", callback_data=f"buy_{plan_code}_1"))
+        markup.row(InlineKeyboardButton(f"📅 2 လ (2000 GB) - {price_2m:,} Ks (5% Off 🔥)", callback_data=f"buy_{plan_code}_2"))
+        markup.row(InlineKeyboardButton(f"📅 3 လ (3000 GB) - {price_3m:,} Ks (10% Off 🚀)", callback_data=f"buy_{plan_code}_3"))
+    else:
+        markup.row(InlineKeyboardButton(f"📅 1 လ - {price_1m:,} Ks", callback_data=f"buy_{plan_code}_1"))
+        markup.row(InlineKeyboardButton(f"📅 2 လ - {price_2m:,} Ks (5% Off 🔥)", callback_data=f"buy_{plan_code}_2"))
+        markup.row(InlineKeyboardButton(f"📅 3 လ - {price_3m:,} Ks (10% Off 🚀)", callback_data=f"buy_{plan_code}_3"))
     return markup
 
 # 🎁 Admin အတွက် GB ရွေးချယ်သည့် Keyboard
@@ -888,15 +893,18 @@ def handle_buy_callback(call):
         base_price = plan["price"]
         if months_count == 1:
             total_price = base_price
+            data_disp = plan['data']
         elif months_count == 2:
             total_price = int(base_price * 2 * 0.95)
+            data_disp = "2000 GB" if plan_code == "ultimate" else plan['data']
         elif months_count == 3:
             total_price = int(base_price * 3 * 0.90)
+            data_disp = "3000 GB" if plan_code == "ultimate" else plan['data']
 
         plan_data = {
             "code": plan_code,
             "name": plan["name"],
-            "data": plan["data"],
+            "data": data_disp,
             "months": months_count,
             "price_str": f"{total_price:,} Ks",
             "price_int": total_price
@@ -906,7 +914,7 @@ def handle_buy_callback(call):
         
         payment_text = (
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
-            f"📌 {plan['name']} ({plan['data']}) - {months_count} လစာ ({total_price:,} Ks)\n\n"
+            f"📌 {plan['name']} ({data_disp}) - {months_count} လစာ ({total_price:,} Ks)\n\n"
             f"━━━━━━━━━━━━━━━\n"
             f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
@@ -954,15 +962,17 @@ def handle_approve_callback(call):
                 action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
             else:
                 action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
+            disp_gb = f"{1000 * months_count} GB"
         else:
             vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
             action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
+            disp_gb = plan_info['data']
         
         if vpn_key:
             success_message = (
                 f"{action_title}\n\n"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
-                f"💳 <b>Plan:</b> {plan_info['name']} ({plan_info['data']}) - {months_count} လစာ\n"
+                f"💳 <b>Plan:</b> {plan_info['name']} ({disp_gb}) - {months_count} လစာ\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                 f"<code>{vpn_key}</code>\n\n"
