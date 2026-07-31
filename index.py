@@ -326,11 +326,11 @@ def get_duration_keyboard(plan_code):
     if plan_code == "ultimate":
         markup.row(InlineKeyboardButton(f"📅 1 လ (1000 GB) - {price_1m:,} Ks", callback_data=f"buy_{plan_code}_1"))
         markup.row(InlineKeyboardButton(f"📅 2 လ (2000 GB) - {price_2m:,} Ks (5% Off 🔥)", callback_data=f"buy_{plan_code}_2"))
-        markup.row(InlineKeyboardButton(f"📅 3 လ (3000 GB) - {price_3m:,} Ks (10% Off 🚀)", callback_data=f"buy_{plan_code}_3"))
+        markup.row(InlineKeyboardButton(f"📅 3 လ (3000 GB) - {price_3m:,} Ks (10% Off 🌟)", callback_data=f"buy_{plan_code}_3"))
     else:
         markup.row(InlineKeyboardButton(f"📅 1 လ - {price_1m:,} Ks", callback_data=f"buy_{plan_code}_1"))
         markup.row(InlineKeyboardButton(f"📅 2 လ - {price_2m:,} Ks (5% Off 🔥)", callback_data=f"buy_{plan_code}_2"))
-        markup.row(InlineKeyboardButton(f"📅 3 လ - {price_3m:,} Ks (10% Off 🚀)", callback_data=f"buy_{plan_code}_3"))
+        markup.row(InlineKeyboardButton(f"📅 3 လ - {price_3m:,} Ks (10% Off 🌟)", callback_data=f"buy_{plan_code}_3"))
     return markup
 
 # 🎁 Admin အတွက် GB ရွေးချယ်သည့် Keyboard
@@ -611,17 +611,20 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function (1000 GB x months_count FUP Limit ပါဝင်သည်)
+# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function (Used Data + 1000 GB Accumulate FUP စနစ်ပါဝင်သည်)
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     today = datetime.now()
     new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
-    fup_bytes = (1000 * months_count) * 1000**3  # 1 လ = 1000 GB, 2 လ = 2000 GB, 3 လ = 3000 GB
+    add_bytes = (1000 * months_count) * 1000**3  # တိုးပေးမည့် Data (1000 GB x လ)
     
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+        
         if keys_resp.status_code == 200:
             keys_data = keys_resp.json().get("accessKeys", [])
+            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
             
             target_key_id = None
             target_key_name = None
@@ -634,12 +637,17 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
                     break
             
             if target_key_id:
+                # ⚡️ လက်ရှိ သုံးထားပြီးသား Data ကို ယူပြီး +1000 GB (သို့မဟုတ် x လစာ) ပေါင်းပေးမည်
+                used_bytes = bytes_transferred.get(str(target_key_id), 0)
+                new_fup_limit = used_bytes + add_bytes
+
                 updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
                 if updated_name == target_key_name:
                     updated_name = f"{target_key_name.split('(')[0].strip()} ({target_chat_id}) {new_expire_date}"
                 
+                # Name နှင့် Data Limit သစ် ပြင်ဆင်မည်
                 requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
-                requests.put(f"{api_url}/access-keys/{target_key_id}/data-limit", json={"limit": {"bytes": fup_bytes}}, verify=False, timeout=8)
+                requests.put(f"{api_url}/access-keys/{target_key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=8)
                 
                 raw_access_url = k.get("accessUrl", "")
                 final_key = f"{raw_access_url}#{updated_name}"
@@ -647,7 +655,8 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     except Exception as e:
         print("Unlimited Renewal Error:", e)
 
-    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": fup_bytes}, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
+    # ကီးအသစ်မွေးလျှင် 1000 GB Limit ဖြင့် စတင်မည်
+    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
     return vpn_key, key_name, expire_date, False
 
 # ⚡ Key အသစ် မွေးပေးသည့် Function (months_count သို့မဟုတ် custom_days အလိုက် တွက်သည်)
