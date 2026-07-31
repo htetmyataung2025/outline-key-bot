@@ -225,13 +225,13 @@ def send_force_join_message(chat_id):
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
 PLANS = {
-    "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": "1,000 Ks", "price_int": 1000},
-    "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": "2,000 Ks", "price_int": 2000},
-    "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": "3,000 Ks", "price_int": 3000},
-    "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": "4,000 Ks", "price_int": 4000},
-    "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": "5,000 Ks", "price_int": 5000},
-    "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": "7,000 Ks", "price_int": 7000},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited", "bytes": None, "price": "10,000 Ks", "price_int": 10000},
+    "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": 1000},
+    "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": 2000},
+    "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": 3000},
+    "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000},
+    "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000},
+    "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited", "bytes": None, "price": 10000},
 }
 
 def bytes_to_gb(bytes_value):
@@ -270,13 +270,29 @@ def get_main_menu_keyboard(chat_id=None):
 
 def get_plan_keyboard():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("🌟 Starter (25 GB) - 1,000 Ks", callback_data="buy_starter"))
-    markup.row(InlineKeyboardButton("💎 Basic (50 GB) - 2,000 Ks", callback_data="buy_basic"))
-    markup.row(InlineKeyboardButton("⚡ Standard (75 GB) - 3,000 Ks", callback_data="buy_standard"))
-    markup.row(InlineKeyboardButton("🔥 Premium (100 GB) - 4,000 Ks", callback_data="buy_premium"))
-    markup.row(InlineKeyboardButton("👑 VIP (150 GB) - 5,000 Ks", callback_data="buy_vip"))
-    markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="buy_pro"))
-    markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimted) - 10,000 Ks", callback_data="buy_ultimate"))
+    markup.row(InlineKeyboardButton("🌟 Starter (25 GB)", callback_data="selectplan_starter"))
+    markup.row(InlineKeyboardButton("💎 Basic (50 GB)", callback_data="selectplan_basic"))
+    markup.row(InlineKeyboardButton("⚡ Standard (75 GB)", callback_data="selectplan_standard"))
+    markup.row(InlineKeyboardButton("🔥 Premium (100 GB)", callback_data="selectplan_premium"))
+    markup.row(InlineKeyboardButton("👑 VIP (150 GB)", callback_data="selectplan_vip"))
+    markup.row(InlineKeyboardButton("🚀 Pro (200 GB)", callback_data="selectplan_pro"))
+    markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimited)", callback_data="selectplan_ultimate"))
+    return markup
+
+# 📅 Plan အတွက် သက်တမ်း (၁ လ၊ ၂ လ၊ ၃ လ) ရွေးချယ်သည့် Keyboard
+def get_duration_keyboard(plan_code):
+    plan = PLANS.get(plan_code)
+    base_price = plan["price"]
+    
+    # Discount တွက်ချက်ခြင်း (၂ လ = 5% off, ၃ လ = 10% off)
+    price_1m = base_price
+    price_2m = int(base_price * 2 * 0.95)
+    price_3m = int(base_price * 3 * 0.90)
+
+    markup = InlineKeyboardMarkup()
+    markup.row(InlineKeyboardButton(f"📅 1 လ - {price_1m:,} Ks", callback_data=f"buy_{plan_code}_1"))
+    markup.row(InlineKeyboardButton(f"📅 2 လ - {price_2m:,} Ks (5% Off 🔥)", callback_data=f"buy_{plan_code}_2"))
+    markup.row(InlineKeyboardButton(f"📅 3 လ - {price_3m:,} Ks (10% Off 🚀)", callback_data=f"buy_{plan_code}_3"))
     return markup
 
 # 🎁 Admin အတွက် GB ရွေးချယ်သည့် Keyboard
@@ -325,7 +341,7 @@ def get_admin_count_keyboard(gb, days):
     )
     return markup
 
-# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function (ဒီလက်ရှိလအတွင်း ဝယ်ယူခဲ့သော ကီးများကိုသာ လအလိုက် Reset ဖြစ်စေပြီး တွက်သည်)
+# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function
 def get_monthly_revenue_report():
     now = datetime.now()
     now_str = now.strftime("%d/%m/%Y (%I:%M %p)")
@@ -357,11 +373,9 @@ def get_monthly_revenue_report():
                 for k in keys_data:
                     k_name = k.get("name", "")
                     
-                    # 🎁 Giveaway Keys ကို ဖယ်ထုတ်ထားသည်
                     if "[gw]" in k_name.lower() or "giveaway" in k_name.lower():
                         continue
 
-                    # ⏰ သက်တမ်းကုန်ရက်ကို ရှာဖွေပြီး စဝယ်သည့်ရက် (Purchase Date = Expire Date - 1 Month) တွက်ချက်သည်
                     date_match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', k_name)
                     purchase_date = None
                     if date_match:
@@ -375,7 +389,6 @@ def get_monthly_revenue_report():
                         except:
                             pass
 
-                    # 🛑 အဓိက အပြောင်းအလဲ: စဝယ်သည့်ရက်သည် "ဒီလက်ရှိလ (Current Month)" ထဲတွင်မှ ရှိရမည် (လကုန်ရင် အလိုအလျောက် Reset ဖြစ်မည်)
                     if purchase_date and purchase_date.year == current_year and purchase_date.month == current_month:
                         is_today = (purchase_date == today_date)
 
@@ -609,11 +622,11 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function (is_renew ဖြင့် ခွဲခြားသည်)
-def renew_or_create_unlimited_key(server_num, user_name, target_chat_id):
+# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function (months_count အလိုက် ပေါင်းတိုးပေးသည်)
+def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     today = datetime.now()
-    new_expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
+    new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
     
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -643,16 +656,16 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id):
     except Exception as e:
         print("Unlimited Renewal Error:", e)
 
-    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=PLANS["ultimate"], target_chat_id=target_chat_id, is_giveaway=False)
+    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=PLANS["ultimate"], target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
     return vpn_key, key_name, expire_date, False
 
-# ⚡ Key အသစ် မွေးပေးသည့် Function (စဝယ်ရက်လုံးဝမပါဘဲ သက်တမ်းကုန်မည့်ရက် အတိအကျသာ ပါဝင်သည်)
-def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, is_giveaway=False):
+# ⚡ Key အသစ် မွေးပေးသည့် Function (months_count သို့မဟုတ် custom_days အလိုက် တွက်သည်)
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False):
     today = datetime.now()
     if custom_days:
         expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
     else:
-        expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
+        expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
     
     existing_count = get_user_key_count(user_name)
     id_str = f" ({target_chat_id})" if target_chat_id else ""
@@ -832,7 +845,30 @@ def send_plans(message):
     set_redeem_state(chat_id, False)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
-# Plan Button Callback
+# 📌 Plan အလိုက် သက်တမ်း ရွေးချယ်ခိုင်းသည့် Callback Handler
+@bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
+def handle_select_plan(call):
+    chat_id = call.message.chat.id
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    plan_code = call.data.replace("selectplan_", "")
+    plan = PLANS.get(plan_code)
+    
+    if plan:
+        bot.edit_message_text(
+            f"📌 <b>{plan['name']} ({plan['data']})</b>\n\n"
+            f"👇 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော <b>သက်တမ်း (Duration)</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:\n"
+            f"<i>(၂ လ သို့မဟုတ် ၃ လ ဝယ်ယူပါက Discount ပရိုမိုးရှင်း ရရှိပါမည်)</i>",
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+            reply_markup=get_duration_keyboard(plan_code)
+        )
+    bot.answer_callback_query(call.id)
+
+# 💳 Plan + Duration ရွေးပြီး ပေးချေရန် လမ်းညွှန်မှု ပြသပေးသည့် Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
 def handle_buy_callback(call):
     chat_id = call.message.chat.id
@@ -840,16 +876,35 @@ def handle_buy_callback(call):
         send_force_join_message(chat_id)
         return
 
-    plan_code = call.data.replace("buy_", "")
+    parts = call.data.split("_")
+    plan_code = parts[1]
+    months_count = int(parts[2]) if len(parts) > 2 else 1
+    
     plan = PLANS.get(plan_code)
-    plan['code'] = plan_code
     
     if plan:
-        save_user_plan(chat_id, plan)
+        base_price = plan["price"]
+        if months_count == 1:
+            total_price = base_price
+        elif months_count == 2:
+            total_price = int(base_price * 2 * 0.95)
+        elif months_count == 3:
+            total_price = int(base_price * 3 * 0.90)
+
+        plan_data = {
+            "code": plan_code,
+            "name": plan["name"],
+            "data": plan["data"],
+            "months": months_count,
+            "price_str": f"{total_price:,} Ks",
+            "price_int": total_price
+        }
+        
+        save_user_plan(chat_id, plan_data)
         
         payment_text = (
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
-            f"📌 {plan['name']} ({plan['data']}) - {plan['price']}\n\n"
+            f"📌 {plan['name']} ({plan['data']}) - {months_count} လစာ ({total_price:,} Ks)\n\n"
             f"━━━━━━━━━━━━━━━\n"
             f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
@@ -879,6 +934,7 @@ def handle_approve_callback(call):
         server_num = "1" if parts[1] == "srv1" else "2"
         target_chat_id = parts[2]
         plan_code = parts[3]
+        months_count = int(parts[4]) if len(parts) > 4 else 1
         
         plan_info = PLANS.get(plan_code, PLANS["starter"])
         
@@ -891,20 +947,20 @@ def handle_approve_callback(call):
         
         # 🌟 Unlimited Plan ဖြစ်ပါက စစ်ဆေးမည်
         if plan_code == "ultimate":
-            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id)
+            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=months_count)
             if is_renew:
                 action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
             else:
                 action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
         else:
-            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, is_giveaway=False)
+            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
             action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
         
         if vpn_key:
             success_message = (
                 f"{action_title}\n\n"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
-                f"💳 <b>Plan:</b> {plan_info['name']} ({plan_info['data']})\n"
+                f"💳 <b>Plan:</b> {plan_info['name']} ({plan_info['data']}) - {months_count} လစာ\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                 f"<code>{vpn_key}</code>\n\n"
@@ -952,21 +1008,23 @@ def handle_payment_screenshot(message):
 
     plan_info = user_plans.get(str(chat_id))
     plan_code = plan_info.get('code', 'starter')
+    months_count = plan_info.get('months', 1)
+    price_str = plan_info.get('price_str', f"{plan_info.get('price_int', 1000):,} Ks")
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
     admin_alert_text = (
         f"💰 <b>ငွေလွှဲပြေစာအသစ်</b>\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
-        f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
-        f"💵 ကျသင့်ငွေပမာဏ: {plan_info['price']}\n"
+        f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
+        f"💵 ကျသင့်ငွေပမာဏ: {price_str}\n"
         f"📅 ပေးပို့သည့်ရက်စွဲ: {current_date}\n"
         f"🆔 User Chat ID: {chat_id}"
     )
     
     approve_markup = InlineKeyboardMarkup()
     approve_markup.row(
-        InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}"),
-        InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}")
+        InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}"),
+        InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}")
     )
     
     try:
