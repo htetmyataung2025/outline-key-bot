@@ -30,7 +30,7 @@ ADMIN_CHAT_ID = "8778394176"
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# Temp Files ဖြင့် Plan, Key Map, Redeem Code နှင့် State များ သိမ်းဆည်းသည့်စနစ်
+# Temp Files ဖြင့် Plan, Key Map, Redeem Code, Sales History နှင့် State များ သိမ်းဆည်းသည့်စနစ်
 STATE_FILE = "/tmp/user_plans.json"
 MAPPING_FILE = "/tmp/key_mappings.json"
 REDEEM_FILE = "/tmp/redeem_codes.json"
@@ -38,6 +38,7 @@ USED_REDEEMERS_FILE = "/tmp/used_redeemers.json"
 SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 REPLY_STATE_FILE = "/tmp/admin_reply_target.json"
+SALES_FILE = "/tmp/sales_history.json"
 
 def load_user_plans():
     if os.path.exists(STATE_FILE):
@@ -72,6 +73,38 @@ def save_key_mapping(clean_name, chat_id):
     try:
         with open(MAPPING_FILE, 'w') as f:
             json.dump(mappings, f)
+    except:
+        pass
+
+# 💵 ရောင်းရငွေ သီးသန့် အတိအကျ သိမ်းဆည်းသည့် စနစ်
+def load_sales_history():
+    if os.path.exists(SALES_FILE):
+        try:
+            with open(SALES_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int):
+    sales = load_sales_history()
+    now = datetime.now()
+    sale_data = {
+        "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "date": now.strftime("%Y-%m-%d"),
+        "year": now.year,
+        "month": now.month,
+        "server": str(server_num),
+        "chat_id": str(chat_id),
+        "plan_code": plan_code,
+        "plan_name": plan_name,
+        "months": months_count,
+        "price": price_int
+    }
+    sales.append(sale_data)
+    try:
+        with open(SALES_FILE, 'w') as f:
+            json.dump(sales, f)
     except:
         pass
 
@@ -276,7 +309,7 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🔥 Premium (100 GB)", callback_data="selectplan_premium"))
     markup.row(InlineKeyboardButton("👑 VIP (150 GB)", callback_data="selectplan_vip"))
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB)", callback_data="selectplan_pro"))
-    markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (1000 GB/လ)", callback_data="selectplan_ultimate"))
+    markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (1000 GB/လစဉ်)", callback_data="selectplan_ultimate"))
     return markup
 
 # 📅 Plan အတွက် သက်တမ်း (၁ လ၊ ၂ လ၊ ၃ လ) ရွေးချယ်သည့် Keyboard
@@ -346,111 +379,62 @@ def get_admin_count_keyboard(gb, days):
     )
     return markup
 
-# 💰 လစဉ် ဝင်ငွေ သီးသန့် တွက်ချက်ပေးသည့် Function
+# 💰 လစဉ် ဝင်ငွေ သီးသန့် အတိအကျ တွက်ချက်ပေးသည့် Function
 def get_monthly_revenue_report():
     now = datetime.now()
     now_str = now.strftime("%d/%m/%Y (%I:%M %p)")
     current_year = now.year
     current_month = now.month
-    today_date = now.date()
+    today_str = now.strftime("%Y-%m-%d")
 
-    def get_server_revenue(api_url):
-        plan_counts = {
-            "25GB": 0, "50GB": 0, "75GB": 0,
-            "100GB": 0, "150GB": 0, "200GB": 0,
-            "Unlimited": 0
-        }
-        srv_today_plans = {
-            "25GB": 0, "50GB": 0, "75GB": 0,
-            "100GB": 0, "150GB": 0, "200GB": 0,
-            "Unlimited": 0
-        }
-        total_rev = 0
-        total_paid_keys = 0
-        srv_today_rev = 0
-        srv_today_keys = 0
+    sales_history = load_sales_history()
 
-        try:
-            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
-            if keys_resp.status_code == 200:
-                keys_data = keys_resp.json().get("accessKeys", [])
+    s1_keys, s1_rev, s1_today_keys, s1_today_rev = 0, 0, 0, 0
+    s2_keys, s2_rev, s2_today_keys, s2_today_rev = 0, 0, 0, 0
 
-                for k in keys_data:
-                    k_name = k.get("name", "")
-                    
-                    if "[gw]" in k_name.lower() or "giveaway" in k_name.lower():
-                        continue
+    s1_plans = {}
+    s2_plans = {}
+    today_plans = {}
 
-                    date_match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', k_name)
-                    purchase_date = None
-                    if date_match:
-                        try:
-                            k_day = int(date_match.group(1))
-                            k_month = int(date_match.group(2))
-                            k_year_raw = date_match.group(3)
-                            k_year = int("20" + k_year_raw) if len(k_year_raw) == 2 else int(k_year_raw)
-                            expire_dt = datetime(k_year, k_month, k_day).date()
-                            purchase_date = expire_dt - relativedelta(months=1)
-                        except:
-                            pass
+    for item in sales_history:
+        if item.get("year") == current_year and item.get("month") == current_month:
+            srv = str(item.get("server", "1"))
+            price = item.get("price", 0)
+            p_name = item.get("plan_name", "Plan")
+            p_months = item.get("months", 1)
+            p_key_str = f"{p_name} [{p_months} လစာ]"
+            is_today = (item.get("date") == today_str)
 
-                    if purchase_date and purchase_date.year == current_year and purchase_date.month == current_month:
-                        is_today = (purchase_date == today_date)
+            if is_today:
+                today_plans[p_key_str] = today_plans.get(p_key_str, 0) + 1
 
-                        limit_bytes = k.get("dataLimit", {}).get("bytes")
-                        is_standard = False
-                        price = 0
-                        gb_key = ""
-                        
-                        if not limit_bytes or round(limit_bytes / (1000 ** 3)) >= 1000:
-                            gb_key = "Unlimited"
-                            price = 10000
-                            is_standard = True
-                        else:
-                            gb_val = round(limit_bytes / (1000 ** 3))
-                            if gb_val == 25: gb_key = "25GB"; price = 1000; is_standard = True
-                            elif gb_val == 50: gb_key = "50GB"; price = 2000; is_standard = True
-                            elif gb_val == 75: gb_key = "75GB"; price = 3000; is_standard = True
-                            elif gb_val == 100: gb_key = "100GB"; price = 4000; is_standard = True
-                            elif gb_val == 150: gb_key = "150GB"; price = 5000; is_standard = True
-                            elif gb_val == 200: gb_key = "200GB"; price = 7000; is_standard = True
-
-                        if is_standard:
-                            plan_counts[gb_key] += 1
-                            total_paid_keys += 1
-                            total_rev += price
-                            
-                            if is_today:
-                                srv_today_keys += 1
-                                srv_today_rev += price
-                                srv_today_plans[gb_key] += 1
-        except:
-            pass
-
-        return total_paid_keys, plan_counts, total_rev, srv_today_keys, srv_today_plans, srv_today_rev
-
-    s1_keys, s1_plans, s1_rev, s1_t_keys, s1_t_plans, s1_t_rev = get_server_revenue(OUTLINE_API_URL_1)
-    s2_keys, s2_plans, s2_rev, s2_t_keys, s2_t_plans, s2_t_rev = get_server_revenue(OUTLINE_API_URL_2)
+            if srv == "1":
+                s1_keys += 1
+                s1_rev += price
+                s1_plans[p_key_str] = s1_plans.get(p_key_str, 0) + 1
+                if is_today:
+                    s1_today_keys += 1
+                    s1_today_rev += price
+            else:
+                s2_keys += 1
+                s2_rev += price
+                s2_plans[p_key_str] = s2_plans.get(p_key_str, 0) + 1
+                if is_today:
+                    s2_today_keys += 1
+                    s2_today_rev += price
 
     total_keys = s1_keys + s2_keys
     total_rev = s1_rev + s2_rev
-    today_keys = s1_t_keys + s2_t_keys
-    today_rev = s1_t_rev + s2_t_rev
+    today_keys = s1_today_keys + s2_today_keys
+    today_rev = s1_today_rev + s2_today_rev
 
-    today_plan_counts = {k: s1_t_plans[k] + s2_t_plans[k] for k in s1_t_plans}
-
-    def format_plan_breakdown(plans):
+    def format_sales_breakdown(plans_dict):
+        if not plans_dict:
+            return "   • <i>မရှိသေးပါ</i>"
         lines = []
-        if plans.get("25GB", 0) > 0: lines.append(f"   • 25 GB Keys: <b>{plans['25GB']}</b> ခု")
-        if plans.get("50GB", 0) > 0: lines.append(f"   • 50 GB Keys: <b>{plans['50GB']}</b> ခု")
-        if plans.get("75GB", 0) > 0: lines.append(f"   • 75 GB Keys: <b>{plans['75GB']}</b> ခု")
-        if plans.get("100GB", 0) > 0: lines.append(f"   • 100 GB Keys: <b>{plans['100GB']}</b> ခု")
-        if plans.get("150GB", 0) > 0: lines.append(f"   • 150 GB Keys: <b>{plans['150GB']}</b> ခု")
-        if plans.get("200GB", 0) > 0: lines.append(f"   • 200 GB Keys: <b>{plans['200GB']}</b> ခု")
-        if plans.get("Unlimited", 0) > 0: lines.append(f"   • Unlimited Keys: <b>{plans['Unlimited']}</b> ခု")
-        return "\n".join(lines) if lines else "   • <i>မရှိသေးပါ</i>"
-
-    today_lines = format_plan_breakdown(today_plan_counts)
+        for k, v in plans_dict.items():
+            lines.append(f"   • {k}: <b>{v}</b> ခု")
+        return "\n".join(lines)
 
     report = (
         f"💵 <b>MONTHLY SALES REVENUE REPORT</b>\n"
@@ -458,21 +442,21 @@ def get_monthly_revenue_report():
         f"━━━━━━━━━━━━━━━━━\n\n"
         f"🔥 <b>ဒီနေ့ ရောင်းရငွေ (Today's Sales)</b>\n"
         f"🔑 ရောင်းရသော Key: <b>{today_keys} ခု</b>\n"
-        f"{today_lines}\n"
+        f"{format_sales_breakdown(today_plans)}\n"
         f"💰 ဒီနေ့ ဝင်ငွေ: <b>{today_rev:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n\n"
         f"📡 <b>Server 1 🇸🇬 (This Month Sales):</b>\n"
         f"🔑 Total Paid Keys: <b>{s1_keys} ခု</b>\n"
-        f"{format_plan_breakdown(s1_plans)}\n"
+        f"{format_sales_breakdown(s1_plans)}\n"
         f"💵 Server 1 လစဉ်ဝင်ငွေ: <b>{s1_rev:,} Ks</b>\n\n"
         f"📡 <b>Server 2 🇸🇬 (This Month Sales):</b>\n"
         f"🔑 Total Paid Keys: <b>{s2_keys} ခု</b>\n"
-        f"{format_plan_breakdown(s2_plans)}\n"
+        f"{format_sales_breakdown(s2_plans)}\n"
         f"💵 Server 2 လစဉ်ဝင်ငွေ: <b>{s2_rev:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Total This Month Paid Keys:</b> <b>{total_keys} ခု</b>\n"
         f"💎 <b>ဒီလ စုစုပေါင်း ဝင်ငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
-        f"<i>* မှတ်ချက်: ဤလအတွင်း အသစ်ဝယ်ယူခဲ့သော ကီးများကိုသာ လအလိုက် Reset ဖြစ်စေပြီး တိကျစွာ တွက်ချက်ထားပါသည်။</i>"
+        f"<i>* မှတ်ချက်: မည်သည့် Discount စျေးနှုန်းမဆို ငွေလွှဲခဲ့သည့် အမှန်တကယ် ပမာဏအတိုင်း အတိအကျ ပေါင်းစပ်ထားပါသည်ခင်ဗျာ။</i>"
     )
     return report
 
@@ -948,6 +932,17 @@ def handle_approve_callback(call):
         
         plan_info = PLANS.get(plan_code, PLANS["starter"])
         
+        # User Plan ထဲမှ အမှန်တကယ် ကျသင့်ငွေကို ယူမည်
+        user_plans = load_user_plans()
+        u_plan = user_plans.get(str(target_chat_id), {})
+        price_int = u_plan.get("price_int")
+        
+        if not price_int:
+            base_p = plan_info["price"]
+            if months_count == 1: price_int = base_p
+            elif months_count == 2: price_int = int(base_p * 2 * 0.95)
+            elif months_count == 3: price_int = int(base_p * 3 * 0.90)
+
         chat_info = bot.get_chat(target_chat_id)
         user_first = chat_info.first_name if chat_info.first_name else ""
         user_last = chat_info.last_name if chat_info.last_name else ""
@@ -969,6 +964,9 @@ def handle_approve_callback(call):
             disp_gb = plan_info['data']
         
         if vpn_key:
+            # 💵 အမှန်တကယ် ရောင်းရငွေအား သီးသန့် အတိအကျ သိမ်းဆည်းမည်
+            save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
+
             success_message = (
                 f"{action_title}\n\n"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
