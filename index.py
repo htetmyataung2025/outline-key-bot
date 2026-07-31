@@ -611,7 +611,7 @@ def get_user_key_count(user_name):
             pass
     return count
 
-# 🔄 Unlimited Key သက်တမ်းတိုးပေးသည့် Function (Used Data + 1000 GB Accumulate FUP စနစ်ပါဝင်သည်)
+# 🔄 Unlimited Key တစ်ခုတည်းအတွက် သက်တမ်းတိုးပေးသည့် Function (Used Data + 1000 GB FUP စနစ်ပါဝင်သည်)
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     today = datetime.now()
@@ -637,7 +637,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
                     break
             
             if target_key_id:
-                # ⚡️ လက်ရှိ သုံးထားပြီးသား Data ကို ယူပြီး +1000 GB (သို့မဟုတ် x လစာ) ပေါင်းပေးမည်
+                # ⚡️ လက်ရှိ သုံးထားပြီးသား Data ကို ယူပြီး +1000 GB ပေါင်းပေးမည်
                 used_bytes = bytes_transferred.get(str(target_key_id), 0)
                 new_fup_limit = used_bytes + add_bytes
 
@@ -659,7 +659,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
     return vpn_key, key_name, expire_date, False
 
-# ⚡ Key အသစ် မွေးပေးသည့် Function (months_count သို့မဟုတ် custom_days အလိုက် တွက်သည်)
+# ⚡ Key အသစ် မွေးပေးသည့် Function (GB Plan များအတွက် အမြဲတမ်း ကီးအသစ် ထွက်ပါမည်)
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False):
     today = datetime.now()
     if custom_days:
@@ -941,7 +941,6 @@ def handle_approve_callback(call):
         
         plan_info = PLANS.get(plan_code, PLANS["starter"])
         
-        # User Plan ထဲမှ အမှန်တကယ် ကျသင့်ငွေကို ယူမည်
         user_plans = load_user_plans()
         u_plan = user_plans.get(str(target_chat_id), {})
         price_int = u_plan.get("price_int")
@@ -959,7 +958,7 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
-        # 🌟 Unlimited Plan ဖြစ်ပါက စစ်ဆေးမည်
+        # 🌟 Unlimited Plan တစ်ခုတည်းသာ Renew ပြုလုပ်ပြီး၊ ကျန် GB Plan များသည် အမြဲ Key အသစ် မွေးထုတ်မည်
         if plan_code == "ultimate":
             vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=months_count)
             if is_renew:
@@ -973,7 +972,6 @@ def handle_approve_callback(call):
             disp_gb = plan_info['data']
         
         if vpn_key:
-            # 💵 အမှန်တကယ် ရောင်းရငွေအား သီးသန့် အတိအကျ သိမ်းဆည်းမည်
             save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
 
             success_message = (
@@ -1248,7 +1246,6 @@ def handle_all_messages(message):
 
             bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
-            # Redeem Code မှ ထွက်သော ကီးဖြစ်၍ is_giveaway=True (ဝင်ငွေထဲမပါပါ)
             vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
             if not vpn_key:
                 vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
@@ -1425,7 +1422,7 @@ def handle_all_messages(message):
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
-# Cron Check Route (Key နာမည်ထဲမှ Chat ID ကို တန်းဆွဲထုတ်ယူသည့် စနစ်ပါဝင်သည်)
+# Cron Check Route
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = datetime.now()
