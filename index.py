@@ -938,6 +938,8 @@ def handle_approve_callback(call):
         target_chat_id = parts[2]
         plan_code = parts[3]
         months_count = int(parts[4]) if len(parts) > 4 else 1
+        # ⚡️ ရွေးချယ်လိုက်သော Action (renew သို့မဟုတ် new) ကို ခွဲယူမည်
+        action_type = parts[5] if len(parts) > 5 else "new"
         
         plan_info = PLANS.get(plan_code, PLANS["starter"])
         
@@ -962,18 +964,16 @@ def handle_approve_callback(call):
         key_name = None
         expire_date = None
 
-        # 🌟 Unlimited Plan တစ်ခုတည်းသာ Renew ပြုလုပ်ပြီး၊ ကျန် GB Plan များသည် အမြဲ Key အသစ် မွေးထုတ်မည်
-        if plan_code == "ultimate":
+        # 🌟 Unlimited Plan ဖြစ်ပြီး Admin က Renew ခလုတ်ကို နှိပ်မှသာ Key အဟောင်းကို Renew လုပ်မည်
+        if plan_code == "ultimate" and action_type == "renew":
             vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=months_count)
-            if is_renew:
-                action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
-            else:
-                action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
+            action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
             disp_gb = f"{1000 * months_count} GB"
         else:
+            # ➕ New ခလုတ်နှိပ်လျှင် သို့မဟုတ် GB Plan များဖြစ်ပါက အမြဲတမ်း Key အသစ်သီးသန့် မွေးထုတ်မည်
             vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
             action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
-            disp_gb = plan_info['data']
+            disp_gb = f"{1000 * months_count} GB" if plan_code == "ultimate" else plan_info['data']
         
         if vpn_key:
             # 💵 မည်သည့် Key မဆို အောင်မြင်စွာ ထွက်သွားပါက စာရင်းထဲ အတိအကျ သေချာပေါက် သွားမှတ်မည်
@@ -1043,11 +1043,24 @@ def handle_payment_screenshot(message):
         f"🆔 User Chat ID: {chat_id}"
     )
     
-    approve_markup = InlineKeyboardMarkup()
-    approve_markup.row(
-        InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}"),
-        InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}")
-    )
+        approve_markup = InlineKeyboardMarkup()
+    
+    # 🌟 Unlimited Plan ဆိုလျှင် Renew ပြုလုပ်မလား သို့မဟုတ် Key အသစ်မွေးမလား ခလုတ် ၂ မျိုးပြမည်
+    if plan_code == "ultimate":
+        approve_markup.row(
+            InlineKeyboardButton("🔄 S1 Renew (အဟောင်းပေါင်း)", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_renew"),
+            InlineKeyboardButton("➕ S1 New (အသစ်မွေး)", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new")
+        )
+        approve_markup.row(
+            InlineKeyboardButton("🔄 S2 Renew (အဟောင်းပေါင်း)", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_renew"),
+            InlineKeyboardButton("➕ S2 New (အသစ်မွေး)", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new")
+        )
+    else:
+        # 📦 ပုံမှန် GB Plan ဆိုလျှင် အမြဲတမ်း Key အသစ်မွေးမည်
+        approve_markup.row(
+            InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new"),
+            InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new")
+        )
     
     try:
         bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=approve_markup)
