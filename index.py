@@ -1047,12 +1047,12 @@ def handle_payment_screenshot(message):
     # 🌟 Unlimited Plan ဆိုလျှင် Renew ပြုလုပ်မလား သို့မဟုတ် Key အသစ်မွေးမလား ခလုတ် ၂ မျိုးပြမည်
     if plan_code == "ultimate":
         approve_markup.row(
-            InlineKeyboardButton("🔄 S1 Renew (အဟောင်းပေါင်း)", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_renew"),
-            InlineKeyboardButton("➕ S1 New (အသစ်မွေး)", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new")
+            InlineKeyboardButton("📡 S1🇸🇬 Renew (အဟောင်းပေါင်း)", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_renew"),
+            InlineKeyboardButton("📡 S1🇸🇬 New (အသစ်မွေး)", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new")
         )
         approve_markup.row(
-            InlineKeyboardButton("🔄 S2 Renew (အဟောင်းပေါင်း)", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_renew"),
-            InlineKeyboardButton("➕ S2 New (အသစ်မွေး)", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new")
+            InlineKeyboardButton("📡 S2🇸🇬 Renew (အဟောင်းပေါင်း)", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_renew"),
+            InlineKeyboardButton("📡 S2🇸🇬 New (အသစ်မွေး)", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new")
         )
     else:
         # 📦 ပုံမှန် GB Plan ဆိုလျှင် အမြဲတမ်း Key အသစ်မွေးမည်
