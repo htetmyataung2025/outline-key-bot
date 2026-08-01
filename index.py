@@ -958,6 +958,10 @@ def handle_approve_callback(call):
         if not user_name:
             user_name = "HMA Customer"
         
+        vpn_key = None
+        key_name = None
+        expire_date = None
+
         # 🌟 Unlimited Plan တစ်ခုတည်းသာ Renew ပြုလုပ်ပြီး၊ ကျန် GB Plan များသည် အမြဲ Key အသစ် မွေးထုတ်မည်
         if plan_code == "ultimate":
             vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=months_count)
@@ -972,6 +976,7 @@ def handle_approve_callback(call):
             disp_gb = plan_info['data']
         
         if vpn_key:
+            # 💵 မည်သည့် Key မဆို အောင်မြင်စွာ ထွက်သွားပါက စာရင်းထဲ အတိအကျ သေချာပေါက် သွားမှတ်မည်
             save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
 
             success_message = (
