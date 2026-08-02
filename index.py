@@ -309,7 +309,7 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🔥 Premium (100 GB) - 4,000 Ks", callback_data="selectplan_premium"))
     markup.row(InlineKeyboardButton("👑 VIP (150 GB) - 5,000 Ks", callback_data="selectplan_vip"))
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="selectplan_pro"))
-    markup.row(InlineKeyboardButton("🌌 Ultimate VIP (1000 GB/လစဉ်) - 10000 Ks", callback_data="selectplan_ultimate"))
+    markup.row(InlineKeyboardButton("🌌 Ultimate VIP (Unlimited)(1000 GB/လစဉ်)", callback_data="selectplan_ultimate"))
     return markup
 
 # 📅 Plan အတွက် သက်တမ်း (၁ လ၊ ၂ လ၊ ၃ လ) ရွေးချယ်သည့် Keyboard
