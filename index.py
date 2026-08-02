@@ -303,12 +303,12 @@ def get_main_menu_keyboard(chat_id=None):
 
 def get_plan_keyboard():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("🌟 Starter (25 GB)", callback_data="selectplan_starter"))
-    markup.row(InlineKeyboardButton("💎 Basic (50 GB)", callback_data="selectplan_basic"))
-    markup.row(InlineKeyboardButton("⚡ Standard (75 GB)", callback_data="selectplan_standard"))
-    markup.row(InlineKeyboardButton("🔥 Premium (100 GB)", callback_data="selectplan_premium"))
-    markup.row(InlineKeyboardButton("👑 VIP (150 GB)", callback_data="selectplan_vip"))
-    markup.row(InlineKeyboardButton("🚀 Pro (200 GB)", callback_data="selectplan_pro"))
+    markup.row(InlineKeyboardButton("🌟 Starter (25 GB) - 1,000 Ks", callback_data="selectplan_starter"))
+    markup.row(InlineKeyboardButton("💎 Basic (50 GB) - 2,000 Ks"", callback_data="selectplan_basic"))
+    markup.row(InlineKeyboardButton("⚡ Standard (75 GB) - 3,000 Ks", callback_data="selectplan_standard"))
+    markup.row(InlineKeyboardButton("🔥 Premium (100 GB) - 4,000 Ks", callback_data="selectplan_premium"))
+    markup.row(InlineKeyboardButton("👑 VIP (150 GB) - 5,000 Ks", callback_data="selectplan_vip"))
+    markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="selectplan_pro"))
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (1000 GB/လစဉ်)", callback_data="selectplan_ultimate"))
     return markup
 
