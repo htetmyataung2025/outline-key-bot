@@ -30,7 +30,33 @@ ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# Temp Files ဖြင့် Plan, Key Map, Redeem Code, Sales History နှင့် State များ သိမ်းဆည်းသည့်စနစ်
+# 🌐 Vercel Upstash Redis REST API Setup (Permanently Data သိမ်းရန်)
+KV_URL = os.environ.get("KV_REST_API_URL")
+KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
+
+def redis_get(key):
+    if not KV_URL or not KV_TOKEN:
+        return None
+    try:
+        res = requests.get(f"{KV_URL}/get/{key}", headers={"Authorization": f"Bearer {KV_TOKEN}"}, timeout=5)
+        if res.status_code == 200:
+            val = res.json().get("result")
+            return json.loads(val) if val else None
+    except:
+        pass
+    return None
+
+def redis_set(key, value):
+    if not KV_URL or not KV_TOKEN:
+        return False
+    try:
+        val_str = json.dumps(value)
+        res = requests.post(f"{KV_URL}/set/{key}", headers={"Authorization": f"Bearer {KV_TOKEN}"}, data=val_str, timeout=5)
+        return res.status_code == 200
+    except:
+        return False
+
+# Temp Files & Redis Fallback Configs
 STATE_FILE = "/tmp/user_plans.json"
 MAPPING_FILE = "/tmp/key_mappings.json"
 REDEEM_FILE = "/tmp/redeem_codes.json"
@@ -42,17 +68,21 @@ SALES_FILE = "/tmp/sales_history.json"
 ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
 
 def load_user_plans():
+    data = redis_get("user_plans")
+    if data is not None:
+        return data
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, 'r') as f:
                 return json.load(f)
         except:
-            return {}
+            pass
     return {}
 
 def save_user_plan(chat_id, plan_data):
     plans = load_user_plans()
     plans[str(chat_id)] = plan_data
+    redis_set("user_plans", plans)
     try:
         with open(STATE_FILE, 'w') as f:
             json.dump(plans, f)
@@ -60,36 +90,43 @@ def save_user_plan(chat_id, plan_data):
         pass
 
 def load_key_mappings():
+    data = redis_get("key_mappings")
+    if data is not None:
+        return data
     if os.path.exists(MAPPING_FILE):
         try:
             with open(MAPPING_FILE, 'r') as f:
                 return json.load(f)
         except:
-            return {}
+            pass
     return {}
 
 def save_key_mapping(clean_name, chat_id):
     mappings = load_key_mappings()
     mappings[clean_name.strip().lower()] = str(chat_id)
+    redis_set("key_mappings", mappings)
     try:
         with open(MAPPING_FILE, 'w') as f:
             json.dump(mappings, f)
     except:
         pass
 
-# 💵 ရောင်းရငွေ သီးသန့် အတိအကျ သိမ်းဆည်းသည့် စနစ်
+# 💵 ရောင်းရငွေ စာရင်းများအား Vercel Redis ထဲတွင် အမြဲတမ်းသိမ်းဆည်းသည့် စနစ်
 def load_sales_history():
+    data = redis_get("sales_history")
+    if data is not None:
+        return data
     if os.path.exists(SALES_FILE):
         try:
             with open(SALES_FILE, 'r') as f:
                 return json.load(f)
         except:
-            return []
+            pass
     return []
 
 def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int):
     sales = load_sales_history()
-    now = datetime.now()
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)  # MMT Timezone
     sale_data = {
         "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
         "date": now.strftime("%Y-%m-%d"),
@@ -100,9 +137,10 @@ def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_coun
         "plan_code": plan_code,
         "plan_name": plan_name,
         "months": months_count,
-        "price": price_int
+        "price": int(price_int) if price_int else 0
     }
     sales.append(sale_data)
+    redis_set("sales_history", sales)
     try:
         with open(SALES_FILE, 'w') as f:
             json.dump(sales, f)
@@ -112,59 +150,52 @@ def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_coun
 # 📩 Admin မက်ဆေ့ခ်ျ ID များအား တူညီစွာ Sync လုပ်ပေးရန် သိမ်းဆည်းသည့် စနစ်
 def save_admin_msg_map(target_chat_id, admin_msg_dict):
     try:
-        data = {}
-        if os.path.exists(ADMIN_MSG_MAP_FILE):
-            with open(ADMIN_MSG_MAP_FILE, 'r') as f:
-                data = json.load(f)
+        data = redis_get("admin_msg_map") or {}
         data[str(target_chat_id)] = admin_msg_dict
-        with open(ADMIN_MSG_MAP_FILE, 'w') as f:
-            json.dump(data, f)
+        redis_set("admin_msg_map", data)
     except:
         pass
 
 def get_admin_msg_map(target_chat_id):
-    if os.path.exists(ADMIN_MSG_MAP_FILE):
-        try:
+    try:
+        data = redis_get("admin_msg_map") or {}
+        if not data and os.path.exists(ADMIN_MSG_MAP_FILE):
             with open(ADMIN_MSG_MAP_FILE, 'r') as f:
                 data = json.load(f)
-                return data.get(str(target_chat_id), {})
-        except:
-            return {}
-    return {}
+        return data.get(str(target_chat_id), {})
+    except:
+        return {}
 
 def set_reply_target(admin_chat_id, target_chat_id):
     try:
-        states = {}
-        if os.path.exists(REPLY_STATE_FILE):
-            with open(REPLY_STATE_FILE, 'r') as f:
-                states = json.load(f)
+        states = redis_get("admin_reply_target") or {}
         states[str(admin_chat_id)] = str(target_chat_id)
-        with open(REPLY_STATE_FILE, 'w') as f:
-            json.dump(states, f)
+        redis_set("admin_reply_target", states)
     except:
         pass
 
 def get_reply_target(admin_chat_id):
-    if os.path.exists(REPLY_STATE_FILE):
-        try:
-            with open(REPLY_STATE_FILE, 'r') as f:
-                states = json.load(f)
-                return states.get(str(admin_chat_id), None)
-        except:
-            return None
-    return None
+    try:
+        states = redis_get("admin_reply_target") or {}
+        return states.get(str(admin_chat_id), None)
+    except:
+        return None
 
 # 🎁 Redeem Code သိမ်းဆည်း/ခေါ်ယူသည့် စနစ်
 def load_redeem_codes():
+    data = redis_get("redeem_codes")
+    if data is not None:
+        return data
     if os.path.exists(REDEEM_FILE):
         try:
             with open(REDEEM_FILE, 'r') as f:
                 return json.load(f)
         except:
-            return {}
+            pass
     return {}
 
 def save_redeem_codes(codes):
+    redis_set("redeem_codes", codes)
     try:
         with open(REDEEM_FILE, 'w') as f:
             json.dump(codes, f)
@@ -173,23 +204,22 @@ def save_redeem_codes(codes):
 
 # 🛑 Redeem Code အသုံးပြုပြီးသား User ID များအား မှတ်သားသည့် စနစ်
 def load_used_redeemers():
+    data = redis_get("used_redeemers")
+    if data is not None:
+        return data
     if os.path.exists(USED_REDEEMERS_FILE):
         try:
             with open(USED_REDEEMERS_FILE, 'r') as f:
                 return json.load(f)
         except:
-            return []
+            pass
     return []
 
 def save_used_redeemer(chat_id):
     used_list = load_used_redeemers()
     if str(chat_id) not in used_list:
         used_list.append(str(chat_id))
-        try:
-            with open(USED_REDEEMERS_FILE, 'w') as f:
-                json.dump(used_list, f)
-        except:
-            pass
+        redis_set("used_redeemers", used_list)
 
 # 🛑 User တစ်ဦးတွင် Active ဖြစ်နေသော Giveaway Key ရှိမရှိ စစ်ဆေးသည့် Function
 def has_active_giveaway_key(chat_id):
@@ -208,49 +238,23 @@ def has_active_giveaway_key(chat_id):
 
 # 🔍 Admin Search State
 def set_search_state(chat_id, is_searching=True):
-    try:
-        states = {}
-        if os.path.exists(SEARCH_STATE_FILE):
-            with open(SEARCH_STATE_FILE, 'r') as f:
-                states = json.load(f)
-        states[str(chat_id)] = is_searching
-        with open(SEARCH_STATE_FILE, 'w') as f:
-            json.dump(states, f)
-    except:
-        pass
+    states = redis_get("admin_search_state") or {}
+    states[str(chat_id)] = is_searching
+    redis_set("admin_search_state", states)
 
 def get_search_state(chat_id):
-    if os.path.exists(SEARCH_STATE_FILE):
-        try:
-            with open(SEARCH_STATE_FILE, 'r') as f:
-                states = json.load(f)
-                return states.get(str(chat_id), False)
-        except:
-            return False
-    return False
+    states = redis_get("admin_search_state") or {}
+    return states.get(str(chat_id), False)
 
 # 🎁 User Redeem State
 def set_redeem_state(chat_id, is_waiting=True):
-    try:
-        states = {}
-        if os.path.exists(REDEEM_STATE_FILE):
-            with open(REDEEM_STATE_FILE, 'r') as f:
-                states = json.load(f)
-        states[str(chat_id)] = is_waiting
-        with open(REDEEM_STATE_FILE, 'w') as f:
-            json.dump(states, f)
-    except:
-        pass
+    states = redis_get("user_redeem_state") or {}
+    states[str(chat_id)] = is_waiting
+    redis_set("user_redeem_state", states)
 
 def get_redeem_state(chat_id):
-    if os.path.exists(REDEEM_STATE_FILE):
-        try:
-            with open(REDEEM_STATE_FILE, 'r') as f:
-                states = json.load(f)
-                return states.get(str(chat_id), False)
-        except:
-            return False
-    return False
+    states = redis_get("user_redeem_state") or {}
+    return states.get(str(chat_id), False)
 
 # 📢 Force Join Verification Helper Functions
 def is_user_subscribed(user_id):
@@ -403,9 +407,9 @@ def get_admin_count_keyboard(gb, days):
     )
     return markup
 
-# 💰 လစဉ် ဝင်ငွေ သီးသန့် အတိအကျ တွက်ချက်ပေးသည့် Function
+# 💰 လစဉ် ဝင်ငွေ သီးသန့် အတိအကျ တွက်ချက်ပေးသည့် Function (MMT Timezone)
 def get_monthly_revenue_report():
-    now = datetime.now()
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
     now_str = now.strftime("%d/%m/%Y (%I:%M %p)")
     current_year = now.year
     current_month = now.month
@@ -421,9 +425,12 @@ def get_monthly_revenue_report():
     today_plans = {}
 
     for item in sales_history:
-        if item.get("year") == current_year and item.get("month") == current_month:
+        item_year = item.get("year")
+        item_month = item.get("month")
+        
+        if item_year == current_year and item_month == current_month:
             srv = str(item.get("server", "1"))
-            price = item.get("price", 0)
+            price = int(item.get("price", 0))
             p_name = item.get("plan_name", "Plan")
             p_months = item.get("months", 1)
             p_key_str = f"{p_name} [{p_months} လစာ]"
@@ -1487,8 +1494,7 @@ def handle_all_messages(message):
 # Cron Check Route
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
-    today = datetime.now()
-    today_date = today.date()
+    today = (datetime.utcnow() + timedelta(hours=6, minutes=30)).date()
     
     key_mappings = load_key_mappings()
     notified_count = 0
@@ -1530,9 +1536,9 @@ def cron_check():
                         
                         key_expire_date = datetime(k_year, k_month, k_day).date()
                         
-                        if key_expire_date == today_date:
+                        if key_expire_date == today:
                             is_expired_today = True
-                        elif today_date > key_expire_date:
+                        elif today > key_expire_date:
                             should_delete = True
                     except:
                         pass
