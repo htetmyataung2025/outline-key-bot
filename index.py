@@ -39,6 +39,7 @@ SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 REPLY_STATE_FILE = "/tmp/admin_reply_target.json"
 SALES_FILE = "/tmp/sales_history.json"
+ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
 
 def load_user_plans():
     if os.path.exists(STATE_FILE):
@@ -107,6 +108,29 @@ def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_coun
             json.dump(sales, f)
     except:
         pass
+
+# 📩 Admin မက်ဆေ့ခ်ျ ID များအား တူညီစွာ Sync လုပ်ပေးရန် သိမ်းဆည်းသည့် စနစ်
+def save_admin_msg_map(target_chat_id, admin_msg_dict):
+    try:
+        data = {}
+        if os.path.exists(ADMIN_MSG_MAP_FILE):
+            with open(ADMIN_MSG_MAP_FILE, 'r') as f:
+                data = json.load(f)
+        data[str(target_chat_id)] = admin_msg_dict
+        with open(ADMIN_MSG_MAP_FILE, 'w') as f:
+            json.dump(data, f)
+    except:
+        pass
+
+def get_admin_msg_map(target_chat_id):
+    if os.path.exists(ADMIN_MSG_MAP_FILE):
+        try:
+            with open(ADMIN_MSG_MAP_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get(str(target_chat_id), {})
+        except:
+            return {}
+    return {}
 
 def set_reply_target(admin_chat_id, target_chat_id):
     try:
@@ -994,12 +1018,22 @@ def handle_approve_callback(call):
             clean_name = user_name.strip().lower()
             save_key_mapping(clean_name, target_chat_id)
             
-            bot.edit_message_caption(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                caption=call.message.caption + f"\n\n✅ <b>DONE (📡 Server {server_num} 🇸🇬)</b>\n\n🔑 {key_name}",
-                parse_mode="HTML"
-            )
+            # 🔄 Admin ၂ ယောက်လုံး၏ Chat Screen တွင် Sync လုပ်ပြီး Done ပြပေးမည်
+            admin_msg_map = get_admin_msg_map(target_chat_id)
+            updated_caption = call.message.caption + f"\n\n✅ <b>DONE (📡 Server {server_num} 🇸🇬)</b>\n\n🔑 {key_name}" if call.message.caption else f"✅ <b>DONE (📡 Server {server_num} 🇸🇬)</b>\n\n🔑 {key_name}"
+
+            for aid, mid in admin_msg_map.items():
+                try:
+                    bot.edit_message_caption(
+                        chat_id=aid,
+                        message_id=mid,
+                        caption=updated_caption,
+                        parse_mode="HTML",
+                        reply_markup=None # Approve ခလုတ်များကို ဖြုတ်လိုက်သည်
+                    )
+                except:
+                    pass
+
             bot.answer_callback_query(call.id, f"✅ Server {server_num} မှ Key ထုတ်ပြီး Customer ထံ ပို့ပြီးပါပြီ!")
         else:
             bot.answer_callback_query(call.id, f"❌ Server {server_num} မှ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ API စစ်ပါ။", show_alert=True)
@@ -1062,12 +1096,17 @@ def handle_payment_screenshot(message):
             InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new")
         )
     
+    admin_msg_dict = {}
     try:
         for admin_id in ADMIN_CHAT_IDS:
             try:
-                bot.send_photo(admin_id, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=approve_markup)
+                sent_msg = bot.send_photo(admin_id, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=approve_markup)
+                if sent_msg:
+                    admin_msg_dict[str(admin_id)] = sent_msg.message_id
             except:
                 pass
+        
+        save_admin_msg_map(chat_id, admin_msg_dict)
         bot.reply_to(message, "💌 ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
         bot.reply_to(message, f"❌ Admin ထံ ပို့၍မရပါ - Bot အား အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
