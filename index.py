@@ -659,7 +659,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
     return vpn_key, key_name, expire_date, False
 
-# ⚡ Key အသစ် မွေးပေးသည့် Function (GB Plan များအတွက် အမြဲတမ်း ကီးအသစ် ထွက်ပါမည်)
+# ⚡ Key အသစ် မွေးပေးသည့် Function (GB Plan များအတွက် လ အရေအတွက်အတိုင်း Data Limit မြှောက်ပေးမည်)
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False):
     today = datetime.now()
     if custom_days:
@@ -691,7 +691,8 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
             if custom_gb:
                 limit_bytes = custom_gb * 1000**3
             elif plan_info:
-                limit_bytes = plan_info.get("bytes")
+                # ⚡️ လ အရေအတွက်အတိုင်း GB မြှောက်ပေးမည် (ဥပမာ 25 GB x 2 လ = 50 GB)
+                limit_bytes = plan_info.get("bytes") * months_count
 
             if limit_bytes:
                 requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
@@ -973,7 +974,7 @@ def handle_approve_callback(call):
             # ➕ New ခလုတ်နှိပ်လျှင် သို့မဟုတ် GB Plan များဖြစ်ပါက အမြဲတမ်း Key အသစ်သီးသန့် မွေးထုတ်မည်
             vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
             action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
-            disp_gb = f"{1000 * months_count} GB" if plan_code == "ultimate" else plan_info['data']
+            disp_gb = f"{1000 * months_count} GB" if plan_code == "ultimate" else f"{int(plan_info['data'].split()[0]) * months_count} GB"
         
         if vpn_key:
             # 💵 မည်သည့် Key မဆို အောင်မြင်စွာ ထွက်သွားပါက စာရင်းထဲ အတိအကျ သေချာပေါက် သွားမှတ်မည်
