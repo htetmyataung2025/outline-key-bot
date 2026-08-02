@@ -24,8 +24,8 @@ REQUIRED_CHANNEL = "@hefeature"
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
-# 🔑 Admin Telegram Chat ID
-ADMIN_CHAT_ID = "8778394176"  
+# 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
+ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
@@ -230,7 +230,7 @@ def get_redeem_state(chat_id):
 
 # 📢 Force Join Verification Helper Functions
 def is_user_subscribed(user_id):
-    if str(user_id) == str(ADMIN_CHAT_ID):
+    if str(user_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return True
     try:
         member = bot.get_chat_member(REQUIRED_CHANNEL, user_id)
@@ -291,7 +291,7 @@ def get_main_menu_keyboard(chat_id=None):
     markup.add(btn_free, btn_redeem)
     markup.add(btn_admin)
     
-    if chat_id and str(chat_id) == str(ADMIN_CHAT_ID):
+    if chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
@@ -539,7 +539,7 @@ def search_users_by_query(query):
 # 🔑 ရွေးချယ်ထားသော User ၏ အသေးစိတ် အချက်အလက် ထုတ်ပြသည့် Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
 def handle_view_key_detail(call):
-    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
         return
     
@@ -706,24 +706,24 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
 # 🎁 Admin GB ရွေးချယ်မှု Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_gb_"))
 def handle_admin_gb_select(call):
-    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
         return
     
     gb = call.data.replace("adm_gb_", "")
     bot.edit_message_text(
         f"🎁 <b>{gb} GB</b> အတွက် သက်တမ်း (ရက်) ရွေးချယ်ပေးပါခင်ဗျာ:",
-        chat_id=ADMIN_CHAT_ID,
+        chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="HTML",
         reply_markup=get_admin_days_keyboard(gb)
     )
     bot.answer_callback_query(call.id)
 
-# 🎁 Admin သက်တမ်း (ရက်) ရွေးချယ်မှု Callback
+# 🎁 Admin သက်တမ်း (ရက်) ရွေးချယ်သည့် Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_dur_"))
 def handle_admin_days_select(call):
-    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
         return
     
@@ -733,7 +733,7 @@ def handle_admin_days_select(call):
     
     bot.edit_message_text(
         f"🎁 <b>{gb} GB ({days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?",
-        chat_id=ADMIN_CHAT_ID,
+        chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="HTML",
         reply_markup=get_admin_count_keyboard(gb, days)
@@ -743,7 +743,7 @@ def handle_admin_days_select(call):
 # 🎁 Admin Code မွေးထုတ်ပေးမှု Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_cnt_"))
 def handle_admin_code_generate(call):
-    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
         return
     
@@ -768,22 +768,22 @@ def handle_admin_code_generate(call):
         "\n".join(generated_list) +
         "\n\n💡 <i>အဆိုပါ Code များကို တစ်ကြိမ်သုံးအဖြစ် အသုံးပြုနိုင်ပါပြီဗျာ။</i>"
     )
-    bot.edit_message_text(reply_msg, chat_id=ADMIN_CHAT_ID, message_id=call.message.message_id, parse_mode="HTML")
+    bot.edit_message_text(reply_msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
     bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
 
 # ✉️ Admin မှ "ဤ Cus ထံ စာပို့ရန်" ခလုတ်ကို နှိပ်လိုက်သောအခါ
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reply_cus_"))
 def handle_reply_cus_callback(call):
-    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
         return
         
     target_id = call.data.replace("reply_cus_", "")
-    set_reply_target(ADMIN_CHAT_ID, target_id)
+    set_reply_target(call.message.chat.id, target_id)
     
     bot.answer_callback_query(call.id, "✍️ အဆင်သင့်ဖြစ်ပါပြီ။ ဤ Cus ထံ ပို့လိုသော စာကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါဗျာ။")
     bot.send_message(
-        ADMIN_CHAT_ID, 
+        call.message.chat.id, 
         f"📩 <b>Target Customer ID: <code>{target_id}</code></b>\n\n👇 ဤသူ့ထံ ပို့လိုသော စာသား (သို့မဟုတ်) ကြော်ငြာကို ဆက်လက် ရိုက်ပို့ပေးပါခင်ဗျာ:", 
         parse_mode="HTML"
     )
@@ -928,7 +928,7 @@ def handle_buy_callback(call):
 # Admin Server 1 / Server 2 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
 def handle_approve_callback(call):
-    if str(call.message.chat.id) != str(ADMIN_CHAT_ID):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         bot.answer_callback_query(call.id, "❌ Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
         return
         
@@ -994,7 +994,7 @@ def handle_approve_callback(call):
             save_key_mapping(clean_name, target_chat_id)
             
             bot.edit_message_caption(
-                chat_id=ADMIN_CHAT_ID,
+                chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
                 caption=call.message.caption + f"\n\n✅ <b>DONE (📡 Server {server_num} 🇸🇬)</b>\n\n🔑 {key_name}",
                 parse_mode="HTML"
@@ -1062,10 +1062,14 @@ def handle_payment_screenshot(message):
         )
     
     try:
-        bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=approve_markup)
+        for admin_id in ADMIN_CHAT_IDS:
+            try:
+                bot.send_photo(admin_id, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=approve_markup)
+            except:
+                pass
         bot.reply_to(message, "💌 ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
     except Exception as e:
-        bot.reply_to(message, f"❌ အစ်ကို့ထံ ပို့၍မရပါ - Bot အား အစ်ကို့အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
+        bot.reply_to(message, f"❌ Admin ထံ ပို့၍မရပါ - Bot အား အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
 # Multi-Server Data Checking Function
 def fetch_key_from_server(api_url, input_value):
@@ -1126,10 +1130,10 @@ def handle_all_messages(message):
         return
 
     # ✉️ Admin မှ Target ID သတ်မှတ်ပြီး စာပို့ခြင်း (ပထဆုံး စစ်ဆေးရန်)
-    if str(chat_id) == str(ADMIN_CHAT_ID):
-        current_target = get_reply_target(ADMIN_CHAT_ID)
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        current_target = get_reply_target(chat_id)
         if current_target:
-            set_reply_target(ADMIN_CHAT_ID, None)  # ပို့ပြီးတာနဲ့ State ပြန်ဖြုတ်မည်
+            set_reply_target(chat_id, None)  # ပို့ပြီးတာနဲ့ State ပြန်ဖြုတ်မည်
             try:
                 bot.send_message(current_target, f"📢 <b>Admin ထံမှ မက်ဆေ့ခ်ျ:</b>\n\n{input_value}", parse_mode="HTML")
                 bot.reply_to(message, f"✅ <b>Chat ID ({current_target})</b> ထံသို့ စာ အောင်မြင်စွာ ပို့ပြီးပါပြီခင်ဗျာ!")
@@ -1169,7 +1173,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, False)
         
         # 🛑 User တွင် Active ဖြစ်နေသော Giveaway Key ရှိမရှိ စစ်ဆေးခြင်း
-        if has_active_giveaway_key(chat_id) and str(chat_id) != str(ADMIN_CHAT_ID):
+        if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML")
             return
 
@@ -1192,7 +1196,7 @@ def handle_all_messages(message):
     # 🔍 Admin သီးသန့် User နာမည်အစ (Initial Letter) ဖြင့် ရှာဖွေသည့် ခလုတ်
     if input_value == "🔍 Cus ရှာရန်":
         set_redeem_state(chat_id, False)
-        if str(chat_id) != str(ADMIN_CHAT_ID):
+        if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
@@ -1208,7 +1212,7 @@ def handle_all_messages(message):
     if input_value == "🎁 Gen RD Code":
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
-        if str(chat_id) != str(ADMIN_CHAT_ID):
+        if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
@@ -1221,7 +1225,7 @@ def handle_all_messages(message):
         return
 
     # 🔍 Admin Search State ဖြစ်နေပါက နာမည်အစ တိုက်စစ်ပြီး List ထုတ်ပေးခြင်း
-    if str(chat_id) == str(ADMIN_CHAT_ID) and get_search_state(chat_id):
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_search_state(chat_id):
         set_search_state(chat_id, False)
         bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော Cus များကို 📡 Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
         
@@ -1241,7 +1245,7 @@ def handle_all_messages(message):
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)
         
-        if has_active_giveaway_key(chat_id) and str(chat_id) != str(ADMIN_CHAT_ID):
+        if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML")
             return
 
@@ -1282,14 +1286,15 @@ def handle_all_messages(message):
                 clean_name = user_name.strip().lower()
                 save_key_mapping(clean_name, chat_id)
 
-                try:
-                    bot.send_message(
-                        ADMIN_CHAT_ID, 
-                        f"🎁 <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
-                        parse_mode="HTML"
-                    )
-                except:
-                    pass
+                for aid in ADMIN_CHAT_IDS:
+                    try:
+                        bot.send_message(
+                            aid, 
+                            f"🎁 <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
+                            parse_mode="HTML"
+                        )
+                    except:
+                        pass
                 return
             else:
                 bot.send_message(chat_id, "❌ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ Admin ထံ ဆက်သွယ်ပေးပါခင်ဗျာ။")
@@ -1302,7 +1307,7 @@ def handle_all_messages(message):
     if input_value == "📊 Total Data Usage":
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
-        if str(chat_id) != str(ADMIN_CHAT_ID):
+        if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
@@ -1315,7 +1320,7 @@ def handle_all_messages(message):
     if input_value in ["💰 လစဉ် ဝင်ငွေ", "လစဉ် ဝင်ငွေ"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
-        if str(chat_id) != str(ADMIN_CHAT_ID):
+        if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
@@ -1336,7 +1341,7 @@ def handle_all_messages(message):
         return
 
     # ADMIN MANUAL REPLY BYPASS SYSTEM
-    if str(chat_id) == str(ADMIN_CHAT_ID) and message.reply_to_message:
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and message.reply_to_message:
         reply_caption = message.reply_to_message.caption
         if reply_caption and "User Chat ID:" in reply_caption:
             try:
@@ -1497,14 +1502,15 @@ def cron_check():
                         del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
                         if del_res.status_code in [200, 204]:
                             deleted_count += 1
-                            try:
-                                bot.send_message(
-                                    ADMIN_CHAT_ID, 
-                                    f"🗑️ <b>Auto Delete Alert:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ၁ ရက်ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
-                                    parse_mode="HTML"
-                                )
-                            except:
-                                pass
+                            for aid in ADMIN_CHAT_IDS:
+                                try:
+                                    bot.send_message(
+                                        aid, 
+                                        f"🗑️ <b>Auto Delete Alert:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ၁ ရက်ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
+                                        parse_mode="HTML"
+                                    )
+                                except:
+                                    pass
                     except:
                         pass
                     continue 
@@ -1550,20 +1556,21 @@ def cron_check():
                         except:
                             pass
 
-                    try:
-                        admin_noti = (
-                            f"📢 <b>Notification Alert</b>\n"
-                            f"👤 အသုံးပြုသူ: {full_name}\n"
-                            f"📌 အခြေအနေ: {reason_text}\n"
-                            f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
-                        )
-                        admin_btn_markup = InlineKeyboardMarkup()
-                        if target_chat_id:
-                            admin_btn_markup.add(InlineKeyboardButton("✉️ ဤ Cus ထံ စာပို့ရန်", callback_data=f"reply_cus_{target_chat_id}"))
-                            
-                        bot.send_message(ADMIN_CHAT_ID, admin_noti, parse_mode="HTML", reply_markup=admin_btn_markup)
-                    except:
-                        pass
+                    admin_noti = (
+                        f"📢 <b>Notification Alert</b>\n"
+                        f"👤 အသုံးပြုသူ: {full_name}\n"
+                        f"📌 အခြေအနေ: {reason_text}\n"
+                        f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
+                    )
+                    admin_btn_markup = InlineKeyboardMarkup()
+                    if target_chat_id:
+                        admin_btn_markup.add(InlineKeyboardButton("✉️ ဤ Cus ထံ စာပို့ရန်", callback_data=f"reply_cus_{target_chat_id}"))
+                        
+                    for aid in ADMIN_CHAT_IDS:
+                        try:
+                            bot.send_message(aid, admin_noti, parse_mode="HTML", reply_markup=admin_btn_markup)
+                        except:
+                            pass
         except:
             pass
 
