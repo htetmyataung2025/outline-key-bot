@@ -1299,7 +1299,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
-    if input_value in ["🔄 Key အဆင်မပြေပါက လဲရန်", "Key အဆင်မပြေပါက လဲရန်"]:
+    if input_value in ["🔄 Key လဲရန်", "Key အဆင်မပြေပါက လဲရန်"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, True)
