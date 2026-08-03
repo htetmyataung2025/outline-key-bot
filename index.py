@@ -340,44 +340,17 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (1000 GB/လစဉ်)", callback_data="selectplan_ultimate"))
     return markup
 
-# 📅 Plan အတွက် သက်တမ်း စျေးနှုန်းများ သတ်မှတ်သည့် Keyboard (Data Bonus စနစ်)
+# 📅 Plan အတွက် သက်တမ်း စျေးနှုန်းများ သတ်မှတ်သည့် Keyboard (၁ လစာ သီးသန့်)
 def get_duration_keyboard(plan_code):
+    plan = PLANS.get(plan_code)
+    price = plan["price"] if plan else 1000
+    data_str = plan["data"] if plan else ""
+
     markup = InlineKeyboardMarkup()
-    
-    if plan_code == "starter": # 25 GB
-        markup.row(InlineKeyboardButton("📅 1 လ (25 GB) - 1,000 Ks", callback_data="buy_starter_1"))
-        markup.row(InlineKeyboardButton("📅 2 လ (55 GB) - 2,000 Ks (5 GB Bonus 🎁)", callback_data="buy_starter_2"))
-        markup.row(InlineKeyboardButton("📅 3 လ (85 GB) - 3,000 Ks (10 GB Bonus 🌟)", callback_data="buy_starter_3"))
-        
-    elif plan_code == "basic": # 50 GB
-        markup.row(InlineKeyboardButton("📅 1 လ (50 GB) - 2,000 Ks", callback_data="buy_basic_1"))
-        markup.row(InlineKeyboardButton("📅 2 လ (110 GB) - 4,000 Ks (10 GB Bonus 🎁)", callback_data="buy_basic_2"))
-        markup.row(InlineKeyboardButton("📅 3 လ (170 GB) - 6,000 Ks (20 GB Bonus 🌟)", callback_data="buy_basic_3"))
-
-    elif plan_code == "standard": # 75 GB
-        markup.row(InlineKeyboardButton("📅 1 လ (75 GB) - 3,000 Ks", callback_data="buy_standard_1"))
-        markup.row(InlineKeyboardButton("📅 2 လ (165 GB) - 6,000 Ks (15 GB Bonus 🎁)", callback_data="buy_standard_2"))
-        markup.row(InlineKeyboardButton("📅 3 လ (255 GB) - 9,000 Ks (30 GB Bonus 🌟)", callback_data="buy_standard_3"))
-
-    elif plan_code == "premium": # 100 GB
-        markup.row(InlineKeyboardButton("📅 1 လ (100 GB) - 4,000 Ks", callback_data="buy_premium_1"))
-        markup.row(InlineKeyboardButton("📅 2 လ (220 GB) - 8,000 Ks (20 GB Bonus 🎁)", callback_data="buy_premium_2"))
-        markup.row(InlineKeyboardButton("📅 3 လ (340 GB) - 12,000 Ks (40 GB Bonus 🌟)", callback_data="buy_premium_3"))
-
-    elif plan_code == "vip": # 150 GB
-        markup.row(InlineKeyboardButton("📅 1 လ (150 GB) - 5,000 Ks", callback_data="buy_vip_1"))
-        markup.row(InlineKeyboardButton("📅 2 လ (330 GB) - 10,000 Ks (30 GB Bonus 🎁)", callback_data="buy_vip_2"))
-        markup.row(InlineKeyboardButton("📅 3 လ (510 GB) - 15,000 Ks (60 GB Bonus 🌟)", callback_data="buy_vip_3"))
-
-    elif plan_code == "pro": # 200 GB
-        markup.row(InlineKeyboardButton("📅 1 လ (200 GB) - 7,000 Ks", callback_data="buy_pro_1"))
-        markup.row(InlineKeyboardButton("📅 2 လ (440 GB) - 14,000 Ks (40 GB Bonus 🎁)", callback_data="buy_pro_2"))
-        markup.row(InlineKeyboardButton("📅 3 လ (680 GB) - 21,000 Ks (80 GB Bonus 🌟)", callback_data="buy_pro_3"))
-
-    elif plan_code == "ultimate": # 1000 GB
-        markup.row(InlineKeyboardButton("📅 1 လ (1000 GB) - 10,000 Ks", callback_data="buy_ultimate_1"))
-        markup.row(InlineKeyboardButton("📅 2 လ (2200 GB) - 20,000 Ks (200 GB Bonus 🎁)", callback_data="buy_ultimate_2"))
-        markup.row(InlineKeyboardButton("📅 3 လ (3400 GB) - 30,000 Ks (400 GB Bonus 🌟)", callback_data="buy_ultimate_3"))
+    if plan_code == "ultimate":
+        markup.row(InlineKeyboardButton(f"📅 1 လ (1000 GB) - {price:,} Ks", callback_data=f"buy_{plan_code}_1"))
+    else:
+        markup.row(InlineKeyboardButton(f"📅 1 လ ({data_str}) - {price:,} Ks", callback_data=f"buy_{plan_code}_1"))
 
     # 🔙 Back Button
     markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
@@ -913,14 +886,14 @@ def handle_select_plan(call):
     if plan:
         bot.edit_message_text(
             f"📌 <b>{plan['name']} ({plan['data']})</b>\n\n"
-            f"👇 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော <b>သက်တမ်း (Duration)</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:\n"
-            f"<i>(၂ လ သို့မဟုတ် ၃ လ ဝယ်ယူပါက Discount ပရိုမိုးရှင်း ရရှိပါမည်)</i>",
+            f"👇 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော <b>သက်တမ်း (Duration)</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
             chat_id=chat_id,
             message_id=call.message.message_id,
             parse_mode="HTML",
             reply_markup=get_duration_keyboard(plan_code)
         )
     bot.answer_callback_query(call.id)
+
 # 🔙 Plan ရွေးချယ်မှုမှ မူလ Plan စာရင်းသို့ ပြန်သွားသည့် Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_plans")
 def handle_back_to_plans(call):
