@@ -340,22 +340,6 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (1000 GB/လစဉ်)", callback_data="selectplan_ultimate"))
     return markup
 
-# 📅 Plan အတွက် သက်တမ်း စျေးနှုန်းများ သတ်မှတ်သည့် Keyboard (၁ လစာ သီးသန့်)
-def get_duration_keyboard(plan_code):
-    plan = PLANS.get(plan_code)
-    price = plan["price"] if plan else 1000
-    data_str = plan["data"] if plan else ""
-
-    markup = InlineKeyboardMarkup()
-    if plan_code == "ultimate":
-        markup.row(InlineKeyboardButton(f"📅 1 လ (1000 GB) - {price:,} Ks", callback_data=f"buy_{plan_code}_1"))
-    else:
-        markup.row(InlineKeyboardButton(f"📅 1 လ ({data_str}) - {price:,} Ks", callback_data=f"buy_{plan_code}_1"))
-
-    # 🔙 Back Button
-    markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
-    return markup
-
 # 🎁 Admin အတွက် GB ရွေးချယ်သည့် Keyboard
 def get_admin_gb_keyboard():
     markup = InlineKeyboardMarkup()
@@ -872,7 +856,7 @@ def send_plans(message):
     set_redeem_state(chat_id, False)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
-# 📌 Plan အလိုက် သက်တမ်း ရွေးချယ်ခိုင်းသည့် Callback Handler
+# 📌 Plan ရွေးလိုက်ပါက သက်တမ်း မမေးတော့ဘဲ ငွေလွှဲအကောင့် အချက်အလက်များ တန်းပြပေးမည်
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
     chat_id = call.message.chat.id
@@ -882,15 +866,49 @@ def handle_select_plan(call):
 
     plan_code = call.data.replace("selectplan_", "")
     plan = PLANS.get(plan_code)
-    
+
     if plan:
+        amount = plan["price"]
+        data_disp = plan["data"]
+
+        # User Plan State မှတ်သားခြင်း (1 လစာ)
+        plan_data = {
+            "code": plan_code,
+            "name": plan["name"],
+            "data": data_disp,
+            "months": 1,
+            "price_str": f"{amount:,} Ks",
+            "price_int": amount
+        }
+        save_user_plan(chat_id, plan_data)
+
+        # 🔙 Plan စာရင်းသို့ ပြန်သွားနိုင်သည့် Back Button
+        markup = InlineKeyboardMarkup()
+        markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
+
+        payment_text = (
+            f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
+            f"📌 {plan['name']} ({data_disp}) - 1 လစာ ({amount:,} Ks)\n\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
+            f"📱 KBZ Pay - 09699970092\n"
+            f"👤 Htet Myat Aung\n\n"
+            f"📱 Wave Pay - 09699970092\n"
+            f"👤 Htet Myat Aung\n\n"
+            f"📱 AYA Pay - 09699970092\n"
+            f"👤 Htet Myat Aung\n\n"
+            f"📱 Uab Pay - 09699970092\n"
+            f"👤 Htet Myat Aung\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
+            f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
+        )
+
         bot.edit_message_text(
-            f"📌 <b>{plan['name']} ({plan['data']})</b>\n\n"
-            f"👇 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော <b>သက်တမ်း (Duration)</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
+            payment_text,
             chat_id=chat_id,
             message_id=call.message.message_id,
-            parse_mode="HTML",
-            reply_markup=get_duration_keyboard(plan_code)
+            reply_markup=markup
         )
     bot.answer_callback_query(call.id)
 
@@ -909,63 +927,6 @@ def handle_back_to_plans(call):
         reply_markup=get_plan_keyboard()
     )
     bot.answer_callback_query(call.id)
-
-# 💳 Plan + Duration ရွေးပြီး ပေးချေရန် လမ်းညွှန်မှု ပြသပေးသည့် Callback
-@bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
-def handle_buy_callback(call):
-    chat_id = call.message.chat.id
-    if not is_user_subscribed(chat_id):
-        send_force_join_message(chat_id)
-        return
-
-    parts = call.data.split("_")
-    plan_code = parts[1]
-    months_count = int(parts[2]) if len(parts) > 2 else 1
-    
-    plan = PLANS.get(plan_code)
-    
-    if plan:
-        base_price = plan["price"]
-        if months_count == 1:
-            total_price = base_price
-            data_disp = plan['data']
-        elif months_count == 2:
-            total_price = int(base_price * 2 * 0.95)
-            data_disp = "2000 GB" if plan_code == "ultimate" else plan['data']
-        elif months_count == 3:
-            total_price = int(base_price * 3 * 0.90)
-            data_disp = "3000 GB" if plan_code == "ultimate" else plan['data']
-
-        plan_data = {
-            "code": plan_code,
-            "name": plan["name"],
-            "data": data_disp,
-            "months": months_count,
-            "price_str": f"{total_price:,} Ks",
-            "price_int": total_price
-        }
-        
-        save_user_plan(chat_id, plan_data)
-        
-        payment_text = (
-            f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
-            f"📌 {plan['name']} ({data_disp}) - {months_count} လစာ ({total_price:,} Ks)\n\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
-            f"📱 KBZ Pay - 09699970092\n"
-            f"👤 Htet Myat Aung\n\n"
-            f"📱 Wave Pay - 09699970092\n"
-            f"👤 Htet Myat Aung\n\n"
-            f"📱 AYA Pay - 09699970092\n"
-            f"👤 Htet Myat Aung\n\n"
-            f"📱 Uab Pay - 09699970092\n"
-            f"👤 Htet Myat Aung\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
-            f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
-        )
-        bot.send_message(chat_id, payment_text)
-        bot.answer_callback_query(call.id)
 
 # Admin Server 1 / Server 2 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
@@ -991,9 +952,7 @@ def handle_approve_callback(call):
         
         if not price_int:
             base_p = plan_info["price"]
-            if months_count == 1: price_int = base_p
-            elif months_count == 2: price_int = int(base_p * 2 * 0.95)
-            elif months_count == 3: price_int = int(base_p * 3 * 0.90)
+            price_int = base_p
 
         chat_info = bot.get_chat(target_chat_id)
         user_first = chat_info.first_name if chat_info.first_name else ""
