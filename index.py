@@ -359,7 +359,7 @@ def get_duration_keyboard(plan_code):
         markup.row(InlineKeyboardButton(f"📅 1 လ - {price_1m:,} Ks", callback_data=f"buy_{plan_code}_1"))
         markup.row(InlineKeyboardButton(f"📅 2 လ - {price_2m:,} Ks (5% Off 🔥)", callback_data=f"buy_{plan_code}_2"))
         markup.row(InlineKeyboardButton(f"📅 3 လ - {price_3m:,} Ks (10% Off 🌟)", callback_data=f"buy_{plan_code}_3"))
-        markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
+    markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
     return markup
 
 
