@@ -320,7 +320,7 @@ def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
-    btn_replace = KeyboardButton("🔄 Key အဆင်မပြေပါက လဲရန်")
+    btn_replace = KeyboardButton("🔄 Key လဲရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_redeem = KeyboardButton("🎁 Redeem Code")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
@@ -1265,7 +1265,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
-    if input_value in ["🔄 Key အဆင်မပြေပါက လဲရန်", "Key အဆင်မပြေပါက လဲရန်"]:
+    if input_value in ["🔄 Key လဲရန်", "Key အဆင်မပြေပါက လဲရန်"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, True)
