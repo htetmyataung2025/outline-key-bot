@@ -359,7 +359,9 @@ def get_duration_keyboard(plan_code):
         markup.row(InlineKeyboardButton(f"📅 1 လ - {price_1m:,} Ks", callback_data=f"buy_{plan_code}_1"))
         markup.row(InlineKeyboardButton(f"📅 2 လ - {price_2m:,} Ks (5% Off 🔥)", callback_data=f"buy_{plan_code}_2"))
         markup.row(InlineKeyboardButton(f"📅 3 လ - {price_3m:,} Ks (10% Off 🌟)", callback_data=f"buy_{plan_code}_3"))
+        markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
     return markup
+
 
 # 🎁 Admin အတွက် GB ရွေးချယ်သည့် Keyboard
 def get_admin_gb_keyboard():
@@ -898,6 +900,21 @@ def handle_select_plan(call):
             parse_mode="HTML",
             reply_markup=get_duration_keyboard(plan_code)
         )
+    bot.answer_callback_query(call.id)
+# 🔙 Plan ရွေးချယ်မှုမှ မူလ Plan စာရင်းသို့ ပြန်သွားသည့် Callback Handler
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_plans")
+def handle_back_to_plans(call):
+    chat_id = call.message.chat.id
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    bot.edit_message_text(
+        "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
+        chat_id=chat_id,
+        message_id=call.message.message_id,
+        reply_markup=get_plan_keyboard()
+    )
     bot.answer_callback_query(call.id)
 
 # 💳 Plan + Duration ရွေးပြီး ပေးချေရန် လမ်းညွှန်မှု ပြသပေးသည့် Callback
