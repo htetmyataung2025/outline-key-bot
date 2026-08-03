@@ -63,6 +63,7 @@ REDEEM_FILE = "/tmp/redeem_codes.json"
 USED_REDEEMERS_FILE = "/tmp/used_redeemers.json"
 SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
+REPLACEMENT_STATE_FILE = "/tmp/user_replacement_state.json"
 REPLY_STATE_FILE = "/tmp/admin_reply_target.json"
 SALES_FILE = "/tmp/sales_history.json"
 ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
@@ -256,6 +257,16 @@ def get_redeem_state(chat_id):
     states = redis_get("user_redeem_state") or {}
     return states.get(str(chat_id), False)
 
+# 🔄 User Replacement State
+def set_replacement_state(chat_id, is_waiting=True):
+    states = redis_get("user_replacement_state") or {}
+    states[str(chat_id)] = is_waiting
+    redis_set("user_replacement_state", states)
+
+def get_replacement_state(chat_id):
+    states = redis_get("user_replacement_state") or {}
+    return states.get(str(chat_id), False)
+
 # 📢 Force Join Verification Helper Functions
 def is_user_subscribed(user_id):
     if str(user_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -304,18 +315,19 @@ def clean_ss_url(url_str):
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
-# 🔄 Main Menu Keyboard (💰 လစဉ် ဝင်ငွေ ခလုတ် ပါဝင်သည်)
+# 🔄 Main Menu Keyboard (🔄 Key လဲရန် ခလုတ် ပါဝင်သည်)
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
+    btn_replace = KeyboardButton("🔄 Key အဆင်မပြေပါက လဲရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_redeem = KeyboardButton("🎁 Redeem Code")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
     btn_refresh = KeyboardButton("🔄 Bot Refresh")
     
     markup.add(btn_buy, btn_check)
-    markup.add(btn_refresh)
+    markup.add(btn_replace, btn_refresh)
     markup.add(btn_free, btn_redeem)
     markup.add(btn_admin)
     
@@ -546,7 +558,7 @@ def search_users_by_query(query):
 
     return found_matches, markup
 
-# 🔑 ရွေးချယ်ထားသော User ၏ အသေးစိတ် အချက်အလက် ထုတ်ပြသည့် Callback Handler
+# 🔑 ရွေးချယ်ထားသော User ၏ အသေးစိတ် အချက်အလက် ထုတ်ပြသည့် Callback Handler (🗑️ Key ဖျက်ရန် ခလုတ်ပါဝင်သည်)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
 def handle_view_key_detail(call):
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -588,6 +600,9 @@ def handle_view_key_detail(call):
                 
                 server_name = "Server 1 🇸🇬" if server_num == "1" else "Server 2 🇸🇬"
                 
+                markup = InlineKeyboardMarkup()
+                markup.add(InlineKeyboardButton("🗑️ Key ဖျက်ရန် (Delete)", callback_data=f"delkey_ask_{server_num}_{key_id}"))
+
                 detail_msg = (
                     f"👤 <b>Customer Information✅ </b>\n\n"
                     f"🤖 <b>Name:</b> {html.escape(full_name)}\n"
@@ -597,11 +612,48 @@ def handle_view_key_detail(call):
                     f"🔑 <b>VPN Key Link:</b>\n\n"
                     f"<code>{final_key}</code>"
                 )
-                bot.send_message(call.message.chat.id, detail_msg, parse_mode="HTML")
+                bot.send_message(call.message.chat.id, detail_msg, parse_mode="HTML", reply_markup=markup)
                 bot.answer_callback_query(call.id)
                 return
     except Exception as e:
         bot.send_message(call.message.chat.id, f"❌ Error: {str(e)}")
+        bot.answer_callback_query(call.id)
+
+# 🗑️ Admin Key Delete Confirmation & Action Handlers
+@bot.callback_query_handler(func=lambda call: call.data.startswith("delkey_"))
+def handle_admin_del_key(call):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
+        return
+
+    parts = call.data.split("_")
+    action = parts[1] # ask သို့မဟုတ် confirm
+    server_num = parts[2]
+    key_id = parts[3]
+
+    if action == "ask":
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton("✅ Yes (ဖျက်မည်)", callback_data=f"delkey_confirm_{server_num}_{key_id}"),
+            InlineKeyboardButton("❌ No (မဖျက်တော့ပါ)", callback_data="delkey_cancel")
+        )
+        bot.send_message(call.message.chat.id, f"⚠️ <b>သတိပေးချက်:</b> Server {server_num} ပေါ်မှ ID ({key_id}) ရှိသော Key ကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?", parse_mode="HTML", reply_markup=markup)
+        bot.answer_callback_query(call.id)
+
+    elif action == "confirm":
+        api_url = OUTLINE_API_URL_1 if server_num == "1" else OUTLINE_API_URL_2
+        try:
+            del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+            if del_res.status_code in [200, 204]:
+                bot.edit_message_text(f"✅ <b>Server {server_num} ပေါ်မှ Key (ID: {key_id}) အား အောင်မြင်စွာ ဖျက်ဆီးပြီးပါပြီဗျာ။</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
+            else:
+                bot.edit_message_text(f"❌ Key ဖျက်ရာတွင် အမှားအယွင်း ရှိနေပါသည် (Status: {del_res.status_code})", chat_id=call.message.chat.id, message_id=call.message.message_id)
+        except Exception as e:
+            bot.edit_message_text(f"❌ Error: {str(e)}", chat_id=call.message.chat.id, message_id=call.message.message_id)
+        bot.answer_callback_query(call.id)
+
+    elif action == "cancel":
+        bot.edit_message_text("❌ Key ဖျက်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီခင်ဗျာ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
         bot.answer_callback_query(call.id)
 
 # 🔍 Customer ဝယ်ယူထားသော Key အရေအတွက် စစ်ပေးသည့် Function
@@ -670,9 +722,11 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     return vpn_key, key_name, expire_date, False
 
 # ⚡ Key အသစ် မွေးပေးသည့် Function (GB Plan များအတွက် လ အရေအတွက်အတိုင်း Data Limit မြှောက်ပေးမည်)
-def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False):
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None):
     today = datetime.now()
-    if custom_days:
+    if custom_expire_date:
+        expire_date = custom_expire_date
+    elif custom_days:
         expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
     else:
         expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
@@ -699,7 +753,7 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
             
             limit_bytes = None
             if custom_gb:
-                limit_bytes = custom_gb * 1000**3
+                limit_bytes = int(custom_gb * 1000**3)
             elif plan_info:
                 # ⚡️ လ အရေအတွက်အတိုင်း GB မြှောက်ပေးမည် (ဥပမာ 25 GB x 2 လ = 50 GB)
                 limit_bytes = plan_info.get("bytes") * months_count
@@ -823,6 +877,7 @@ def send_welcome(message):
     chat_id = message.chat.id
     set_search_state(chat_id, False)
     set_redeem_state(chat_id, False)
+    set_replacement_state(chat_id, False)
 
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
@@ -854,6 +909,7 @@ def send_plans(message):
 
     set_search_state(chat_id, False)
     set_redeem_state(chat_id, False)
+    set_replacement_state(chat_id, False)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 # 📌 Plan ရွေးလိုက်ပါက သက်တမ်း မမေးတော့ဘဲ ငွေလွှဲအကောင့် အချက်အလက်များ တန်းပြပေးမည်
@@ -1026,6 +1082,7 @@ def handle_payment_screenshot(message):
 
     set_search_state(chat_id, False)
     set_redeem_state(chat_id, False)
+    set_replacement_state(chat_id, False)
     user_first = message.from_user.first_name if message.from_user.first_name else ""
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     user_name = f"{user_first} {user_last}".strip()
@@ -1094,7 +1151,7 @@ def fetch_key_from_server(api_url, input_value):
         metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
         
         if keys_resp.status_code != 200:
-            return None, None
+            return None, None, None
             
         keys_data = keys_resp.json().get("accessKeys", [])
         bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
@@ -1129,10 +1186,77 @@ def fetch_key_from_server(api_url, input_value):
                     break
                     
         if target_key:
-            return target_key, bytes_transferred
+            server_num = "1" if api_url == OUTLINE_API_URL_1 else "2"
+            return target_key, bytes_transferred, server_num
     except:
         pass
-    return None, None
+    return None, None, None
+
+# 🔄 Admin Key Replacement Approval Callback Handler
+@bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
+def handle_admin_replace_callback(call):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        bot.answer_callback_query(call.id, "❌ Admin သီးသန့်ဖြစ်ပါသည်။")
+        return
+
+    parts = call.data.split("_")
+    action = parts[1] # approve သို့မဟုတ် reject
+
+    if action == "reject":
+        target_chat_id = parts[2]
+        bot.send_message(target_chat_id, "❌ <b>လူကြီးမင်း တောင်းဆိုထားသော Key အစားထိုးခြင်းအား Admin မှ ငြင်းပယ်လိုက်ပါသည်ခင်ဗျာ။ အသေးစိတ် သိရှိလိုပါက Admin ထံ တိုက်ရိုက် ဆက်သွယ်ပေးပါ။</b>", parse_mode="HTML")
+        bot.edit_message_caption(chat_id=call.message.chat.id, message_id=call.message.message_id, caption=call.message.caption + "\n\n❌ <b>REJECTED</b>")
+        bot.answer_callback_query(call.id, "❌ Rejected")
+        return
+
+    # approve
+    old_server_num = parts[2]
+    old_key_id = parts[3]
+    target_chat_id = parts[4]
+    rem_gb = float(parts[5])
+    exp_date = parts[6]
+
+    api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else OUTLINE_API_URL_2
+    
+    try:
+        # အဆင့် (၁): Key အဟောင်း ဖျက်မည်
+        requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=8)
+
+        # အဆင့် (၂): Server အသစ်တွင် Key အသစ် မွေးပေးမည် (Server ပြောင်းပေးမည်)
+        new_server_num = "2" if old_server_num == "1" else "1"
+        
+        chat_info = bot.get_chat(target_chat_id)
+        user_first = chat_info.first_name if chat_info.first_name else ""
+        user_last = chat_info.last_name if chat_info.last_name else ""
+        user_name = f"{user_first} {user_last}".strip()
+        if not user_name: user_name = "HMA Customer"
+
+        new_key, new_key_name, expire_date = create_outline_key(
+            new_server_num, 
+            user_name, 
+            custom_gb=rem_gb, 
+            target_chat_id=target_chat_id, 
+            custom_expire_date=exp_date
+        )
+
+        if new_key:
+            success_msg = (
+                f"🎉 <b>လူကြီးမင်း၏ VPN Key ကို အဆင်ပြေစွာ အသစ် လဲလှယ်ပေးလိုက်ပါပြီခင်ဗျာ!</b>\n\n"
+                f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
+                f"📡 <b>Server အသစ်:</b> Server {new_server_num} 🇸🇬\n"
+                f"⚡️ <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n"
+                f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                f"🔑 <b>VPN Key အသစ်:</b>\n\n"
+                f"<code>{new_key}</code>\n\n"
+                f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
+            )
+            bot.send_message(target_chat_id, success_msg, parse_mode="HTML")
+            bot.edit_message_caption(chat_id=call.message.chat.id, message_id=call.message.message_id, caption=call.message.caption + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>")
+            bot.answer_callback_query(call.id, "✅ Key အသစ် အောင်မြင်စွာ လဲပေးလိုက်ပါပြီ!")
+        else:
+            bot.answer_callback_query(call.id, "❌ Key အသစ် မွေးထုတ်ရာတွင် အမှားအယွင်း ရှိနေပါသည်။", show_alert=True)
+    except Exception as e:
+        bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
 # Text/Key Handler
 @bot.message_handler(func=lambda message: True)
@@ -1160,12 +1284,14 @@ def handle_all_messages(message):
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
     if input_value in ["⚡️ Data Usage စစ်ရန်", "Data Usage စစ်ရန်", "⚡ Data Usage စစ်ရန်"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         check_guide = (
             "👇 ဝယ်ယူထားသော VPN Key ကို ဒီမှာ Paste ချပေးပါ:\n\n"
             " 🫶 Key ကို Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ခင်ဗျာ။"
@@ -1173,9 +1299,22 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide)
         return
 
+    if input_value in ["🔄 Key အဆင်မပြေပါက လဲရန်", "Key အဆင်မပြေပါက လဲရန်"]:
+        set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, True)
+        replace_guide = (
+            "🔄 <b>VPN Key အစားထိုး လဲလှယ်ရန်:</b>\n\n"
+            "👇 အဆင်မပြေ ဖြစ်နေသော VPN Key (<code>ss://...</code>) ကို ဒီ Chat ထဲသို့ Paste ချ ပေးပို့ပေးပါခင်ဗျာ။\n"
+            "<i>(Bot မှ ကျန်ရှိသော ရက်/Data များကို စစ်ဆေး၍ Admin ထံ အစားထိုး တောင်းဆိုပေးပါမည်။)</i>"
+        )
+        bot.send_message(chat_id, replace_guide, parse_mode="HTML")
+        return
+
     if input_value in ["🎁 Public Free Key", "Public Free Key"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
             f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TB အထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
@@ -1187,6 +1326,7 @@ def handle_all_messages(message):
 
     if input_value in ["🎁 Redeem Code", "Redeem Code"]:
         set_search_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         
         # 🛑 User တွင် Active ဖြစ်နေသော Giveaway Key ရှိမရှိ စစ်ဆေးခြင်း
         if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1204,6 +1344,7 @@ def handle_all_messages(message):
     if input_value in ["👨‍💻 Admin သို့ ဆက်သွယ်ရန်", "Admin သို့ ဆက်သွယ်ရန်"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
@@ -1212,6 +1353,7 @@ def handle_all_messages(message):
     # 🔍 Admin သီးသန့် User နာမည်အစ (Initial Letter) ဖြင့် ရှာဖွေသည့် ခလုတ်
     if input_value == "🔍 Cus ရှာရန်":
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -1228,6 +1370,7 @@ def handle_all_messages(message):
     if input_value == "🎁 Gen RD Code":
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -1256,6 +1399,63 @@ def handle_all_messages(message):
         else:
             bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
+
+    # 🔄 User Replacement State စစ်ဆေးသည့် Logic
+    if get_replacement_state(chat_id):
+        set_replacement_state(chat_id, False)
+        
+        bot.send_message(chat_id, "⏳ လူကြီးမင်း ပေးပို့ထားသော Key အား စစ်ဆေးနေပါသည်...")
+        
+        target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
+        if not target_key:
+            target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
+
+        if target_key:
+            full_name = target_key.get("name", "HMA User")
+            key_id = str(target_key.get("id"))
+            
+            date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
+            exp_date = date_match.group(0) if date_match else "30.09.2026"
+            
+            limit_bytes = target_key.get("dataLimit", {}).get("bytes", 0)
+            usage_bytes = bytes_transferred.get(key_id, 0)
+            
+            total_gb = bytes_to_gb(limit_bytes) if limit_bytes else 1000
+            used_gb = bytes_to_gb(usage_bytes)
+            rem_gb = max(0, round(total_gb - used_gb, 2))
+
+            user_first = message.from_user.first_name if message.from_user.first_name else ""
+            user_last = message.from_user.last_name if message.from_user.last_name else ""
+            user_name = f"{user_first} {user_last}".strip() or "Customer"
+            username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
+
+            alert_text = (
+                f"🔄 <b>KEY REPLACEMENT REQUEST</b>\n\n"
+                f"👤 ဝယ်ယူသူ: {user_name} ({username})\n"
+                f"🆔 Chat ID: <code>{chat_id}</code>\n"
+                f"📡 လက်ရှိ Server: Server {server_num}\n"
+                f"🔑 Key အဟောင်း: {full_name}\n"
+                f"⚡️ ကျန်ရှိ Data: <b>{rem_gb} GB</b> / {total_gb} GB\n"
+                f"⏰ သက်တမ်းကုန်ရက်: <b>{exp_date}</b>"
+            )
+
+            markup = InlineKeyboardMarkup()
+            markup.row(
+                InlineKeyboardButton("✅ Approve & Issue New Key", callback_data=f"replace_approve_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"replace_reject_{chat_id}")
+            )
+
+            for aid in ADMIN_CHAT_IDS:
+                try:
+                    bot.send_message(aid, alert_text, parse_mode="HTML", reply_markup=markup)
+                except:
+                    pass
+
+            bot.send_message(chat_id, "✅ <b>Key အချက်အလက်များ တောင်းဆိုမှု အောင်မြင်ပါသည်။ Admin မှ စစ်ဆေး၍ Key အသစ် အမြန်ဆုံး လဲလှယ်ပေးပါမည်။</b>", parse_mode="HTML")
+            return
+        else:
+            bot.send_message(chat_id, "❌ <b>ပေးပို့ထားသော Key ကို Server ပေါ်တွင် ရှာမတွေ့ပါခင်ဗျာ။ မှန်ကန်သော Key Link ကို Paste ချပို့ပေးပါ။</b>", parse_mode="HTML")
+            return
 
     # 🎁 Redeem Code စစ်ဆေးသည့် Logic (လက်ရှိ Active Giveaway Key ရှိမရှိ ထပ်မံစစ်ဆေးသည်)
     if get_redeem_state(chat_id):
@@ -1323,6 +1523,7 @@ def handle_all_messages(message):
     if input_value == "📊 Total Data Usage":
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -1336,6 +1537,7 @@ def handle_all_messages(message):
     if input_value in ["💰 လစဉ် ဝင်ငွေ", "လစဉ် ဝင်ငွေ"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -1349,6 +1551,7 @@ def handle_all_messages(message):
     if input_value in ["🔄 Bot Refresh", "/refresh"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
         refresh_text = (
             "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
             "✨ Update စနစ်သစ်ဖြင့် စတင် အသုံးပြုနိုင်ပါပြီ။"
@@ -1380,9 +1583,9 @@ def handle_all_messages(message):
         return
 
     # Multi-Server Key Usage Checking
-    target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
+    target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
-        target_key, bytes_transferred = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
+        target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
 
     if target_key:
         try:
