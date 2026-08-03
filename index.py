@@ -320,7 +320,7 @@ def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
-    btn_replace = KeyboardButton("🔄 Key အဆင်မပြေပါက လဲရန်")
+    btn_replace = KeyboardButton("🔄 Key အစားထိုးလဲရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
     btn_redeem = KeyboardButton("🎁 Redeem Code")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
