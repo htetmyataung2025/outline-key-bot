@@ -1119,7 +1119,7 @@ def fetch_key_from_server(api_url, input_value):
         pass
     return None, None, None
 
-# 🔄 Admin Key Replacement Approval Callback Handler
+# 🔄 Admin Key Replacement Approval Callback Handler (Server 1/2 ရွေးချယ်နိုင်သော စနစ်ပါရှိသည်)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
     bot.answer_callback_query(call.id, "⏳ လုပ်ဆောင်နေပါသည်...")
@@ -1147,7 +1147,8 @@ def handle_admin_replace_callback(call):
             pass
         return
 
-    # approve
+    # approve -> parts: ["replace", "srv1/srv2", old_server_num, old_key_id, target_chat_id, rem_gb, exp_date]
+    new_server_num = "1" if parts[1] == "srv1" else "2"
     old_server_num = parts[2]
     old_key_id = parts[3]
     target_chat_id = parts[4]
@@ -1157,15 +1158,15 @@ def handle_admin_replace_callback(call):
     api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else OUTLINE_API_URL_2
     
     try:
+        # Key အဟောင်း ဖျက်မည်
         requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=8)
 
-        new_server_num = "2" if old_server_num == "1" else "1"
-        
         chat_info = bot.get_chat(target_chat_id)
         user_first = chat_info.first_name if chat_info.first_name else ""
         user_last = chat_info.last_name if chat_info.last_name else ""
         user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
+        # ရွေးချယ်လိုက်သော Server တွင် Key အသစ်မွေးမည်
         new_key, new_key_name, expire_date = create_outline_key(
             new_server_num, 
             user_name, 
@@ -1318,6 +1319,7 @@ def handle_all_messages(message):
             bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
 
+    # Key Replacement တောင်းဆိုမှု လုပ်ဆောင်သည့် အပိုင်း
     if get_replacement_state(chat_id):
         set_replacement_state(chat_id, False)
         
@@ -1356,11 +1358,19 @@ def handle_all_messages(message):
                 f"⏰ သက်တမ်းကုန်ရက်: <b>{exp_date}</b>"
             )
 
+            # Server ရွေးချယ်နိုင်သော အစားထိုး ခလုတ်များ
             markup = InlineKeyboardMarkup()
-            markup.row(
-                InlineKeyboardButton("✅ Approve & Issue New Key", callback_data=f"replace_approve_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
-                InlineKeyboardButton("❌ Reject", callback_data=f"replace_reject_{chat_id}")
-            )
+            if server_num == "1":
+                markup.row(
+                    InlineKeyboardButton("📡 S1 Renew (S1 ပဲထားမည်)", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
+                    InlineKeyboardButton("📡 S2 သို့ ပြောင်းမည် (S1 -> S2)", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
+                )
+            else:
+                markup.row(
+                    InlineKeyboardButton("📡 S2 Renew (S2 ပဲထားမည်)", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
+                    InlineKeyboardButton("📡 S1 သို့ ပြောင်းမည် (S2 -> S1)", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
+                )
+            markup.row(InlineKeyboardButton("❌ Reject (ငြင်းပယ်မည်)", callback_data=f"replace_reject_{chat_id}"))
 
             for aid in ADMIN_CHAT_IDS:
                 try:
