@@ -25,7 +25,7 @@ REQUIRED_CHANNEL = "@hefeature"
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
-# 🟣 3X-UI VLESS Panel Setup (အစ်ကို့ရဲ့ Port 14096 & Base Path အပြည့်အစုံ)
+# 🟣 3X-UI VLESS Panel Setup
 PANEL_BASE_URL = "https://h.e.feature.hma.qzz.io:14096/SHXjOMXGbiCuHQ6X1G"
 PANEL_USERNAME = "hma"
 PANEL_PASSWORD = "Hm@147025"
@@ -64,11 +64,6 @@ def redis_set(key, value):
     except:
         return False
 
-STATE_FILE = "/tmp/user_plans.json"
-MAPPING_FILE = "/tmp/key_mappings.json"
-REDEEM_FILE = "/tmp/redeem_codes.json"
-SALES_FILE = "/tmp/sales_history.json"
-ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
 PROCESSED_CALLBACKS = set()
 
 def is_callback_processed(call_id):
@@ -234,7 +229,7 @@ def send_force_join_message(chat_id):
     )
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
-# 🟣 3X-UI Panel API Helper Functions (Fully Port 14096 & Path Resolved)
+# 🟣 3X-UI Panel API Helper Functions (TotalGB Fixed)
 def get_3xui_session():
     session = requests.Session()
     base_clean = PANEL_BASE_URL.rstrip('/')
@@ -247,15 +242,16 @@ def get_3xui_session():
     try:
         res = session.post(login_url, data=payload, headers=headers, verify=False, timeout=10)
         if res.status_code == 200:
-            return session
+            return session, "OK"
+        else:
+            return None, f"Login HTTP {res.status_code}"
     except Exception as e:
-        print("3X-UI Login Error:", e)
-    return None
+        return None, f"Login Error: {str(e)}"
 
-def create_3xui_vless_key(user_name, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None):
-    session = get_3xui_session()
+def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None):
+    session, err_msg = get_3xui_session()
     if not session:
-        return None, None, None
+        return None, None, None, f"Session Failed: {err_msg}"
 
     today = datetime.now()
     if custom_expire_date:
@@ -276,13 +272,14 @@ def create_3xui_vless_key(user_name, custom_gb=None, target_chat_id=None, custom
     gw_str = "_GW" if is_giveaway else ""
     email_name = f"{clean_user}{id_str}{gw_str}_{expire_date_str}".replace(".", "_")
 
-    limit_bytes = int(custom_gb * 1000**3) if custom_gb else int(25 * 1000**3)
+    # 💡 3X-UI API တွင် totalGB ကို Bytes သို့မဟုတ် GB ပမာဏ အပြည့်အစုံ တွက်ချက်ခြင်း
+    total_bytes = int(custom_gb) * 1024 * 1024 * 1024
 
     client_data = {
         "id": client_uuid,
         "email": email_name,
         "flow": VLESS_FLOW,
-        "totalGB": limit_bytes,
+        "totalGB": total_bytes,
         "expiryTime": expiry_timestamp_ms,
         "enable": True,
         "tgId": str(target_chat_id) if target_chat_id else "",
@@ -311,14 +308,15 @@ def create_3xui_vless_key(user_name, custom_gb=None, target_chat_id=None, custom
         if res.status_code == 200:
             res_json = res.json()
             if res_json.get("success"):
-                vless_link = f"vless://{client_uuid}@h.e.feature.hma.qzz.io:8080?type=tcp&security=reality&flow={VLESS_FLOW}#{user_name}"
-                return vless_link, email_name, expire_date_str
+                parsed_host = "h.e.feature.hma.qzz.io"
+                vless_link = f"vless://{client_uuid}@{parsed_host}:8080?type=tcp&security=reality&flow={VLESS_FLOW}#{user_name}"
+                return vless_link, email_name, expire_date_str, "SUCCESS"
             else:
-                print("AddClient Response:", res_json)
+                return None, None, None, f"Panel Error: {res_json.get('msg', res.text)}"
+        else:
+            return None, None, None, f"HTTP Error {res.status_code}: {res.text}"
     except Exception as e:
-        print("3X-UI Create Key Error:", e)
-
-    return None, None, None
+        return None, None, None, f"API Exception: {str(e)}"
 
 PLANS = {
     "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": 1000},
@@ -383,52 +381,6 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
-def get_admin_gb_keyboard():
-    markup = InlineKeyboardMarkup()
-    markup.row(
-        InlineKeyboardButton("⚡️ 25 GB", callback_data="adm_gb_25"),
-        InlineKeyboardButton("⚡️ 50 GB", callback_data="adm_gb_50")
-    )
-    markup.row(
-        InlineKeyboardButton("⚡️ 75 GB", callback_data="adm_gb_75"),
-        InlineKeyboardButton("⚡️ 100 GB", callback_data="adm_gb_100")
-    )
-    markup.row(
-        InlineKeyboardButton("⚡️ 150 GB", callback_data="adm_gb_150"),
-        InlineKeyboardButton("⚡️ 200 GB", callback_data="adm_gb_200")
-    )
-    markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
-    return markup
-
-def get_admin_days_keyboard(gb):
-    markup = InlineKeyboardMarkup()
-    markup.row(
-        InlineKeyboardButton("📅 3 ရက်", callback_data=f"adm_dur_{gb}_3"),
-        InlineKeyboardButton("📅 5 ရက်", callback_data=f"adm_dur_{gb}_5")
-    )
-    markup.row(
-        InlineKeyboardButton("📅 7 ရက်", callback_data=f"adm_dur_{gb}_7"),
-        InlineKeyboardButton("📅 10 ရက်", callback_data=f"adm_dur_{gb}_10")
-    )
-    markup.row(
-        InlineKeyboardButton("📅 30 ရက် (1 လ)", callback_data=f"adm_dur_{gb}_30")
-    )
-    markup.row(InlineKeyboardButton("🔙 GB ပြန်ရွေးရန်", callback_data="back_to_gen_rd"))
-    return markup
-
-def get_admin_count_keyboard(gb, days):
-    markup = InlineKeyboardMarkup()
-    markup.row(
-        InlineKeyboardButton("1 ခု", callback_data=f"adm_cnt_{gb}_{days}_1"),
-        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_{days}_3")
-    )
-    markup.row(
-        InlineKeyboardButton("5 ခု", callback_data=f"adm_cnt_{gb}_{days}_5"),
-        InlineKeyboardButton("10 ခု", callback_data=f"adm_cnt_{gb}_{days}_10")
-    )
-    markup.row(InlineKeyboardButton("🔙 ရက်ပေါင်း ပြန်ရွေးရန်", callback_data=f"adm_gb_{gb}"))
-    return markup
-
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None):
     today = datetime.now()
     if custom_expire_date:
@@ -467,41 +419,6 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     except Exception as e:
         print("Key Generation Error:", e)
     return None, None, None
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_gb_"))
-def handle_admin_gb_select(call):
-    bot.answer_callback_query(call.id)
-    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
-        return
-    gb = call.data.replace("adm_gb_", "")
-    bot.edit_message_text(f"🎁 <b>{gb} GB</b> အတွက် သက်တမ်း (ရက်) ရွေးချယ်ပေးပါခင်ဗျာ:", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_admin_days_keyboard(gb))
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_dur_"))
-def handle_admin_days_select(call):
-    bot.answer_callback_query(call.id)
-    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
-        return
-    parts = call.data.split("_")
-    gb, days = parts[2], parts[3]
-    bot.edit_message_text(f"🎁 <b>{gb} GB ({days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_admin_count_keyboard(gb, days))
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_cnt_"))
-def handle_admin_code_generate(call):
-    bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
-    if is_callback_processed(f"admcode_{call.message.message_id}_{call.data}") or str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
-        return
-    parts = call.data.split("_")
-    gb_amount, days_amount, count = int(parts[2]), int(parts[3]), int(parts[4])
-    codes = load_redeem_codes()
-    generated_list = []
-    for _ in range(count):
-        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        code = f"H&E-{gb_amount}GB-{random_str}"
-        codes[code] = {"gb": gb_amount, "days": days_amount}
-        generated_list.append(f"<code>{code}</code>")
-    save_redeem_codes(codes)
-    reply_msg = f"🎉 <b>{gb_amount} GB ({days_amount} ရက်) Giveaway Code ({count} ခု) ထုတ်ပြီးပါပြီ:</b>\n\n" + "\n".join(generated_list)
-    bot.edit_message_text(reply_msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
 @bot.callback_query_handler(func=lambda call: call.data == "verify_subscription")
 def handle_verify_subscription(call):
@@ -581,7 +498,7 @@ def handle_back_to_plans(call):
     bot.answer_callback_query(call.id)
     bot.edit_message_text("🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=get_plan_keyboard())
 
-# Admin Approve Callback Handler
+# Admin Approve Callback Handler (Detailed Debug Info Added)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_"))
 def handle_approve_callback(call):
     bot.answer_callback_query(call.id, "⏳ Key ထုတ်ပေးနေပါသည်...")
@@ -600,11 +517,11 @@ def handle_approve_callback(call):
         chat_info = bot.get_chat(target_chat_id)
         user_name = f"{chat_info.first_name or ''} {chat_info.last_name or ''}".strip() or "HMA Customer"
         
-        vpn_key, key_name, expire_date = None, None, None
+        vpn_key, key_name, expire_date, status_msg = None, None, None, "OK"
 
         if action_srv == "vless":
             gb_val = int(plan_info['data'].split()[0]) * months_count
-            vpn_key, key_name, expire_date = create_3xui_vless_key(user_name, custom_gb=gb_val, target_chat_id=target_chat_id, months_count=months_count)
+            vpn_key, key_name, expire_date, status_msg = create_3xui_vless_key(user_name, custom_gb=gb_val, target_chat_id=target_chat_id, months_count=months_count)
             srv_title = "🟣 3X-UI Server 🇸🇬 (VLESS REALITY)"
         else:
             server_num = "1" if action_srv == "srv1" else "2"
@@ -613,7 +530,7 @@ def handle_approve_callback(call):
 
         if vpn_key:
             save_sale_transaction(action_srv, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
-            success_message = f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n👤 <b>ဝယ်ယူသူ:</b> {user_name}\n💳 <b>Plan:</b> {plan_info['name']} - {months_count} လစာ\n⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n<code>{vpn_key}</code>\n\n☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
+            success_message = f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n👤 <b>ဝယ်ယူသူ:</b> {user_name}\n💳 <b>Plan:</b> {plan_info['name']} - {months_count} လစာ\n⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n<code>{vpn_key}</code>"
             bot.send_message(target_chat_id, success_message, parse_mode="HTML")
             save_key_mapping(user_name.strip().lower(), target_chat_id)
             
@@ -625,10 +542,10 @@ def handle_approve_callback(call):
                 except:
                     pass
         else:
-            bot.send_message(call.message.chat.id, f"❌ <b>Key မွေး၍ မရပါခင်ဗျာ!</b>\n3X-UI Panel API Response ကို စစ်ဆေးပေးပါခင်ဗျာ။", parse_mode="HTML")
+            bot.send_message(call.message.chat.id, f"❌ <b>Key မွေး၍ မရပါခင်ဗျာ!</b>\n\n⚠️ <b>Error Details:</b>\n<code>{status_msg}</code>", parse_mode="HTML")
 
     except Exception as e:
-        bot.send_message(call.message.chat.id, f"❌ Error: {str(e)}")
+        bot.send_message(call.message.chat.id, f"❌ Exception: {str(e)}")
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo_messages(message):
@@ -636,21 +553,6 @@ def handle_photo_messages(message):
     save_user_id(chat_id)
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
-        return
-
-    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
-        set_broadcast_state(chat_id, False)
-        all_users = load_all_users()
-        success_count = 0
-        for uid in all_users:
-            if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]:
-                continue
-            try:
-                bot.send_photo(uid, message.photo[-1].file_id, caption=message.caption or "", parse_mode="HTML")
-                success_count += 1
-            except:
-                pass
-        bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b> ({success_count}/{len(all_users)})", parse_mode="HTML")
         return
 
     clear_all_states(chat_id)
