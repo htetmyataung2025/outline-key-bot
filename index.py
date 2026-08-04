@@ -1519,6 +1519,7 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
+            # 💡 Admin စစ်ဆေးခြင်းဖြစ်ပါက Customer ရဲ့ Mapping Chat ID ကို ပြောင်းလဲခြင်း မပြုပါ
             if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 clean_mapping_name = display_name.strip().lower()
                 save_key_mapping(clean_mapping_name, chat_id)
