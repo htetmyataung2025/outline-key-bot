@@ -64,7 +64,6 @@ USED_REDEEMERS_FILE = "/tmp/used_redeemers.json"
 SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
 REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 REPLACEMENT_STATE_FILE = "/tmp/user_replacement_state.json"
-REPLY_STATE_FILE = "/tmp/admin_reply_target.json"
 SALES_FILE = "/tmp/sales_history.json"
 ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
 PROCESSED_CALLBACKS = set()
@@ -174,21 +173,6 @@ def get_admin_msg_map(target_chat_id):
         return data.get(str(target_chat_id), {})
     except:
         return {}
-
-def set_reply_target(admin_chat_id, target_chat_id):
-    try:
-        states = redis_get("admin_reply_target") or {}
-        states[str(admin_chat_id)] = str(target_chat_id)
-        redis_set("admin_reply_target", states)
-    except:
-        pass
-
-def get_reply_target(admin_chat_id):
-    try:
-        states = redis_get("admin_reply_target") or {}
-        return states.get(str(admin_chat_id), None)
-    except:
-        return None
 
 def load_redeem_codes():
     data = redis_get("redeem_codes")
@@ -816,21 +800,6 @@ def handle_admin_code_generate(call):
     )
     bot.edit_message_text(reply_msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("reply_cus_"))
-def handle_reply_cus_callback(call):
-    bot.answer_callback_query(call.id, "✍️ အဆင်သင့်ဖြစ်ပါပြီ။")
-    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
-        return
-        
-    target_id = call.data.replace("reply_cus_", "")
-    set_reply_target(call.message.chat.id, target_id)
-    
-    bot.send_message(
-        call.message.chat.id, 
-        f"📩 <b>Target Customer ID: <code>{target_id}</code></b>\n\n👇 ဤသူ့ထံ ပို့လိုသော စာသား (သို့မဟုတ်) ကြော်ငြာကို ဆက်လက် ရိုက်ပို့ပေးပါခင်ဗျာ:", 
-        parse_mode="HTML"
-    )
-
 @bot.callback_query_handler(func=lambda call: call.data == "verify_subscription")
 def handle_verify_subscription(call):
     chat_id = call.message.chat.id
@@ -955,12 +924,11 @@ def handle_back_to_plans(call):
         reply_markup=get_plan_keyboard()
     )
 
-# Admin Server 1 / Server 2 Approve Callback Handler (Duplicates Lock ထည့်သွင်းထားသည်)
+# Admin Server 1 / Server 2 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
 def handle_approve_callback(call):
     bot.answer_callback_query(call.id, "⏳ Key ထုတ်ပေးနေပါသည်...")
     
-    # 重複 (Duplicate Call) တားဆီးရန် Lock စစ်ဆေးခြင်း
     lock_key = f"appr_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
         return
@@ -1151,12 +1119,11 @@ def fetch_key_from_server(api_url, input_value):
         pass
     return None, None, None
 
-# 🔄 Admin Key Replacement Approval Callback Handler (Fixed Done Display & Multi-Click Lock)
+# 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
     bot.answer_callback_query(call.id, "⏳ လုပ်ဆောင်နေပါသည်...")
 
-    # Duplicate Process Lock
     lock_key = f"repl_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
         return
@@ -1235,17 +1202,6 @@ def handle_all_messages(message):
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
         return
-
-    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
-        current_target = get_reply_target(chat_id)
-        if current_target:
-            set_reply_target(chat_id, None)
-            try:
-                bot.send_message(current_target, f"📢 <b>Admin ထံမှ မက်ဆေ့ခ်ျ:</b>\n\n{input_value}", parse_mode="HTML")
-                bot.reply_to(message, f"✅ <b>Chat ID ({current_target})</b> ထံသို့ စာ အောင်မြင်စွာ ပို့ပြီးပါပြီခင်ဗျာ!")
-            except Exception as e:
-                bot.reply_to(message, f"❌ စာပို့၍ မရပါ: {str(e)}")
-            return
 
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         set_search_state(chat_id, False)
@@ -1563,8 +1519,9 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
-            clean_mapping_name = display_name.strip().lower()
-            save_key_mapping(clean_mapping_name, chat_id)
+            if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+                clean_mapping_name = display_name.strip().lower()
+                save_key_mapping(clean_mapping_name, chat_id)
 
             if date_match_str:
                 try:
@@ -1733,13 +1690,10 @@ def cron_check():
                         f"📌 အခြေအနေ: {reason_text}\n"
                         f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
                     )
-                    admin_btn_markup = InlineKeyboardMarkup()
-                    if target_chat_id:
-                        admin_btn_markup.add(InlineKeyboardButton("✉️ ဤ Cus ထံ စာပို့ရန်", callback_data=f"reply_cus_{target_chat_id}"))
-                        
+                    
                     for aid in ADMIN_CHAT_IDS:
                         try:
-                            bot.send_message(aid, admin_noti, parse_mode="HTML", reply_markup=admin_btn_markup)
+                            bot.send_message(aid, admin_noti, parse_mode="HTML")
                         except:
                             pass
         except:
