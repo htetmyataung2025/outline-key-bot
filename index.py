@@ -25,10 +25,9 @@ REQUIRED_CHANNEL = "@hefeature"
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
-# 🟣 3X-UI VLESS Panel Setup
+# 🟣 3X-UI VLESS Panel Direct Token Setup
 PANEL_BASE_URL = "https://h.e.feature.hma.qzz.io:14096/SHXjOMXGbiCuHQ6X1G"
-PANEL_USERNAME = "hma"
-PANEL_PASSWORD = "Hm@147025"
+3XUI_API_TOKEN = "VaP4qII1wdzEPn25eANln8TZgYhDSU6bq6TUlJbBpeVvv5Os"
 VLESS_INBOUND_ID = 1
 VLESS_FLOW = "xtls-rprx-vision"
 
@@ -229,40 +228,8 @@ def send_force_join_message(chat_id):
     )
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
-# 🟣 3X-UI Panel API Helper Functions (403 Fixed with Proper Login & Path Trailing Slash)
-def get_3xui_session():
-    session = requests.Session()
-    base_clean = PANEL_BASE_URL.rstrip('/')
-    login_url = f"{base_clean}/login"
-    payload = {"username": PANEL_USERNAME, "password": PANEL_PASSWORD}
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-        "Accept": "application/json, text/plain, */*",
-        "Origin": "https://h.e.feature.hma.qzz.io:14096",
-        "Referer": f"{base_clean}/"
-    }
-    
-    try:
-        # 1. Form Data Try
-        res = session.post(login_url, data=payload, headers=headers, verify=False, timeout=10)
-        if res.status_code == 200:
-            return session, "OK"
-            
-        # 2. JSON Payload Try (403 ရှောင်ရန်)
-        res_json_try = session.post(login_url, json=payload, headers=headers, verify=False, timeout=10)
-        if res_json_try.status_code == 200:
-            return session, "OK"
-            
-        return None, f"Login HTTP {res.status_code}"
-    except Exception as e:
-        return None, f"Login Error: {str(e)}"
-
+# 🟣 3X-UI Direct API Token Helper Function (No Session Login Required)
 def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None):
-    session, err_msg = get_3xui_session()
-    if not session:
-        return None, None, None, f"Session Failed: {err_msg}"
-
     today = datetime.now()
     if custom_expire_date:
         exp_dt = datetime.strptime(custom_expire_date, "%d.%m.%Y")
@@ -306,15 +273,17 @@ def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_d
         "settings": json.dumps(client_settings)
     }
 
+    # 💡 Bearer Token / Cookie Fallback Headers
+    headers = {
+        "Authorization": f"Bearer {3XUI_API_TOKEN}",
+        "Cookie": f"token={3XUI_API_TOKEN}",
+        "Accept": "application/json", 
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
+
     try:
-        headers = {
-            "Accept": "application/json", 
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-            "Referer": f"{base_clean}/"
-        }
-        res = session.post(add_url, json=payload, headers=headers, verify=False, timeout=10)
-        
+        res = requests.post(add_url, json=payload, headers=headers, verify=False, timeout=10)
         if res.status_code == 200:
             res_json = res.json()
             if res_json.get("success"):
@@ -322,11 +291,11 @@ def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_d
                 vless_link = f"vless://{client_uuid}@{parsed_host}:8080?type=tcp&security=reality&flow={VLESS_FLOW}#{user_name}"
                 return vless_link, email_name, expire_date_str, "SUCCESS"
             else:
-                return None, None, None, f"Panel Error: {res_json.get('msg', res.text)}"
+                return None, None, None, f"Panel Msg: {res_json.get('msg', res.text)}"
         else:
-            return None, None, None, f"HTTP Error {res.status_code}: {res.text}"
+            return None, None, None, f"HTTP Status {res.status_code}: {res.text}"
     except Exception as e:
-        return None, None, None, f"API Exception: {str(e)}"
+        return None, None, None, f"Exception: {str(e)}"
 
 PLANS = {
     "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": 1000},
@@ -540,7 +509,7 @@ def handle_approve_callback(call):
 
         if vpn_key:
             save_sale_transaction(action_srv, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
-            success_message = f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n👤 <b>ဝယ်ယူသူ:</b> {user_name}\n💳 <b>Plan:</b> {plan_info['name']} - {months_count} လစာ\n⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n<code>{vpn_key}</code>"
+            success_message = f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n👤 <b>ဝယ်ယူသူ:</b> {user_name}\n💳 <b>Plan:</b> {plan_info['name']} - {months_count} လစာ\n⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n<code>{vpn_key}</code>\n\n☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
             bot.send_message(target_chat_id, success_message, parse_mode="HTML")
             save_key_mapping(user_name.strip().lower(), target_chat_id)
             
