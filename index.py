@@ -25,7 +25,7 @@ REQUIRED_CHANNEL = "@hefeature"
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
-# 🟣 3X-UI VLESS Panel Direct Token Setup (Fixed Syntax)
+# 🟣 3X-UI VLESS Panel Setup
 PANEL_BASE_URL = "https://h.e.feature.hma.qzz.io:14096/SHXjOMXGbiCuHQ6X1G"
 XUI_API_TOKEN = "VaP4qII1wdzEPn25eANln8TZgYhDSU6bq6TUlJbBpeVvv5Os"
 VLESS_INBOUND_ID = 1
@@ -228,7 +228,7 @@ def send_force_join_message(chat_id):
     )
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
-# 🟣 3X-UI Direct API Token Helper Function
+# 🟣 3X-UI Direct API Helper Function (Multi-Endpoint Auto Fallback Logic)
 def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None):
     today = datetime.now()
     if custom_expire_date:
@@ -266,8 +266,6 @@ def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_d
         "clients": [client_data]
     }
 
-    base_clean = PANEL_BASE_URL.rstrip('/')
-    add_url = f"{base_clean}/panel/api/inbounds/addClient"
     payload = {
         "id": int(VLESS_INBOUND_ID),
         "settings": json.dumps(client_settings)
@@ -281,20 +279,33 @@ def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_d
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
 
-    try:
-        res = requests.post(add_url, json=payload, headers=headers, verify=False, timeout=10)
-        if res.status_code == 200:
-            res_json = res.json()
-            if res_json.get("success"):
-                parsed_host = "h.e.feature.hma.qzz.io"
-                vless_link = f"vless://{client_uuid}@{parsed_host}:8080?type=tcp&security=reality&flow={VLESS_FLOW}#{user_name}"
-                return vless_link, email_name, expire_date_str, "SUCCESS"
+    # 💡 Endpoint Path နမူနာ (၃) မျိုးစလုံးကို Auto စမ်းသပ်မည့် စနစ်
+    base_clean = PANEL_BASE_URL.rstrip('/')
+    endpoints_to_try = [
+        f"{base_clean}/panel/api/inbounds/addClient",
+        f"{base_clean}/api/inbounds/addClient",
+        "https://h.e.feature.hma.qzz.io:14096/panel/api/inbounds/addClient"
+    ]
+
+    last_error = ""
+
+    for add_url in endpoints_to_try:
+        try:
+            res = requests.post(add_url, json=payload, headers=headers, verify=False, timeout=10)
+            if res.status_code == 200:
+                res_json = res.json()
+                if res_json.get("success"):
+                    parsed_host = "h.e.feature.hma.qzz.io"
+                    vless_link = f"vless://{client_uuid}@{parsed_host}:8080?type=tcp&security=reality&flow={VLESS_FLOW}#{user_name}"
+                    return vless_link, email_name, expire_date_str, "SUCCESS"
+                else:
+                    last_error = f"Panel Msg: {res_json.get('msg', res.text)}"
             else:
-                return None, None, None, f"Panel Msg: {res_json.get('msg', res.text)}"
-        else:
-            return None, None, None, f"HTTP Status {res.status_code}: {res.text}"
-    except Exception as e:
-        return None, None, None, f"Exception: {str(e)}"
+                last_error = f"HTTP {res.status_code} at {add_url}"
+        except Exception as e:
+            last_error = f"Exception: {str(e)}"
+
+    return None, None, None, last_error
 
 PLANS = {
     "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": 1000},
