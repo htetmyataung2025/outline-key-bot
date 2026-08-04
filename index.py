@@ -262,7 +262,7 @@ def send_force_join_message(chat_id):
     )
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
-# 🟣 3X-UI Panel API Helper Functions (Path Fixed)
+# 🟣 3X-UI Panel API Helper Functions (Fully Resolved Endpoint Path)
 def get_3xui_session():
     session = requests.Session()
     base_clean = PANEL_BASE_URL.rstrip('/')
@@ -271,9 +271,7 @@ def get_3xui_session():
     try:
         res = session.post(login_url, data=payload, verify=False, timeout=10)
         if res.status_code == 200:
-            res_json = res.json()
-            if res_json.get("success"):
-                return session
+            return session
     except Exception as e:
         print("3X-UI Login Error:", e)
     return None
@@ -296,9 +294,11 @@ def create_3xui_vless_key(user_name, custom_gb=None, target_chat_id=None, custom
 
     expiry_timestamp_ms = int(exp_dt.timestamp() * 1000)
     client_uuid = str(uuid.uuid4())
-    id_str = f"({target_chat_id})" if target_chat_id else ""
-    gw_str = "[GW]" if is_giveaway else ""
-    email_name = f"{user_name}_{id_str}_{gw_str}_{expire_date_str}".replace(" ", "_").strip()
+    
+    clean_user = "".join(re.findall(r'[a-zA-Z0-9]', user_name)) or "HMA_User"
+    id_str = f"_{target_chat_id}" if target_chat_id else ""
+    gw_str = "_GW" if is_giveaway else ""
+    email_name = f"{clean_user}{id_str}{gw_str}_{expire_date_str}".replace(".", "_")
 
     limit_bytes = 0
     if custom_gb:
@@ -306,32 +306,38 @@ def create_3xui_vless_key(user_name, custom_gb=None, target_chat_id=None, custom
     else:
         limit_bytes = int(25 * 1000**3)
 
+    client_data = {
+        "id": client_uuid,
+        "email": email_name,
+        "flow": VLESS_FLOW,
+        "totalGB": limit_bytes,
+        "expiryTime": expiry_timestamp_ms,
+        "enable": True,
+        "tgId": str(target_chat_id) if target_chat_id else "",
+        "subId": "".join(random.choices(string.ascii_lowercase + string.digits, k=16))
+    }
+
     client_settings = {
-        "clients": [{
-            "id": client_uuid,
-            "email": email_name,
-            "flow": VLESS_FLOW,
-            "totalGB": limit_bytes,
-            "expiryTime": expiry_timestamp_ms,
-            "enable": True,
-            "tgId": str(target_chat_id) if target_chat_id else "",
-            "subId": "".join(random.choices(string.ascii_lowercase + string.digits, k=16))
-        }]
+        "clients": [client_data]
     }
 
     base_clean = PANEL_BASE_URL.rstrip('/')
     add_url = f"{base_clean}/panel/api/inbounds/addClient"
     payload = {
-        "id": VLESS_INBOUND_ID,
+        "id": int(VLESS_INBOUND_ID),
         "settings": json.dumps(client_settings)
     }
 
     try:
-        res = session.post(add_url, json=payload, verify=False, timeout=10)
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        res = session.post(add_url, json=payload, headers=headers, verify=False, timeout=10)
+        
         if res.status_code == 200 and res.json().get("success"):
             parsed_host = PANEL_BASE_URL.split("//")[1].split(":")[0]
             vless_link = f"vless://{client_uuid}@{parsed_host}:8080?type=tcp&security=reality&flow={VLESS_FLOW}#{user_name}"
             return vless_link, email_name, expire_date_str
+        else:
+            print("Panel AddClient Response:", res.text)
     except Exception as e:
         print("3X-UI Create Key Error:", e)
 
@@ -1089,7 +1095,7 @@ def handle_back_to_plans(call):
         reply_markup=get_plan_keyboard()
     )
 
-# Admin Approve Callback Handler (Fixed Pattern Matching)
+# Admin Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_"))
 def handle_approve_callback(call):
     bot.answer_callback_query(call.id, "⏳ Key ထုတ်ပေးနေပါသည်...")
