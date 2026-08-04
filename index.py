@@ -1047,7 +1047,7 @@ def handle_photo_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # 📢 Admin Broadcast Photo Handler (ပုံပါသော Broadcast ပို့ခြင်း)
+    # 📢 Admin Broadcast Photo Handler (ပုံပါသော Broadcast ပို့ခြင်း - Admin များအား ကျော်မည်)
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
@@ -1058,6 +1058,10 @@ def handle_photo_messages(message):
         bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
 
         for uid in all_users:
+            # 💡 Admin ID ဖြစ်ပါက Broadcast စာ မပို့ဘဲ ကျော်မည်
+            if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+                continue
+
             try:
                 bot.send_photo(uid, photo_id, caption=caption_text, parse_mode="HTML")
                 success_count += 1
@@ -1263,7 +1267,7 @@ def handle_all_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # 📢 Admin Broadcast Text Handler (စာသား သီးသန့် Broadcast ပို့ခြင်း)
+    # 📢 Admin Broadcast Text Handler (စာသား သီးသန့် Broadcast ပို့ခြင်း - Admin များအား ကျော်မည်)
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
@@ -1272,6 +1276,10 @@ def handle_all_messages(message):
         bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
 
         for uid in all_users:
+            # 💡 Admin ID ဖြစ်ပါက Broadcast စာ မပို့ဘဲ ကျော်မည်
+            if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+                continue
+
             try:
                 bot.send_message(uid, input_value, parse_mode="HTML")
                 success_count += 1
