@@ -66,6 +66,8 @@ REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 REPLACEMENT_STATE_FILE = "/tmp/user_replacement_state.json"
 SALES_FILE = "/tmp/sales_history.json"
 ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
+BROADCAST_STATE_FILE = "/tmp/admin_broadcast_state.json"
+ALL_USERS_FILE = "/tmp/all_users.json"
 PROCESSED_CALLBACKS = set()
 
 # Lock Check Function
@@ -76,6 +78,29 @@ def is_callback_processed(call_id):
     if len(PROCESSED_CALLBACKS) > 1000:
         PROCESSED_CALLBACKS.clear()
     return False
+
+# 📢 Bot သုံးဖူးသော User အားလုံး၏ Chat ID ကို မှတ်သားသည့် စနစ်
+def save_user_id(chat_id):
+    users = redis_get("all_users") or []
+    if str(chat_id) not in [str(u) for u in users]:
+        users.append(str(chat_id))
+        redis_set("all_users", users)
+
+def load_all_users():
+    data = redis_get("all_users")
+    if data is not None:
+        return data
+    return []
+
+# 📢 Broadcast State
+def set_broadcast_state(chat_id, is_waiting=True):
+    states = redis_get("admin_broadcast_state") or {}
+    states[str(chat_id)] = is_waiting
+    redis_set("admin_broadcast_state", states)
+
+def get_broadcast_state(chat_id):
+    states = redis_get("admin_broadcast_state") or {}
+    return states.get(str(chat_id), False)
 
 def load_user_plans():
     data = redis_get("user_plans")
@@ -320,8 +345,10 @@ def get_main_menu_keyboard(chat_id=None):
         btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
         btn_gen_code = KeyboardButton("🎁 Gen RD Code")
         btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
+        btn_broadcast = KeyboardButton("📢 Broadcast စာပို့ရန်")
         markup.add(btn_total_usage, btn_gen_code)
         markup.add(btn_monthly_income, btn_search_user)
+        markup.add(btn_broadcast)
         
     return markup
 
@@ -804,6 +831,7 @@ def handle_admin_code_generate(call):
 def handle_verify_subscription(call):
     chat_id = call.message.chat.id
     if is_user_subscribed(chat_id):
+        save_user_id(chat_id)
         bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
         try:
             bot.delete_message(chat_id, call.message.message_id)
@@ -820,9 +848,11 @@ def handle_verify_subscription(call):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     chat_id = message.chat.id
+    save_user_id(chat_id)
     set_search_state(chat_id, False)
     set_redeem_state(chat_id, False)
     set_replacement_state(chat_id, False)
+    set_broadcast_state(chat_id, False)
 
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
@@ -847,6 +877,7 @@ def send_welcome(message):
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
     chat_id = message.chat.id
+    save_user_id(chat_id)
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
         return
@@ -854,6 +885,7 @@ def send_plans(message):
     set_search_state(chat_id, False)
     set_redeem_state(chat_id, False)
     set_replacement_state(chat_id, False)
+    set_broadcast_state(chat_id, False)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
@@ -1005,16 +1037,42 @@ def handle_approve_callback(call):
     except Exception as e:
         print("Approve Error:", str(e))
 
+# 📸 Photo Message Handler (Screenshot & Broadcast Photo Support)
 @bot.message_handler(content_types=['photo'])
-def handle_payment_screenshot(message):
+def handle_photo_messages(message):
     chat_id = message.chat.id
+    save_user_id(chat_id)
+
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
         return
 
+    # 📢 Admin Broadcast Photo Handler (ပုံပါသော Broadcast ပို့ခြင်း)
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
+        set_broadcast_state(chat_id, False)
+        all_users = load_all_users()
+        success_count = 0
+        photo_id = message.photo[-1].file_id
+        caption_text = message.caption or ""
+
+        bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
+
+        for uid in all_users:
+            try:
+                bot.send_photo(uid, photo_id, caption=caption_text, parse_mode="HTML")
+                success_count += 1
+            except:
+                pass
+
+        bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nအောင်မြင်စွာ ရောက်ရှိသွားသော User အရေအတွက်: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
+        return
+
+    # 💳 Payment Screenshot Handler
     set_search_state(chat_id, False)
     set_redeem_state(chat_id, False)
     set_replacement_state(chat_id, False)
+    set_broadcast_state(chat_id, False)
+
     user_first = message.from_user.first_name if message.from_user.first_name else ""
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA User"
@@ -1119,7 +1177,7 @@ def fetch_key_from_server(api_url, input_value):
         pass
     return None, None, None
 
-# 🔄 Admin Key Replacement Approval Callback Handler (Server 1/2 ရွေးချယ်နိုင်သော စနစ်ပါရှိသည်)
+# 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
     bot.answer_callback_query(call.id, "⏳ လုပ်ဆောင်နေပါသည်...")
@@ -1199,15 +1257,35 @@ def handle_admin_replace_callback(call):
 def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
+    save_user_id(chat_id)
 
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
+        return
+
+    # 📢 Admin Broadcast Text Handler (စာသား သီးသန့် Broadcast ပို့ခြင်း)
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
+        set_broadcast_state(chat_id, False)
+        all_users = load_all_users()
+        success_count = 0
+
+        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
+
+        for uid in all_users:
+            try:
+                bot.send_message(uid, input_value, parse_mode="HTML")
+                success_count += 1
+            except:
+                pass
+
+        bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nအောင်မြင်စွာ ရောက်ရှိသွားသော User အရေအတွက်: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
         return
 
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
@@ -1215,6 +1293,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         check_guide = (
             "👇 ဝယ်ယူထားသော VPN Key ကို ဒီမှာ Paste ချပေးပါ:\n\n"
             " 🫶 Key ကို Copy ယူလာတဲ့ ss://... နဲ့စတဲ့ Key တစ်ခုလုံးကို ဒီ Chat ထဲသို့ တန်းပြီး Paste ချပို့ပြီး စစ်ဆေးနိုင်ပါတယ်ခင်ဗျာ။"
@@ -1225,6 +1304,7 @@ def handle_all_messages(message):
     if input_value in ["🔄 Key လဲရန်", "Key အဆင်မပြေပါက လဲရန်"]:
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         set_replacement_state(chat_id, True)
         replace_guide = (
             "🔄 <b>VPN Key အစားထိုး လဲလှယ်ရန်:</b>\n\n"
@@ -1238,6 +1318,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFQTVIUmNwYW1odkQyNnY5ZnNBNFgw@h.e.feature.hma.qzz.io:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
             f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TB အထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
@@ -1250,6 +1331,7 @@ def handle_all_messages(message):
     if input_value in ["🎁 Redeem Code", "Redeem Code"]:
         set_search_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         
         if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML")
@@ -1267,6 +1349,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         admin_link_markup = InlineKeyboardMarkup()
         admin_link_markup.add(InlineKeyboardButton("💬 စာပို့ရန် နှိပ်ပါ", url="https://t.me/H_M_A_2026"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
@@ -1275,6 +1358,7 @@ def handle_all_messages(message):
     if input_value == "🔍 Cus ရှာရန်":
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -1291,6 +1375,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -1300,6 +1385,28 @@ def handle_all_messages(message):
             "🎁 <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးပြု၍ ဖန်တီးလိုသော <b>GB ပမာဏ</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:", 
             parse_mode="HTML", 
             reply_markup=get_admin_gb_keyboard()
+        )
+        return
+
+    # 📢 Admin သီးသန့် Broadcast စာပို့ရန် ခလုတ်
+    if input_value == "📢 Broadcast စာပို့ရန်":
+        set_search_state(chat_id, False)
+        set_redeem_state(chat_id, False)
+        set_replacement_state(chat_id, False)
+
+        if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+            bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
+            return
+
+        all_users = load_all_users()
+        set_broadcast_state(chat_id, True)
+
+        bot.send_message(
+            chat_id,
+            f"📢 <b>Broadcast Announcement စာပို့ရန်:</b>\n\n"
+            f"👥 လက်ရှိ Bot သုံးစွဲသူ စုစုပေါင်း: <b>{len(all_users)} ယောက်</b>\n\n"
+            f"👇 လူတိုင်းဆီ ကြေညာလိုသော <b>စာသား (သို့မဟုတ်) ဓာတ်ပုံ (Caption ပါရှိနိုင်သည်)</b> ကို ဒီ Chat ထဲသို့ Paste ချ ပေးပို့ပေးပါခင်ဗျာ:",
+            parse_mode="HTML"
         )
         return
 
@@ -1319,7 +1426,6 @@ def handle_all_messages(message):
             bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML")
         return
 
-    # Key Replacement တောင်းဆိုမှု လုပ်ဆောင်သည့် အပိုင်း
     if get_replacement_state(chat_id):
         set_replacement_state(chat_id, False)
         
@@ -1358,7 +1464,6 @@ def handle_all_messages(message):
                 f"⏰ သက်တမ်းကုန်ရက်: <b>{exp_date}</b>"
             )
 
-            # Server ရွေးချယ်နိုင်သော အစားထိုး ခလုတ်များ
             markup = InlineKeyboardMarkup()
             if server_num == "1":
                 markup.row(
@@ -1449,6 +1554,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -1462,6 +1568,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
@@ -1475,6 +1582,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, False)
         set_redeem_state(chat_id, False)
         set_replacement_state(chat_id, False)
+        set_broadcast_state(chat_id, False)
         refresh_text = (
             "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
             "✨ Update စနစ်သစ်ဖြင့် စတင် အသုံးပြုနိုင်ပါပြီ။"
