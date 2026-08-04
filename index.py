@@ -86,7 +86,7 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 📢 All Users List (Customer စာရင်း အဟောင်းရော အသစ်ပါ Auto ဆွဲယူမှတ်သားသည့် Logic)
+# 📢 All Users List
 def save_user_id(chat_id):
     users = redis_get("all_users") or []
     if str(chat_id) not in [str(u) for u in users]:
@@ -262,15 +262,18 @@ def send_force_join_message(chat_id):
     )
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
-# 🟣 3X-UI Panel API Helper Functions
+# 🟣 3X-UI Panel API Helper Functions (Path Fixed)
 def get_3xui_session():
     session = requests.Session()
-    login_url = f"{PANEL_BASE_URL}/login"
+    base_clean = PANEL_BASE_URL.rstrip('/')
+    login_url = f"{base_clean}/login"
     payload = {"username": PANEL_USERNAME, "password": PANEL_PASSWORD}
     try:
         res = session.post(login_url, data=payload, verify=False, timeout=10)
-        if res.status_code == 200 and res.json().get("success"):
-            return session
+        if res.status_code == 200:
+            res_json = res.json()
+            if res_json.get("success"):
+                return session
     except Exception as e:
         print("3X-UI Login Error:", e)
     return None
@@ -316,7 +319,8 @@ def create_3xui_vless_key(user_name, custom_gb=None, target_chat_id=None, custom
         }]
     }
 
-    add_url = f"{PANEL_BASE_URL}/panel/api/inbounds/addClient"
+    base_clean = PANEL_BASE_URL.rstrip('/')
+    add_url = f"{base_clean}/panel/api/inbounds/addClient"
     payload = {
         "id": VLESS_INBOUND_ID,
         "settings": json.dumps(client_settings)
@@ -472,14 +476,14 @@ def get_monthly_revenue_report():
             if is_today:
                 today_plans[p_key_str] = today_plans.get(p_key_str, 0) + 1
 
-            if srv == "1":
+            if srv == "1" or srv == "srv1":
                 s1_keys += 1
                 s1_rev += price
                 s1_plans[p_key_str] = s1_plans.get(p_key_str, 0) + 1
                 if is_today:
                     s1_today_keys += 1
                     s1_today_rev += price
-            elif srv == "2":
+            elif srv == "2" or srv == "srv2":
                 s2_keys += 1
                 s2_rev += price
                 s2_plans[p_key_str] = s2_plans.get(p_key_str, 0) + 1
@@ -550,7 +554,8 @@ def get_servers_total_usage():
         session = get_3xui_session()
         if session:
             try:
-                res = session.get(f"{PANEL_BASE_URL}/panel/api/inbounds/list", verify=False, timeout=8)
+                base_clean = PANEL_BASE_URL.rstrip('/')
+                res = session.get(f"{base_clean}/panel/api/inbounds/list", verify=False, timeout=8)
                 if res.status_code == 200 and res.json().get("success"):
                     inbounds = res.json().get("obj", [])
                     for ib in inbounds:
@@ -606,7 +611,8 @@ def search_users_by_query(query):
     session = get_3xui_session()
     if session:
         try:
-            res = session.get(f"{PANEL_BASE_URL}/panel/api/inbounds/list", verify=False, timeout=8)
+            base_clean = PANEL_BASE_URL.rstrip('/')
+            res = session.get(f"{base_clean}/panel/api/inbounds/list", verify=False, timeout=8)
             if res.status_code == 200 and res.json().get("success"):
                 inbounds = res.json().get("obj", [])
                 for ib in inbounds:
@@ -1083,7 +1089,7 @@ def handle_back_to_plans(call):
         reply_markup=get_plan_keyboard()
     )
 
-# Admin Approve Callback Handler (Outline S1/S2 & 3X-UI VLESS Auto Support)
+# Admin Approve Callback Handler (Fixed Pattern Matching)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_"))
 def handle_approve_callback(call):
     bot.answer_callback_query(call.id, "⏳ Key ထုတ်ပေးနေပါသည်...")
@@ -1115,9 +1121,10 @@ def handle_approve_callback(call):
         vpn_key, key_name, expire_date = None, None, None
 
         if action_srv == "vless":
+            gb_val = int(plan_info['data'].split()[0]) * months_count if "data" in plan_info else 25
             vpn_key, key_name, expire_date = create_3xui_vless_key(
                 user_name, 
-                custom_gb=int(plan_info['data'].split()[0]) * months_count, 
+                custom_gb=gb_val, 
                 target_chat_id=target_chat_id, 
                 months_count=months_count
             )
@@ -1132,7 +1139,7 @@ def handle_approve_callback(call):
         if vpn_key:
             save_sale_transaction(action_srv, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
 
-            disp_gb = f"{int(plan_info['data'].split()[0]) * months_count} GB"
+            disp_gb = f"{int(plan_info['data'].split()[0]) * months_count} GB" if "data" in plan_info else "25 GB"
             success_message = (
                 f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
@@ -1156,8 +1163,12 @@ def handle_approve_callback(call):
                     )
                 except:
                     pass
+        else:
+            bot.send_message(call.message.chat.id, f"❌ <b>Key မွေး၍ မရပါခင်ဗျာ!</b>\n3X-UI Panel Connection သို့မဟုတ် API ကို စစ်ဆေးပေးပါခင်ဗျာ။", parse_mode="HTML")
+
     except Exception as e:
         print("Approve Error:", str(e))
+        bot.send_message(call.message.chat.id, f"❌ Error: {str(e)}")
 
 # 📸 Photo Message Handler
 @bot.message_handler(content_types=['photo'])
@@ -1169,7 +1180,7 @@ def handle_photo_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # 📢 Broadcast Photo Handler (Admin မပါဘဲ User အားလုံးဆီ ပို့မည်)
+    # 📢 Broadcast Photo Handler
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
@@ -1267,7 +1278,8 @@ def fetch_vless_from_3xui(input_value):
     session = get_3xui_session()
     if session:
         try:
-            res = session.get(f"{PANEL_BASE_URL}/panel/api/inbounds/list", verify=False, timeout=8)
+            base_clean = PANEL_BASE_URL.rstrip('/')
+            res = session.get(f"{base_clean}/panel/api/inbounds/list", verify=False, timeout=8)
             if res.status_code == 200 and res.json().get("success"):
                 inbounds = res.json().get("obj", [])
                 for ib in inbounds:
