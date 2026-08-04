@@ -25,9 +25,9 @@ REQUIRED_CHANNEL = "@hefeature"
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
-# 🟣 3X-UI VLESS Panel Direct Token Setup
+# 🟣 3X-UI VLESS Panel Direct Token Setup (Fixed Syntax)
 PANEL_BASE_URL = "https://h.e.feature.hma.qzz.io:14096/SHXjOMXGbiCuHQ6X1G"
-3XUI_API_TOKEN = "VaP4qII1wdzEPn25eANln8TZgYhDSU6bq6TUlJbBpeVvv5Os"
+XUI_API_TOKEN = "VaP4qII1wdzEPn25eANln8TZgYhDSU6bq6TUlJbBpeVvv5Os"
 VLESS_INBOUND_ID = 1
 VLESS_FLOW = "xtls-rprx-vision"
 
@@ -228,7 +228,7 @@ def send_force_join_message(chat_id):
     )
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
-# 🟣 3X-UI Direct API Token Helper Function (No Session Login Required)
+# 🟣 3X-UI Direct API Token Helper Function
 def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None):
     today = datetime.now()
     if custom_expire_date:
@@ -273,10 +273,9 @@ def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_d
         "settings": json.dumps(client_settings)
     }
 
-    # 💡 Bearer Token / Cookie Fallback Headers
     headers = {
-        "Authorization": f"Bearer {3XUI_API_TOKEN}",
-        "Cookie": f"token={3XUI_API_TOKEN}",
+        "Authorization": f"Bearer {XUI_API_TOKEN}",
+        "Cookie": f"token={XUI_API_TOKEN}",
         "Accept": "application/json", 
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
