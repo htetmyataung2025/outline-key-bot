@@ -229,22 +229,32 @@ def send_force_join_message(chat_id):
     )
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
-# 🟣 3X-UI Panel API Helper Functions (TotalGB Fixed)
+# 🟣 3X-UI Panel API Helper Functions (403 Fixed with Proper Login & Path Trailing Slash)
 def get_3xui_session():
     session = requests.Session()
     base_clean = PANEL_BASE_URL.rstrip('/')
     login_url = f"{base_clean}/login"
     payload = {"username": PANEL_USERNAME, "password": PANEL_PASSWORD}
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json, text/plain, */*"
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://h.e.feature.hma.qzz.io:14096",
+        "Referer": f"{base_clean}/"
     }
+    
     try:
+        # 1. Form Data Try
         res = session.post(login_url, data=payload, headers=headers, verify=False, timeout=10)
         if res.status_code == 200:
             return session, "OK"
-        else:
-            return None, f"Login HTTP {res.status_code}"
+            
+        # 2. JSON Payload Try (403 ရှောင်ရန်)
+        res_json_try = session.post(login_url, json=payload, headers=headers, verify=False, timeout=10)
+        if res_json_try.status_code == 200:
+            return session, "OK"
+            
+        return None, f"Login HTTP {res.status_code}"
     except Exception as e:
         return None, f"Login Error: {str(e)}"
 
@@ -272,7 +282,6 @@ def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_d
     gw_str = "_GW" if is_giveaway else ""
     email_name = f"{clean_user}{id_str}{gw_str}_{expire_date_str}".replace(".", "_")
 
-    # 💡 3X-UI API တွင် totalGB ကို Bytes သို့မဟုတ် GB ပမာဏ အပြည့်အစုံ တွက်ချက်ခြင်း
     total_bytes = int(custom_gb) * 1024 * 1024 * 1024
 
     client_data = {
@@ -301,7 +310,8 @@ def create_3xui_vless_key(user_name, custom_gb=25, target_chat_id=None, custom_d
         headers = {
             "Accept": "application/json", 
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+            "Referer": f"{base_clean}/"
         }
         res = session.post(add_url, json=payload, headers=headers, verify=False, timeout=10)
         
@@ -498,7 +508,7 @@ def handle_back_to_plans(call):
     bot.answer_callback_query(call.id)
     bot.edit_message_text("🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=get_plan_keyboard())
 
-# Admin Approve Callback Handler (Detailed Debug Info Added)
+# Admin Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_"))
 def handle_approve_callback(call):
     bot.answer_callback_query(call.id, "⏳ Key ထုတ်ပေးနေပါသည်...")
