@@ -20,6 +20,7 @@ TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 
 # 🤖 Gemini AI Configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6Ll8uZ1sdEIwECFjOcSK2LukvMwH5QV_7c7JLz9CckAng")
+
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
@@ -1352,7 +1353,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nအောင်မြင်စွာ ရောက်ရှိသွားသော User အရေအတွက်: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
         return
 
-    # Standard Buttons Check
+    # Standard Menu Buttons Check
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         clear_all_states(chat_id)
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
@@ -1723,35 +1724,46 @@ def handle_all_messages(message):
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
             return
 
-    # 🤖 AI Chatbot Engine Integration
-    if ai_model:
+    # 🤖 AI Chatbot Engine
+    try:
+        bot.send_chat_action(chat_id, 'typing')
+        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
+
+        if is_admin:
+            prompt_instruction = (
+                "မင်းက H & E Feature VPN Bot ရဲ့ Developer / Business AI Partner ဖြစ်သည်။ "
+                "မင်းနဲ့ စကားပြောနေသူမှာ Admin (သားကြီး) ဖြစ်သည်။ "
+                "သူ့ကို ခင်မင်ရင်းနှီးစွာဖြင့် 'သားကြီး' အသုံးအနှုန်းသုံး၍ မြန်မာလို ပြန်ဖြေပေးပါ။ "
+                "Python programming, VPS configuration, server setup နဲ့ business တိုင်ပင်မှုများကို တိကျစွာ အကူအညီပေးပါ။"
+            )
+        else:
+            prompt_instruction = (
+                "မင်းက H & E Feature VPN ဝန်ဆောင်မှု၏ Customer Support AI Agent ဖြစ်သည်။ "
+                "Customer မေးမြန်းသမျှကို အလွန်ယဉ်ကျေးပျူငှာစွာ မြန်မာဘာသာဖြင့် ပြန်လည်ဖြေကြားပေးပါ။ "
+                "Outline VPN သုံးစွဲပုံ၊ iOS / Android / Windows များတွင် Key ထည့်သွင်းပုံ၊ VPN ချိတ်ဆက်မရပါက လိုက်လုပ်ရမည့် အဆင့်များကို ရှင်းပြပေးပါ။ "
+                "အကူအညီလိုပါက '👨‍💻 Admin သို့ ဆက်သွယ်ရန်' ခလုတ်ကို နှိပ်၍ Admin ထံ စာပို့နိုင်ကြောင်း ညွှန်ပြပေးပါ။"
+            )
+
+        # Gemini Model Safe Call
+        model_instance = genai.GenerativeModel('gemini-1.5-flash')
+        full_prompt = f"{prompt_instruction}\n\nUser Question: {input_value}"
+        
+        response = model_instance.generate_content(full_prompt)
+
+        if response and response.text:
+            bot.reply_to(message, response.text, reply_markup=get_main_menu_keyboard(chat_id))
+            return
+    except Exception as e:
+        print("Gemini AI Error:", str(e))
+        # Fallback Model Try
         try:
-            bot.send_chat_action(chat_id, 'typing')
-            is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-
-            if is_admin:
-                system_prompt = (
-                    "မင်းက H & E Feature VPN Bot ရဲ့ Developer / Business AI Partner ဖြစ်သည်။ "
-                    "မင်းနဲ့ စကားပြောနေသူမှာ Admin (သားကြီး) ဖြစ်သည်။ "
-                    "သူ့ကို ခင်မင်ရင်းနှီးစွာဖြင့် 'သားကြီး' အသုံးအနှုန်းသုံး၍ မြန်မာလို ပြန်ဖြေပေးပါ။ "
-                    "Python programming, VPS configuration, server setup နဲ့ business တိုင်ပင်မှုများကို တိကျစွာ အကူအညီပေးပါ။"
-                )
-            else:
-                system_prompt = (
-                    "မင်းက H & E Feature VPN ဝန်ဆောင်မှု၏ Customer Support AI Agent ဖြစ်သည်။ "
-                    "Customer မေးမြန်းသမျှကို အလွန်ယဉ်ကျေးပျူငှာစွာ မြန်မာဘာသာဖြင့် ပြန်လည်ဖြေကြားပေးပါ။ "
-                    "Outline VPN သုံးစွဲပုံ၊ iOS / Android / Windows များတွင် Key ထည့်သွင်းပုံ၊ VPN ချိတ်ဆက်မရပါက လိုက်လုပ်ရမည့် အဆင့်များကို ရှင်းပြပေးပါ။ "
-                    "အကူအညီလိုပါက '👨‍💻 Admin သို့ ဆက်သွယ်ရန်' ခလုတ်ကို နှိပ်၍ Admin ထံ စာပို့နိုင်ကြောင်း ညွှန်ပြပေးပါ။"
-                )
-
-            full_prompt = f"{system_prompt}\n\nUser Message: {input_value}"
-            response = ai_model.generate_content(full_prompt)
-
-            if response and response.text:
-                bot.reply_to(message, response.text, reply_markup=get_main_menu_keyboard(chat_id))
+            model_fallback = genai.GenerativeModel('gemini-pro')
+            res = model_fallback.generate_content(f"{prompt_instruction}\n\nUser Question: {input_value}")
+            if res and res.text:
+                bot.reply_to(message, res.text, reply_markup=get_main_menu_keyboard(chat_id))
                 return
-        except Exception as e:
-            print("AI Processing Error:", str(e))
+        except Exception as ex:
+            print("Gemini Fallback Error:", str(ex))
 
     not_found_msg = (
         "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
