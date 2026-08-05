@@ -1078,7 +1078,7 @@ def handle_approve_callback(call):
                 except:
                     pass
             
-            bot.answer_callback_query(call.id, "✅ Cus ထံ VPN Key ပို့ပေးလိုက်ပါပြီခင်ဗျာ။", show_alert=False)
+            bot.answer_callback_query(call.id, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။", show_alert=False)
     except Exception as e:
         print("Approve Error:", str(e))
         try:
