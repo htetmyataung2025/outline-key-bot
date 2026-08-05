@@ -999,10 +999,12 @@ def handle_back_to_plans(call):
 # Admin Server 1 / Server 2 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
 def handle_approve_callback(call):
-    bot.answer_callback_query(call.id, "⏳ Key ထုတ်ပေးနေပါသည်...")
-    
     lock_key = f"appr_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
+        try:
+            bot.answer_callback_query(call.id, "⚠️ ဒီ Key ကို ထုတ်ပေးပြီးပါပြီ။")
+        except:
+            pass
         return
 
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1044,7 +1046,8 @@ def handle_approve_callback(call):
             disp_gb = f"{1000 * months_count} GB" if plan_code == "ultimate" else f"{int(plan_info['data'].split()[0]) * months_count} GB"
         
         if vpn_key:
-            save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
+            if str(target_chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+                save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
 
             success_message = (
                 f"{action_title}\n\n"
@@ -1074,8 +1077,14 @@ def handle_approve_callback(call):
                     )
                 except:
                     pass
+            
+            bot.answer_callback_query(call.id, "✅ Cus ထံ VPN Key ပို့ပေးလိုက်ပါပြီခင်ဗျာ။", show_alert=False)
     except Exception as e:
         print("Approve Error:", str(e))
+        try:
+            bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
+        except:
+            pass
 
 # 📸 Photo Message Handler (Screenshot & Broadcast Photo Support)
 @bot.message_handler(content_types=['photo'])
@@ -1221,10 +1230,12 @@ def fetch_key_from_server(api_url, input_value):
 # 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
-    bot.answer_callback_query(call.id, "⏳ လုပ်ဆောင်နေပါသည်...")
-
     lock_key = f"repl_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
+        try:
+            bot.answer_callback_query(call.id, "⚠️ ဒီ တောင်းဆိုမှုကို လုပ်ဆောင်ပြီးပါပြီ။")
+        except:
+            pass
         return
 
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1242,6 +1253,7 @@ def handle_admin_replace_callback(call):
         
         try:
             bot.edit_message_text(call.message.text + "\n\n❌ <b>REJECTED</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=None)
+            bot.answer_callback_query(call.id, "❌ Key အစားထိုးခြင်းကို ငြင်းပယ်လိုက်ပါပြီ။", show_alert=False)
         except:
             pass
         return
@@ -1291,8 +1303,14 @@ def handle_admin_replace_callback(call):
                 bot.edit_message_text(call.message.text + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=None)
             except:
                 pass
+
+            bot.answer_callback_query(call.id, "✅ Key အသစ် အစားထိုး ပို့ပေးလိုက်ပါပြီခင်ဗျာ။", show_alert=False)
     except Exception as e:
         print("Replace Approve Error:", str(e))
+        try:
+            bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
+        except:
+            pass
 
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
