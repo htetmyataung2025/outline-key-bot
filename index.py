@@ -11,22 +11,11 @@ import json
 import html
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from google import genai
 
 app = Flask(__name__)
 
 # Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
-
-# 🤖 Gemini AI Configuration (Official GenAI SDK)
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6Ll8uZ1sdEIwECFjOcSK2LukvMwH5QV_7c7JLz9CckAng")
-
-ai_client = None
-if GEMINI_API_KEY:
-    try:
-        ai_client = genai.Client(api_key=GEMINI_API_KEY)
-    except Exception as e:
-        print("Gemini Config Error:", str(e))
 
 # 📢 Force Join Channel Configuration
 REQUIRED_CHANNEL = "@hefeature"
@@ -1089,7 +1078,7 @@ def handle_approve_callback(call):
                 except:
                     pass
             
-            bot.answer_callback_query(call.id, "✅ Cus ထံ VPN Key ပို့ပေးလိုက်ပါပြီခင်ဗျာ။", show_alert=False)
+            bot.answer_callback_query(call.id, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။", show_alert=False)
     except Exception as e:
         print("Approve Error:", str(e))
         try:
@@ -1118,6 +1107,7 @@ def handle_photo_messages(message):
         bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
 
         for uid in all_users:
+            # 💡 Admin ID ဖြစ်ပါက Broadcast စာ မပို့ဘဲ ကျော်မည်
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 continue
 
@@ -1268,6 +1258,7 @@ def handle_admin_replace_callback(call):
             pass
         return
 
+    # approve -> parts: ["replace", "srv1/srv2", old_server_num, old_key_id, target_chat_id, rem_gb, exp_date]
     new_server_num = "1" if parts[1] == "srv1" else "2"
     old_server_num = parts[2]
     old_key_id = parts[3]
@@ -1278,6 +1269,7 @@ def handle_admin_replace_callback(call):
     api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else OUTLINE_API_URL_2
     
     try:
+        # Key အဟောင်း ဖျက်မည်
         requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=8)
 
         chat_info = bot.get_chat(target_chat_id)
@@ -1285,6 +1277,7 @@ def handle_admin_replace_callback(call):
         user_last = chat_info.last_name if chat_info.last_name else ""
         user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
+        # ရွေးချယ်လိုက်သော Server တွင် Key အသစ်မွေးမည်
         new_key, new_key_name, expire_date = create_outline_key(
             new_server_num, 
             user_name, 
@@ -1329,7 +1322,7 @@ def handle_all_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # 📢 Admin Broadcast Text Handler
+    # 📢 Admin Broadcast Text Handler (စာသား သီးသန့် Broadcast ပို့ခြင်း - Admin များအား ကျော်မည်)
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
@@ -1338,6 +1331,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
 
         for uid in all_users:
+            # 💡 Admin ID ဖြစ်ပါက Broadcast စာ မပို့ဘဲ ကျော်မည်
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 continue
 
@@ -1350,7 +1344,6 @@ def handle_all_messages(message):
         bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nအောင်မြင်စွာ ရောက်ရှိသွားသော User အရေအတွက်: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
         return
 
-    # Standard Menu Buttons Check
     if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
         clear_all_states(chat_id)
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
@@ -1439,6 +1432,7 @@ def handle_all_messages(message):
         )
         return
 
+    # 📢 Admin သီးသန့် Broadcast စာပို့ရန် ခလုတ်
     if input_value == "📢 Broadcast စာပို့ရန်":
         clear_all_states(chat_id)
 
@@ -1653,7 +1647,6 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # Check VPN Key Format
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -1662,6 +1655,8 @@ def handle_all_messages(message):
         try:
             full_name = target_key.get("name", "HMA User")
             key_id = str(target_key.get("id"))
+            
+            date_matches = list(re.finditer(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name))
             
             display_name = full_name
             date_match_str = None
@@ -1677,6 +1672,7 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
+            # 💡 Admin စစ်ဆေးခြင်းဖြစ်ပါက Customer ရဲ့ Mapping Chat ID ကို ပြောင်းလဲခြင်း မပြုပါ
             if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 clean_mapping_name = display_name.strip().lower()
                 save_key_mapping(clean_mapping_name, chat_id)
@@ -1687,7 +1683,12 @@ def handle_all_messages(message):
                     day = int(e_parts[0])
                     month = int(e_parts[1])
                     year_str = e_parts[2]
-                    year = int("20" + year_str) if len(year_str) == 2 else int(year_str)
+                    
+                    if len(year_str) == 2:
+                        year = int("20" + year_str)
+                    else:
+                        year = int(year_str)
+                        
                     end_date = f"{day}.{month}.{year}"
                     has_date = True
                 except:
@@ -1720,38 +1721,6 @@ def handle_all_messages(message):
         except Exception as e:
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
             return
-
-    # 🤖 Official Google GenAI SDK Implementation
-    if ai_client:
-        try:
-            bot.send_chat_action(chat_id, 'typing')
-            is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-
-            if is_admin:
-                prompt_instruction = (
-                    "မင်းက H & E Feature VPN Bot ရဲ့ Developer / Business AI Partner ဖြစ်သည်။ "
-                    "မင်းနဲ့ စကားပြောနေသူမှာ Admin (သားကြီး) ဖြစ်သည်။ "
-                    "သူ့ကို ခင်မင်ရင်းနှီးစွာဖြင့် 'သားကြီး' အသုံးအနှုန်းသုံး၍ မြန်မာလို ပြန်ဖြေပေးပါ။ "
-                    "Python programming, VPS configuration, server setup နဲ့ business တိုင်ပင်မှုများကို တိကျစွာ အကူအညီပေးပါ။"
-                )
-            else:
-                prompt_instruction = (
-                    "မင်းက H & E Feature VPN ဝန်ဆောင်မှု၏ Customer Support AI Agent ဖြစ်သည်။ "
-                    "Customer မေးမြန်းသမျှကို အလွန်ယဉ်ကျေးပျူငှာစွာ မြန်မာဘာသာဖြင့် ပြန်လည်ဖြေကြားပေးပါ။ "
-                    "Outline VPN သုံးစွဲပုံ၊ iOS / Android / Windows များတွင် Key ထည့်သွင်းပုံ၊ VPN ချိတ်ဆက်မရပါက လိုက်လုပ်ရမည့် အဆင့်များကို ရှင်းပြပေးပါ။ "
-                    "အကူအညီလိုပါက '👨‍💻 Admin သို့ ဆက်သွယ်ရန်' ခလုတ်ကို နှိပ်၍ Admin ထံ စာပို့နိုင်ကြောင်း ညွှန်ပြပေးပါ။"
-                )
-
-            response = ai_client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=f"{prompt_instruction}\n\nUser Question: {input_value}"
-            )
-
-            if response and response.text:
-                bot.reply_to(message, response.text, reply_markup=get_main_menu_keyboard(chat_id))
-                return
-        except Exception as e:
-            print("Google GenAI Error:", str(e))
 
     not_found_msg = (
         "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
