@@ -11,25 +11,22 @@ import json
 import html
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-import google.generativeai as genai
+from google import genai
 
 app = Flask(__name__)
 
 # Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 
-# 🤖 Gemini AI Configuration
+# 🤖 Gemini AI Configuration (Official GenAI SDK)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6Ll8uZ1sdEIwECFjOcSK2LukvMwH5QV_7c7JLz9CckAng")
 
+ai_client = None
 if GEMINI_API_KEY:
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        ai_model = genai.GenerativeModel('gemini-1.5-flash')
+        ai_client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         print("Gemini Config Error:", str(e))
-        ai_model = None
-else:
-    ai_model = None
 
 # 📢 Force Join Channel Configuration
 REQUIRED_CHANNEL = "@hefeature"
@@ -1724,46 +1721,37 @@ def handle_all_messages(message):
             bot.reply_to(message, f"❌ ဒေတာတွက်ချက်မှု မှားယွင်းနေပါသည်- {str(e)}")
             return
 
-    # 🤖 AI Chatbot Engine
-    try:
-        bot.send_chat_action(chat_id, 'typing')
-        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-
-        if is_admin:
-            prompt_instruction = (
-                "မင်းက H & E Feature VPN Bot ရဲ့ Developer / Business AI Partner ဖြစ်သည်။ "
-                "မင်းနဲ့ စကားပြောနေသူမှာ Admin (သားကြီး) ဖြစ်သည်။ "
-                "သူ့ကို ခင်မင်ရင်းနှီးစွာဖြင့် 'သားကြီး' အသုံးအနှုန်းသုံး၍ မြန်မာလို ပြန်ဖြေပေးပါ။ "
-                "Python programming, VPS configuration, server setup နဲ့ business တိုင်ပင်မှုများကို တိကျစွာ အကူအညီပေးပါ။"
-            )
-        else:
-            prompt_instruction = (
-                "မင်းက H & E Feature VPN ဝန်ဆောင်မှု၏ Customer Support AI Agent ဖြစ်သည်။ "
-                "Customer မေးမြန်းသမျှကို အလွန်ယဉ်ကျေးပျူငှာစွာ မြန်မာဘာသာဖြင့် ပြန်လည်ဖြေကြားပေးပါ။ "
-                "Outline VPN သုံးစွဲပုံ၊ iOS / Android / Windows များတွင် Key ထည့်သွင်းပုံ၊ VPN ချိတ်ဆက်မရပါက လိုက်လုပ်ရမည့် အဆင့်များကို ရှင်းပြပေးပါ။ "
-                "အကူအညီလိုပါက '👨‍💻 Admin သို့ ဆက်သွယ်ရန်' ခလုတ်ကို နှိပ်၍ Admin ထံ စာပို့နိုင်ကြောင်း ညွှန်ပြပေးပါ။"
-            )
-
-        # Gemini Model Safe Call
-        model_instance = genai.GenerativeModel('gemini-1.5-flash')
-        full_prompt = f"{prompt_instruction}\n\nUser Question: {input_value}"
-        
-        response = model_instance.generate_content(full_prompt)
-
-        if response and response.text:
-            bot.reply_to(message, response.text, reply_markup=get_main_menu_keyboard(chat_id))
-            return
-    except Exception as e:
-        print("Gemini AI Error:", str(e))
-        # Fallback Model Try
+    # 🤖 Official Google GenAI SDK Implementation
+    if ai_client:
         try:
-            model_fallback = genai.GenerativeModel('gemini-pro')
-            res = model_fallback.generate_content(f"{prompt_instruction}\n\nUser Question: {input_value}")
-            if res and res.text:
-                bot.reply_to(message, res.text, reply_markup=get_main_menu_keyboard(chat_id))
+            bot.send_chat_action(chat_id, 'typing')
+            is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
+
+            if is_admin:
+                prompt_instruction = (
+                    "မင်းက H & E Feature VPN Bot ရဲ့ Developer / Business AI Partner ဖြစ်သည်။ "
+                    "မင်းနဲ့ စကားပြောနေသူမှာ Admin (သားကြီး) ဖြစ်သည်။ "
+                    "သူ့ကို ခင်မင်ရင်းနှီးစွာဖြင့် 'သားကြီး' အသုံးအနှုန်းသုံး၍ မြန်မာလို ပြန်ဖြေပေးပါ။ "
+                    "Python programming, VPS configuration, server setup နဲ့ business တိုင်ပင်မှုများကို တိကျစွာ အကူအညီပေးပါ။"
+                )
+            else:
+                prompt_instruction = (
+                    "မင်းက H & E Feature VPN ဝန်ဆောင်မှု၏ Customer Support AI Agent ဖြစ်သည်။ "
+                    "Customer မေးမြန်းသမျှကို အလွန်ယဉ်ကျေးပျူငှာစွာ မြန်မာဘာသာဖြင့် ပြန်လည်ဖြေကြားပေးပါ။ "
+                    "Outline VPN သုံးစွဲပုံ၊ iOS / Android / Windows များတွင် Key ထည့်သွင်းပုံ၊ VPN ချိတ်ဆက်မရပါက လိုက်လုပ်ရမည့် အဆင့်များကို ရှင်းပြပေးပါ။ "
+                    "အကူအညီလိုပါက '👨‍💻 Admin သို့ ဆက်သွယ်ရန်' ခလုတ်ကို နှိပ်၍ Admin ထံ စာပို့နိုင်ကြောင်း ညွှန်ပြပေးပါ။"
+                )
+
+            response = ai_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=f"{prompt_instruction}\n\nUser Question: {input_value}"
+            )
+
+            if response and response.text:
+                bot.reply_to(message, response.text, reply_markup=get_main_menu_keyboard(chat_id))
                 return
-        except Exception as ex:
-            print("Gemini Fallback Error:", str(ex))
+        except Exception as e:
+            print("Google GenAI Error:", str(e))
 
     not_found_msg = (
         "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
