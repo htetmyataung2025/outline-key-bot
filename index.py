@@ -66,6 +66,7 @@ REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
 REPLACEMENT_STATE_FILE = "/tmp/user_replacement_state.json"
 SALES_FILE = "/tmp/sales_history.json"
 ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
+REPLACEMENT_MSG_MAP_FILE = "/tmp/replacement_msg_map.json"
 BROADCAST_STATE_FILE = "/tmp/admin_broadcast_state.json"
 ALL_USERS_FILE = "/tmp/all_users.json"
 PROCESSED_CALLBACKS = set()
@@ -199,6 +200,24 @@ def get_admin_msg_map(target_chat_id):
     except:
         return {}
 
+def save_replacement_msg_map(request_key, admin_msg_dict):
+    try:
+        data = redis_get("replacement_msg_map") or {}
+        data[str(request_key)] = admin_msg_dict
+        redis_set("replacement_msg_map", data)
+    except:
+        pass
+
+def get_replacement_msg_map(request_key):
+    try:
+        data = redis_get("replacement_msg_map") or {}
+        if not data and os.path.exists(REPLACEMENT_MSG_MAP_FILE):
+            with open(REPLACEMENT_MSG_MAP_FILE, 'r') as f:
+                data = json.load(f)
+        return data.get(str(request_key), {})
+    except:
+        return {}
+
 def load_redeem_codes():
     data = redis_get("redeem_codes")
     if data is not None:
@@ -306,7 +325,7 @@ def get_force_join_keyboard():
 def send_force_join_message(chat_id):
     msg_text = (
         f"⚠️ <b>သတိပေးချက်:</b>\n\n"
-        f"Bot အား စတင်အသုံးပြုရန်အတွက် အောက်ပါ ကျွ်တော်ရဲ့ Telegram Channel ကို အရင်ဆုံး Join ပေးရန် လိုအပ်ပါသည်ခင်ဗျာ။\n\n"
+        f"Bot အား စတင်အသုံးပြုရန်အတွက် အောက်ပါ ကျွန်တော်ရဲ့Telegram Channel ကို အရင်ဆုံး Join ပေးရန် လိုအပ်ပါသည်ခင်ဗျာ။\n\n"
         f"👉 <b>Channel:</b> {REQUIRED_CHANNEL}\n\n"
         f"Channel Join ပြီးပါက <b>'✅ Join ပြီးပါပြီ (Verify)'</b> ခလုတ်ကို နှိပ်၍ အသုံးပြုနိုင်ပါပြီ။"
     )
@@ -412,7 +431,7 @@ def get_admin_count_keyboard(gb, days):
     markup = InlineKeyboardMarkup()
     markup.row(
         InlineKeyboardButton("1 ခု", callback_data=f"adm_cnt_{gb}_{days}_1"),
-        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_{days}_3")
+        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_{days}_5")
     )
     markup.row(
         InlineKeyboardButton("5 ခု", callback_data=f"adm_cnt_{gb}_{days}_5"),
@@ -1107,7 +1126,6 @@ def handle_photo_messages(message):
         bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
 
         for uid in all_users:
-            # 💡 Admin ID ဖြစ်ပါက Broadcast စာ မပို့ဘဲ ကျော်မည်
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 continue
 
@@ -1227,7 +1245,7 @@ def fetch_key_from_server(api_url, input_value):
         pass
     return None, None, None
 
-# 🔄 Admin Key Replacement Approval Callback Handler
+# 🔄 Admin Key Replacement Approval Callback Handler (Admin 2 ယောက်လုံး ဆီမှာ REPLACED / REJECTED တပြိုင်နက် ပြင်ပေးမည့် စနစ်)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
     lock_key = f"repl_{call.message.message_id}_{call.data}"
@@ -1246,19 +1264,33 @@ def handle_admin_replace_callback(call):
 
     if action == "reject":
         target_chat_id = parts[2]
+        request_key = f"{target_chat_id}_{parts[3] if len(parts) > 3 else ''}"
         try:
             bot.send_message(target_chat_id, "❌ <b>လူကြီးမင်း တောင်းဆိုထားသော Key အစားထိုးခြင်းအား Admin မှ ငြင်းပယ်လိုက်ပါသည်ခင်ဗျာ။ အသေးစိတ် သိရှိလိုပါက Admin ထံ တိုက်ရိုက် ဆက်သွယ်ပေးပါ။</b>", parse_mode="HTML")
         except:
             pass
         
+        repl_msg_map = get_replacement_msg_map(request_key)
+        for aid, mid in repl_msg_map.items():
+            try:
+                bot.edit_message_text(
+                    call.message.text + "\n\n❌ <b>REJECTED</b>",
+                    chat_id=aid,
+                    message_id=mid,
+                    parse_mode="HTML",
+                    reply_markup=None
+                )
+            except:
+                pass
+        
         try:
             bot.edit_message_text(call.message.text + "\n\n❌ <b>REJECTED</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=None)
-            bot.answer_callback_query(call.id, "❌ Key အစားထိုးခြင်းကို ငြင်းပယ်လိုက်ပါပြီ။", show_alert=False)
         except:
             pass
+            
+        bot.answer_callback_query(call.id, "❌ Key အစားထိုးခြင်းကို ငြင်းပယ်လိုက်ပါပြီ။", show_alert=False)
         return
 
-    # approve -> parts: ["replace", "srv1/srv2", old_server_num, old_key_id, target_chat_id, rem_gb, exp_date]
     new_server_num = "1" if parts[1] == "srv1" else "2"
     old_server_num = parts[2]
     old_key_id = parts[3]
@@ -1266,10 +1298,10 @@ def handle_admin_replace_callback(call):
     rem_gb = float(parts[5])
     exp_date = parts[6]
 
+    request_key = f"{target_chat_id}_{old_key_id}"
     api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else OUTLINE_API_URL_2
     
     try:
-        # Key အဟောင်း ဖျက်မည်
         requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=8)
 
         chat_info = bot.get_chat(target_chat_id)
@@ -1277,7 +1309,6 @@ def handle_admin_replace_callback(call):
         user_last = chat_info.last_name if chat_info.last_name else ""
         user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
-        # ရွေးချယ်လိုက်သော Server တွင် Key အသစ်မွေးမည်
         new_key, new_key_name, expire_date = create_outline_key(
             new_server_num, 
             user_name, 
@@ -1299,6 +1330,19 @@ def handle_admin_replace_callback(call):
             )
             bot.send_message(target_chat_id, success_msg, parse_mode="HTML")
             
+            repl_msg_map = get_replacement_msg_map(request_key)
+            for aid, mid in repl_msg_map.items():
+                try:
+                    bot.edit_message_text(
+                        call.message.text + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>",
+                        chat_id=aid,
+                        message_id=mid,
+                        parse_mode="HTML",
+                        reply_markup=None
+                    )
+                except:
+                    pass
+
             try:
                 bot.edit_message_text(call.message.text + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=None)
             except:
@@ -1322,7 +1366,7 @@ def handle_all_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # 📢 Admin Broadcast Text Handler (စာသား သီးသန့် Broadcast ပို့ခြင်း - Admin များအား ကျော်မည်)
+    # 📢 Admin Broadcast Text Handler
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
@@ -1331,7 +1375,6 @@ def handle_all_messages(message):
         bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
 
         for uid in all_users:
-            # 💡 Admin ID ဖြစ်ပါက Broadcast စာ မပို့ဘဲ ကျော်မည်
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 continue
 
@@ -1432,7 +1475,6 @@ def handle_all_messages(message):
         )
         return
 
-    # 📢 Admin သီးသန့် Broadcast စာပို့ရန် ခလုတ်
     if input_value == "📢 Broadcast စာပို့ရန်":
         clear_all_states(chat_id)
 
@@ -1519,13 +1561,20 @@ def handle_all_messages(message):
                     InlineKeyboardButton("📡 S2 Renew (S2 ပဲထားမည်)", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
                     InlineKeyboardButton("📡 S1 သို့ ပြောင်းမည် (S2 -> S1)", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
                 )
-            markup.row(InlineKeyboardButton("❌ Reject (ငြင်းပယ်မည်)", callback_data=f"replace_reject_{chat_id}"))
+            markup.row(InlineKeyboardButton("❌ Reject (ငြင်းပယ်မည်)", callback_data=f"replace_reject_{chat_id}_{key_id}"))
+
+            request_key = f"{chat_id}_{key_id}"
+            repl_msg_dict = {}
 
             for aid in ADMIN_CHAT_IDS:
                 try:
-                    bot.send_message(aid, alert_text, parse_mode="HTML", reply_markup=markup)
+                    sent_msg = bot.send_message(aid, alert_text, parse_mode="HTML", reply_markup=markup)
+                    if sent_msg:
+                        repl_msg_dict[str(aid)] = sent_msg.message_id
                 except:
                     pass
+
+            save_replacement_msg_map(request_key, repl_msg_dict)
 
             bot.send_message(chat_id, "✅ <b>Key အချက်အလက်များ တောင်းဆိုမှု အောင်မြင်ပါသည်။ Admin မှ စစ်ဆေး၍ Key အသစ် အမြန်ဆုံး လဲလှယ်ပေးပါမည်။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
             return
@@ -1647,6 +1696,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
+    # ⚡️ Data Usage Check (ကျန်ရှိသော Data တွက်ချက်ပြသသည့် စနစ် ပါဝင်သည်)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -1672,7 +1722,6 @@ def handle_all_messages(message):
             if not display_name:
                 display_name = "HMA Customer"
             
-            # 💡 Admin စစ်ဆေးခြင်းဖြစ်ပါက Customer ရဲ့ Mapping Chat ID ကို ပြောင်းလဲခြင်း မပြုပါ
             if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 clean_mapping_name = display_name.strip().lower()
                 save_key_mapping(clean_mapping_name, chat_id)
@@ -1697,22 +1746,33 @@ def handle_all_messages(message):
                 has_date = False
 
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+            plan_gb_val = bytes_to_gb(limit_bytes) if limit_bytes else 1000
+            plan_gb = f"{plan_gb_val} GB" if limit_bytes else "Unlimited"
+            
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
+            
+            # 🗃️ ကျန်ရှိသော Data တွက်ချက်ခြင်း
+            if limit_bytes:
+                rem_gb_val = max(0, round(plan_gb_val - usage_gb, 2))
+                rem_gb_str = f"{rem_gb_val} GB"
+            else:
+                rem_gb_str = "Unlimited"
             
             if has_date:
                 result_text = (
                     f"👤 အသုံးပြုသူ : {display_name}\n"
                     f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
                     f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}\n"
                     f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
                 )
             else:
                 result_text = (
                     f"👤 အသုံးပြုသူ : {display_name}\n"
                     f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB"
+                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}"
                 )
                 
             bot.reply_to(message, result_text, reply_markup=get_back_inline_keyboard())
