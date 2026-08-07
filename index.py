@@ -353,12 +353,12 @@ def clean_ss_url(url_str):
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
-    btn_check = KeyboardButton("⚡️ Data Usage စစ်ရန်")
-    btn_replace = KeyboardButton("🔄 Key လဲရန်")
+    btn_check = KeyboardButton("🧰 Data Usage စစ်ရန်")
+    btn_replace = KeyboardButton("♻️ Key လဲရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
-    btn_redeem = KeyboardButton("🎁 Redeem Code")
+    btn_redeem = KeyboardButton("🎟️ Redeem Code")
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
-    btn_refresh = KeyboardButton("🔄 Bot Refresh")
+    btn_refresh = KeyboardButton("🤖 Bot Refresh")
     
     markup.add(btn_buy, btn_check)
     markup.add(btn_replace, btn_refresh)
@@ -368,7 +368,7 @@ def get_main_menu_keyboard(chat_id=None):
     if chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
-        btn_gen_code = KeyboardButton("🎁 Gen RD Code")
+        btn_gen_code = KeyboardButton("🎟️ Gen RD Code")
         btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
         btn_broadcast = KeyboardButton("📢 Broadcast စာပို့ရန်")
         markup.add(btn_total_usage, btn_gen_code)
@@ -558,10 +558,10 @@ def get_servers_total_usage():
         f"📊 <b>SERVER DATA STATS REPORT</b>\n\n"
         f"📡 <b>Server 1 🇸🇬</b>\n"
         f"🔑 Total Keys: <b>{s1_total}</b>\n"
-        f"⚡️ Total Usage: <b>{s1_gb} GB</b>\n\n"
+        f"🧰 Total Usage: <b>{s1_gb} GB</b>\n\n"
         f"📡 <b>Server 2 🇸🇬</b>\n"
         f"🔑 Total Keys: <b>{s2_total}</b>\n"
-        f"⚡️ Total Usage: <b>{s2_gb} GB</b>\n"
+        f"🧰 Total Usage: <b>{s2_gb} GB</b>\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
@@ -620,7 +620,7 @@ def handle_back_to_gen_rd(call):
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     bot.edit_message_text(
-        "🎁 <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးပြု၍ ဖန်တီးလိုသော <b>GB ပမာဏ</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
+        "🎟️ <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးပြု၍ ဖန်တီးလိုသော <b>GB ပမာဏ</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="HTML",
@@ -675,7 +675,7 @@ def handle_view_key_detail(call):
                     f"👤 <b>Customer Information✅ </b>\n\n"
                     f"🤖 <b>Name:</b> {html.escape(full_name)}\n"
                     f"📡 <b>Server:</b> {server_name}\n"
-                    f"⚡️ <b>Data Usage :</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
+                    f"🧰 <b>Data Usage :</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
                     f"⏰ <b>Expired Date:</b> {end_date}\n"
                     f"🔑 <b>VPN Key Link:</b>\n\n"
                     f"<code>{final_key}</code>"
@@ -834,7 +834,7 @@ def handle_admin_gb_select(call):
     
     gb = call.data.replace("adm_gb_", "")
     bot.edit_message_text(
-        f"🎁 <b>{gb} GB</b> အတွက် သက်တမ်း (ရက်) ရွေးချယ်ပေးပါခင်ဗျာ:",
+        f"🎟️ <b>{gb} GB</b> အတွက် သက်တမ်း (ရက်) ရွေးချယ်ပေးပါခင်ဗျာ:",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="HTML",
@@ -852,7 +852,7 @@ def handle_admin_days_select(call):
     days = parts[3]
     
     bot.edit_message_text(
-        f"🎁 <b>{gb} GB ({days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?",
+        f"🎟️ <b>{gb} GB ({days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="HTML",
@@ -1322,7 +1322,7 @@ def handle_admin_replace_callback(call):
                 f"🎉 <b>လူကြီးမင်း၏ VPN Key ကို အဆင်ပြေစွာ အသစ် လဲလှယ်ပေးလိုက်ပါပြီခင်ဗျာ!</b>\n\n"
                 f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
                 f"📡 <b>Server အသစ်:</b> Server {new_server_num} 🇸🇬\n"
-                f"⚡️ <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n"
+                f"🧰 <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>VPN Key အသစ်:</b>\n\n"
                 f"<code>{new_key}</code>\n\n"
@@ -1392,7 +1392,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
         
-    if input_value in ["⚡️ Data Usage စစ်ရန်", "Data Usage စစ်ရန်", "⚡ Data Usage စစ်ရန်"]:
+    if input_value in ["🧰 Data Usage စစ်ရန်", "Data Usage စစ်ရန်", "⚡ Data Usage စစ်ရန်"]:
         clear_all_states(chat_id)
         check_guide = (
             "👇 ဝယ်ယူထားသော VPN Key ကို ဒီမှာ Paste ချပေးပါ:\n\n"
@@ -1401,11 +1401,11 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide, reply_markup=get_back_inline_keyboard())
         return
 
-    if input_value in ["🔄 Key လဲရန်", "Key အဆင်မပြေပါက လဲရန်"]:
+    if input_value in ["♻️ Key လဲရန်", "Key အဆင်မပြေပါက လဲရန်"]:
         clear_all_states(chat_id)
         set_replacement_state(chat_id, True)
         replace_guide = (
-            "🔄 <b>VPN Key အစားထိုး လဲလှယ်ရန်:</b>\n\n"
+            "♻️ <b>VPN Key အစားထိုး လဲလှယ်ရန်:</b>\n\n"
             "👇 အဆင်မပြေ ဖြစ်နေသော VPN Key (<code>ss://...</code>) ကို ဒီ Chat ထဲသို့ Paste ချ ပေးပို့ပေးပါခင်ဗျာ။\n"
             "<i>(Bot မှ ကျန်ရှိသော ရက်/Data များကို စစ်ဆေး၍ Admin ထံ အစားထိုး တောင်းဆိုပေးပါမည်။)</i>"
         )
@@ -1423,7 +1423,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, free_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
-    if input_value in ["🎁 Redeem Code", "Redeem Code"]:
+    if input_value in ["🎟️ Redeem Code", "Redeem Code"]:
         clear_all_states(chat_id)
         
         if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1432,7 +1432,7 @@ def handle_all_messages(message):
 
         set_redeem_state(chat_id, True)
         redeem_guide = (
-            "🎁 <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
+            "🎟️ <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
             "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>H&E-50GB-XXXXXX</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
         )
         bot.send_message(chat_id, redeem_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
@@ -1461,7 +1461,7 @@ def handle_all_messages(message):
         )
         return
 
-    if input_value == "🎁 Gen RD Code":
+    if input_value == "🎟️ Gen RD Code":
         clear_all_states(chat_id)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
@@ -1469,7 +1469,7 @@ def handle_all_messages(message):
         
         bot.send_message(
             chat_id, 
-            "🎁 <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးပြု၍ ဖန်တီးလိုသော <b>GB ပမာဏ</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:", 
+            "🎟️ <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးပြု၍ ဖန်တီးလိုသော <b>GB ပမာဏ</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:", 
             parse_mode="HTML", 
             reply_markup=get_admin_gb_keyboard()
         )
@@ -1541,12 +1541,12 @@ def handle_all_messages(message):
             username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
 
             alert_text = (
-                f"🔄 <b>KEY REPLACEMENT REQUEST</b>\n\n"
+                f"♻️ <b>KEY REPLACEMENT REQUEST</b>\n\n"
                 f"👤 ဝယ်ယူသူ: {user_name} ({username})\n"
                 f"🆔 Chat ID: <code>{chat_id}</code>\n"
                 f"📡 လက်ရှိ Server: Server {server_num}\n"
                 f"🔑 Key အဟောင်း: {full_name}\n"
-                f"⚡️ ကျန်ရှိ Data: <b>{rem_gb} GB</b> / {total_gb} GB\n"
+                f"🧰 ကျန်ရှိ Data: <b>{rem_gb} GB</b> / {total_gb} GB\n"
                 f"⏰ သက်တမ်းကုန်ရက်: <b>{exp_date}</b>"
             )
 
@@ -1615,7 +1615,7 @@ def handle_all_messages(message):
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
                     f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
-                    f"🎁 <b>ရရှိသော Data GB:</b> {gb_val} GB\n"
+                    f"🎟️ <b>ရရှိသော Data GB:</b> {gb_val} GB\n"
                     f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                     f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                     f"<code>{vpn_key}</code>\n\n"
@@ -1630,7 +1630,7 @@ def handle_all_messages(message):
                     try:
                         bot.send_message(
                             aid, 
-                            f"🎁 <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
+                            f"🎟️ <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
                             parse_mode="HTML"
                         )
                     except:
@@ -1665,10 +1665,10 @@ def handle_all_messages(message):
         bot.send_message(chat_id, rev_report, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
-    if input_value in ["🔄 Bot Refresh", "/refresh"]:
+    if input_value in ["🤖 Bot Refresh", "/refresh"]:
         clear_all_states(chat_id)
         refresh_text = (
-            "🔄 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
+            "🤖 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>\n\n"
             "✨ Update စနစ်သစ်ဖြင့် စတင် အသုံးပြုနိုင်ပါပြီ။"
         )
         bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
@@ -1763,7 +1763,7 @@ def handle_all_messages(message):
                 result_text = (
                     f"👤 အသုံးပြုသူ : {display_name}\n"
                     f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
                     f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}\n"
                     f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
                 )
@@ -1771,7 +1771,7 @@ def handle_all_messages(message):
                 result_text = (
                     f"👤 အသုံးပြုသူ : {display_name}\n"
                     f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"⚡️ အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
                     f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}"
                 )
                 
@@ -1784,7 +1784,7 @@ def handle_all_messages(message):
 
     not_found_msg = (
         "❌ <b>ခွင့်လွှတ်ပါဗျာ၊ တစ်ခုခုမှားနေပါတယ်ခင်ဗျာ။</b>\n\n"
-        "💡 <i> Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🔄 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
+        "💡 <i> Menu ခလုတ်များ အလုပ်မလုပ်ပါက သို့မဟုတ် Refresh လုပ်လိုပါက အောက်ပါ '🤖 Bot Refresh' ခလုတ် သို့မဟုတ် /start ကို နှိပ်ပေးပါခင်ဗျာ။</i>"
     )
     bot.reply_to(message, not_found_msg, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
 
