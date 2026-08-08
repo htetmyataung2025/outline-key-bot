@@ -565,12 +565,19 @@ def get_servers_total_usage():
     )
     return report
 
+# 🛠️ ဤနေရာတွင် Customer ရှာဖွေမှု အဆင်ပြေစေရန် ပြင်ဆင်ထားပါသည်
 def search_users_by_query(query):
     query_clean = query.strip().lower()
     markup = InlineKeyboardMarkup()
     found_matches = []
 
-    for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2)]:
+    # API URL များ စနစ်တကျ လှမ်းယူခြင်း
+    api_url_1 = os.environ.get("OUTLINE_API_URL_1") or OUTLINE_API_URL_1
+    api_url_2 = os.environ.get("OUTLINE_API_URL_2") or OUTLINE_API_URL_2
+
+    for server_num, api_url in [("1", api_url_1), ("2", api_url_2)]:
+        if not api_url:
+            continue
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             if res.status_code == 200:
@@ -579,14 +586,11 @@ def search_users_by_query(query):
                     k_name = k.get("name", "").strip()
                     k_name_lower = k_name.lower()
 
-                    if len(query_clean) == 1:
-                        if k_name_lower.startswith(query_clean):
-                            found_matches.append((server_num, str(k.get("id")), k_name))
-                    else:
-                        if query_clean in k_name_lower:
-                            found_matches.append((server_num, str(k.get("id")), k_name))
-        except:
-            pass
+                    # စာလုံး ၁ လုံးတည်းဖြစ်စေ၊ အပြည့်ဖြစ်စေ နာမည်ထဲပါရင် အကုန်ရှာတွေ့အောင် ပြုလုပ်ခြင်း
+                    if query_clean in k_name_lower:
+                        found_matches.append((server_num, str(k.get("id")), k_name))
+        except Exception as e:
+            print(f"Search Server {server_num} Error:", str(e))
 
     for server_num, key_id, k_name in found_matches[:30]:
         srv_icon = "📡 S1🇸🇬" if server_num == "1" else "📡 S2🇸🇬"
