@@ -14,14 +14,15 @@ from dateutil.relativedelta import relativedelta
 
 app = Flask(__name__)
 
-# Token & API Configuration (Vercel Env မရှိရင် မူရင်း Key ဖြင့် Fallback အလုပ်လုပ်မည်)
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU")
-OUTLINE_API_URL_1 = os.environ.get("OUTLINE_API_URL_1", "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ")
-OUTLINE_API_URL_2 = os.environ.get("OUTLINE_API_URL_2", "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA")
-
+# Token & API Configuration
+TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 
 # 📢 Force Join Channel Configuration
 REQUIRED_CHANNEL = "@hefeature"
+
+# 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ
+OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
+OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
 # 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
