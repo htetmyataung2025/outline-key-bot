@@ -721,21 +721,47 @@ def handle_admin_del_key(call):
     elif action == "cancel":
         bot.edit_message_text("❌ Key ဖျက်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီခင်ဗျာ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
 
-def get_user_key_count(user_name):
-    count = 0
+# 💡 လက်ရှိရှိပြီးသား Key များထဲမှ အကြီးဆုံး ဂဏန်း (Number) ကို ရှာပေးမည့် စနစ်
+def get_user_next_key_number(user_name, target_chat_id=None):
+    max_num = 0
+    found_any = False
     clean_user = user_name.strip().lower()
+
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
         try:
-            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
             if res.status_code == 200:
                 keys = res.json().get("accessKeys", [])
                 for k in keys:
-                    k_name = k.get("name", "").lower()
-                    if clean_user in k_name:
-                        count += 1
+                    k_name = k.get("name", "")
+                    k_name_lower = k_name.lower()
+
+                    # Chat ID သို့မဟုတ် User Name ပါမပါ စစ်မည်
+                    if (target_chat_id and f"({target_chat_id})" in k_name) or (clean_user in k_name_lower):
+                        found_any = True
+                        # နာမည်ထဲက (1), (2), (9) စတဲ့ ဂဏန်းများကို ရှာယူမည်
+                        num_match = re.search(r'\((\d+)\)\s*\d{1,2}\.\d{1,2}\.', k_name)
+                        if not num_match:
+                            num_match = re.search(r'\((\d+)\)', k_name)
+
+                        if num_match:
+                            try:
+                                val = int(num_match.group(1))
+                                # Chat ID မဟုတ်သော နာမည်ခွဲ ဂဏန်းများကိုပဲ ယူမည်
+                                if str(val) != str(target_chat_id):
+                                    if val > max_num:
+                                        max_num = val
+                            except:
+                                pass
         except:
             pass
-    return count
+
+    if not found_any:
+        return 0, 1  # Key လုံးဝ မရှိသေးပါ
+    elif max_num == 0:
+        return 1, 2  # Key ၁ ခုရှိသော်လည်း ဂဏန်း တပ်မထားသေးပါ (နောက်တစ်ခုကို (2) ပေးမည်)
+    else:
+        return max_num, max_num + 1 # အကြီးဆုံးဂဏန်း၏ နောက်တစ်ဂဏန်း (ဥပမာ 9 -> 10)
 
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
@@ -790,15 +816,15 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     else:
         expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
     
-    existing_count = get_user_key_count(user_name)
+    # 💡 အကြီးဆုံး ဂဏန်းကို စစ်ဆေး၍ နောက်ဂဏန်း တပ်ဆင်ခြင်း
+    curr_max, next_number = get_user_next_key_number(user_name, target_chat_id)
     id_str = f" ({target_chat_id})" if target_chat_id else ""
     gw_str = " [GW]" if is_giveaway else ""
     
-    if existing_count == 0:
+    if curr_max == 0:
         key_name = f"{user_name}{id_str}{gw_str} {expire_date}"
     else:
-        key_number = existing_count + 1
-        key_name = f"{user_name}{id_str}{gw_str} ({key_number}) {expire_date}"
+        key_name = f"{user_name}{id_str}{gw_str} ({next_number}) {expire_date}"
     
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     
