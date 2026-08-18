@@ -166,7 +166,7 @@ def load_sales_history():
 
 def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int):
     sales = load_sales_history()
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)  # MMT Timezone
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
     sale_data = {
         "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
         "date": now.strftime("%Y-%m-%d"),
@@ -866,8 +866,9 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
             limit_bytes = None
             if custom_gb:
                 limit_bytes = int(custom_gb * 1000**3)
-            elif plan_info:
-                limit_bytes = plan_info.get("bytes") * months_count
+            elif plan_info and isinstance(plan_info, dict):
+                p_bytes = plan_info.get("bytes", 25 * 1000**3)
+                limit_bytes = p_bytes * months_count
 
             if limit_bytes:
                 requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
@@ -875,6 +876,8 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
             raw_access_url = key_data.get("accessUrl", "")
             final_key = f"{raw_access_url}#{key_name}"
             return final_key, key_name, expire_date
+        else:
+            print("Create Outline Key API Error Status:", res.status_code, res.text)
     except Exception as e:
         print("Key Generation Error:", e)
     return None, None, None
@@ -1319,8 +1322,12 @@ def handle_photo_messages(message):
         save_used_trx_id(trx_id)
         
         server_num = "1"
+        vpn_key = None
+        key_name = None
+        expire_date = None
+
         if plan_code == "ultimate":
-            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id=chat_id, months_count=months_count)
+            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=months_count)
             action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
             disp_gb = f"{1000 * months_count} GB"
         else:
