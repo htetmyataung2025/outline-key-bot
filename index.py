@@ -906,8 +906,17 @@ def parse_slip_ocr(file_path):
         print("OCR API Error:", e)
     return ""
 
+def convert_myanmar_digits_to_english(text):
+    if not text:
+        return ""
+    mm_digits = "၀၁၂၃၄၅၆၇၈၉"
+    en_digits = "0123456789"
+    trans_table = str.maketrans(mm_digits, en_digits)
+    return text.translate(trans_table)
+
 def extract_transaction_id(text):
-    clean_text = text.replace(" ", "").replace("-", "")
+    converted_text = convert_myanmar_digits_to_english(text)
+    clean_text = converted_text.replace(" ", "").replace("-", "")
     match_wave = re.search(r'(?:Trx|Transaction|လုပ်ဆောင်ချက်).*?([0-9]{8,15})', clean_text, re.IGNORECASE)
     if match_wave:
         return match_wave.group(1)
@@ -923,9 +932,12 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
     if not ocr_text:
         return False, "OCR မဖတ်နိုင်ပါ", None, "UNKNOWN"
 
-    lower_text = ocr_text.lower()
+    # မြန်မာဂဏန်းများကို အင်္ဂလိပ်ဂဏန်းသို့ အရင်ပြောင်းလဲခြင်း
+    ocr_text_normalized = convert_myanmar_digits_to_english(ocr_text)
+    lower_text = ocr_text_normalized.lower()
+
     method = "UNKNOWN"
-    if "wave" in lower_text or "လုပ်ဆောင်ချက်" in ocr_text or "အယ်လ်ဘမ်" in ocr_text:
+    if "wave" in lower_text or "လုပ်ဆောင်ချက်" in ocr_text or "အယ်လ်ဘမ်" in ocr_text or "အောင်မြင်ပါသည်" in ocr_text:
         method = "WAVEPAY"
     elif "kbz" in lower_text or "kpay" in lower_text or "transfer" in lower_text:
         method = "KPAY"
@@ -934,32 +946,30 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
     elif "uab" in lower_text:
         method = "UABPAY"
 
-    # ၁။ လက်ခံသူ အကောင့် / ဖုန်းနံပါတ် / နာမည် စစ်ဆေးခြင်း (WavePay နှင့် KBZPay ပုံစံအားလုံး ပိုမိုစုံလင်စွာ ထည့်သွင်းထားသည်)
+    # ၁။ လက်ခံသူ အကောင့် / ဖုန်းနံပါတ် / နာမည် စစ်ဆေးခြင်း
     receiver_matched = False
     for ph in MY_PAYMENT_PHONES:
-        if ph in ocr_text.replace(" ", "").replace("-", ""):
+        if ph in ocr_text_normalized.replace(" ", "").replace("-", ""):
             receiver_matched = True
             break
             
     if not receiver_matched:
-        # နာမည် စာလုံးပေါင်း အနည်းငယ် လွဲမှားဖတ်မိခြင်းများကိုပါ ခြုံငုံစစ်ဆေးခြင်း
         name_keywords = ["htet", "myat", "aung", "mg htet", "myataung", "htetmyataung", "het", "htat"]
         matched_kw_count = sum(1 for kw in name_keywords if kw in lower_text)
         if matched_kw_count >= 1:
             receiver_matched = True
-            
-    # WavePay ပြေစာ အမှတ်အသားများ ပါဝင်နေပါက
+
     if not receiver_matched and (method == "WAVEPAY" or "လုပ်ဆောင်ချက်အိုင်ဒီ" in ocr_text or "အောင်မြင်ပါသည်" in ocr_text):
         receiver_matched = True
 
     if not receiver_matched:
         return False, "လက်ခံသူ အကောင့်နံပါတ် (သို့မဟုတ်) နာမည် မကိုက်ညီပါ", None, method
 
-    # ၂။ လွှဲငွေ ပမာဏ စစ်ဆေးခြင်း
+    # ၂။ လွှဲငွေ ပမာဏ စစ်ဆေးခြင်း (မြန်မာဂဏန်း/အင်္ဂလိပ်ဂဏန်း နှစ်မျိုးလုံး စစ်ဆေးပေးသည်)
     amount_matched = False
     price_str = str(expected_amount)
     
-    clean_nums = re.findall(r'\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b', ocr_text)
+    clean_nums = re.findall(r'\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b', ocr_text_normalized)
     for num in clean_nums:
         val_clean = num.replace(",", "").split(".")[0]
         if str(val_clean) == price_str:
@@ -967,14 +977,14 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
             break
             
     if not amount_matched:
-        clean_all_digits = re.sub(r'[^0-9]', '', ocr_text)
+        clean_all_digits = re.sub(r'[^0-9]', '', ocr_text_normalized)
         if price_str in clean_all_digits:
             amount_matched = True
 
     if not amount_matched:
         return False, f"လွှဲငွေ ပမာဏ ({expected_amount:,} Ks) မကိုက်ညီပါ", None, method
 
-    # ၃။ Transaction ID စစ်ဆေးခြင်း (Admin စမ်းသပ်ပါက Trx ID တူနေသော်လည်း အမြဲခွင့်ပြုမည်)
+    # ၃။ Transaction ID စစ်ဆေးခြင်း
     trx_id = extract_transaction_id(ocr_text)
     if trx_id:
         used_trx = load_used_trx_ids()
