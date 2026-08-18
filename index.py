@@ -212,8 +212,8 @@ def save_replacement_msg_map(request_key, admin_msg_dict):
 def get_replacement_msg_map(request_key):
     try:
         data = redis_get("replacement_msg_map") or {}
-        if not data and os.path.exists(REPLACEMENT_MSG_MAP_FILE):
-            with open(REPLACEMENT_MSG_MAP_FILE, 'r') as f:
+        if not data and os.path.exists(REPLACEMENT_MSG_FILE):
+            with open(REPLACEMENT_MSG_FILE, 'r') as f:
                 data = json.load(f)
         return data.get(str(request_key), {})
     except:
@@ -898,21 +898,26 @@ def parse_slip_ocr(file_path):
         print("OCR API Error:", e)
     return ""
 
-def convert_myanmar_digits_to_english(text):
+def clean_ocr_text_thoroughly(text):
     if not text:
         return ""
-    # မြန်မာဂဏန်း (Unicode + Zawgyi)
+    # မြန်မာဂဏန်းများ အင်္ဂလိပ်ဂဏန်းပြောင်းခြင်း
     mm_map = {
         '၀': '0', '၁': '1', '၂': '2', '၃': '3', '၄': '4',
-        '၅': '5', '၆': '6', '၇': '7', '၈': '8', '၉': '9',
-        'O': '0', 'o': '0'
+        '၅': '5', '၆': '6', '၇': '7', '၈': '8', '၉': '9'
     }
     for mm_char, en_char in mm_map.items():
         text = text.replace(mm_char, en_char)
+
+    # OCR အမှားများ (letter o/O ကို 0 ပြောင်းခြင်း၊ )/J/] ကို 1 ပြောင်းခြင်း)
+    text = re.sub(r'([oO]{2,})', lambda m: '0' * len(m.group(1)), text)
+    text = re.sub(r'(?<=\d)[oO]', '0', text)
+    text = re.sub(r'[oO](?=\d)', '0', text)
+    text = re.sub(r'[\)\]\>Ijl]\s*[,.\s]?\s*(000)', r'1,\1', text)
     return text
 
 def extract_transaction_id(text):
-    converted_text = convert_myanmar_digits_to_english(text)
+    converted_text = clean_ocr_text_thoroughly(text)
     clean_text = converted_text.replace(" ", "").replace("-", "")
     match_wave = re.search(r'(?:Trx|Transaction|လုပ်ဆောင်ချက်).*?([0-9]{8,15})', clean_text, re.IGNORECASE)
     if match_wave:
@@ -929,8 +934,8 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
     if not ocr_text:
         return False, "OCR မဖတ်နိုင်ပါ", None, "UNKNOWN"
 
-    ocr_text_normalized = convert_myanmar_digits_to_english(ocr_text)
-    lower_text = ocr_text_normalized.lower()
+    norm_text = clean_ocr_text_thoroughly(ocr_text)
+    lower_text = norm_text.lower()
 
     method = "UNKNOWN"
     if "wave" in lower_text or "လုပ်ဆောင်ချက်" in ocr_text or "အယ်လ်ဘမ်" in ocr_text or "အောင်မြင်ပါသည်" in ocr_text:
@@ -945,7 +950,7 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
     # ၁။ လက်ခံသူ အကောင့် / ဖုန်းနံပါတ် / နာမည် စစ်ဆေးခြင်း
     receiver_matched = False
     for ph in MY_PAYMENT_PHONES:
-        if ph in ocr_text_normalized.replace(" ", "").replace("-", ""):
+        if ph in norm_text.replace(" ", "").replace("-", ""):
             receiver_matched = True
             break
             
@@ -961,13 +966,13 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
     if not receiver_matched:
         return False, "လက်ခံသူ အကောင့်နံပါတ် (သို့မဟုတ်) နာမည် မကိုက်ညီပါ", None, method
 
-    # ၂။ လွှဲငွေ ပမာဏ စစ်ဆေးခြင်း (1000, 1,000, 1,000.00, ၁,၀၀၀, ၁၀၀၀ အကုန်စစ်ဆေးပေးသည်)
+    # ၂။ လွှဲငွေ ပမာဏ စစ်ဆေးခြင်း (WavePay / KPay မြန်မာ/အင်္ဂလိပ် Format အားလုံး စစ်နိုင်သည်)
     amount_matched = False
     price_int = int(expected_amount)
-    price_str = str(price_int)
+    price_thousands = price_int // 1000
 
-    # စာလုံးတွေထဲက ဂဏန်းတန်ဖိုးတွေကို အကုန်ဆွဲထုတ်ပြီး စစ်ဆေးခြင်း
-    extracted_tokens = re.findall(r'[\d,]+(?:\.\d+)?', ocr_text_normalized)
+    # နည်းလမ်း A: ဂဏန်းပုံစံ အတိအကျ ရှာခြင်း
+    extracted_tokens = re.findall(r'[\d,]+(?:\.\d+)?', norm_text)
     for token in extracted_tokens:
         clean_num = token.replace(",", "")
         try:
@@ -978,9 +983,16 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
         except:
             pass
 
+    # နည်းလမ်း B: Regex ပုံစံဖြင့် 1,000 / 1000 / 1.000 / ),000 အားလုံး ရှာခြင်း
     if not amount_matched:
-        clean_all_digits = re.sub(r'[^0-9]', '', ocr_text_normalized)
-        if price_str in clean_all_digits:
+        amt_regex = rf'(?:{price_thousands}|[\)\]\>Ijl1])[\s,.\-_]?000'
+        if re.search(amt_regex, norm_text, re.IGNORECASE):
+            amount_matched = True
+
+    # နည်းလမ်း C: ဂဏန်းသီးသန့် ဆွဲထုတ်ပြီး စစ်ဆေးခြင်း
+    if not amount_matched:
+        only_digits = re.sub(r'[^0-9]', '', norm_text)
+        if str(price_int) in only_digits:
             amount_matched = True
 
     if not amount_matched:
