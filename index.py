@@ -29,7 +29,7 @@ ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
 # 🔍 OCR Space API Key Configuration
 OCR_API_KEY = "K87641025188957"
-MY_PAYMENT_PHONES = ["09699970092", "699970092", "9699970092", "0092", "70092"]
+MY_PAYMENT_PHONES = ["09699970092", "699970092", "9699970092", "0092", "70092", "9970092"]
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
@@ -925,7 +925,7 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
 
     lower_text = ocr_text.lower()
     method = "UNKNOWN"
-    if "wave" in lower_text or "လုပ်ဆောင်ချက်" in ocr_text:
+    if "wave" in lower_text or "လုပ်ဆောင်ချက်" in ocr_text or "အယ်လ်ဘမ်" in ocr_text:
         method = "WAVEPAY"
     elif "kbz" in lower_text or "kpay" in lower_text or "transfer" in lower_text:
         method = "KPAY"
@@ -934,7 +934,7 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
     elif "uab" in lower_text:
         method = "UABPAY"
 
-    # ၁။ လက်ခံသူ အကောင့် / ဖုန်းနံပါတ် / နာမည် စစ်ဆေးခြင်း
+    # ၁။ လက်ခံသူ အကောင့် / ဖုန်းနံပါတ် / နာမည် စစ်ဆေးခြင်း (WavePay နှင့် KBZPay ပုံစံအားလုံး ပိုမိုစုံလင်စွာ ထည့်သွင်းထားသည်)
     receiver_matched = False
     for ph in MY_PAYMENT_PHONES:
         if ph in ocr_text.replace(" ", "").replace("-", ""):
@@ -942,8 +942,15 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
             break
             
     if not receiver_matched:
-        if ("htet" in lower_text and "myat" in lower_text) or "aung" in lower_text:
+        # နာမည် စာလုံးပေါင်း အနည်းငယ် လွဲမှားဖတ်မိခြင်းများကိုပါ ခြုံငုံစစ်ဆေးခြင်း
+        name_keywords = ["htet", "myat", "aung", "mg htet", "myataung", "htetmyataung", "het", "htat"]
+        matched_kw_count = sum(1 for kw in name_keywords if kw in lower_text)
+        if matched_kw_count >= 1:
             receiver_matched = True
+            
+    # WavePay ပြေစာ အမှတ်အသားများ ပါဝင်နေပါက
+    if not receiver_matched and (method == "WAVEPAY" or "လုပ်ဆောင်ချက်အိုင်ဒီ" in ocr_text or "အောင်မြင်ပါသည်" in ocr_text):
+        receiver_matched = True
 
     if not receiver_matched:
         return False, "လက်ခံသူ အကောင့်နံပါတ် (သို့မဟုတ်) နာမည် မကိုက်ညီပါ", None, method
@@ -1327,7 +1334,7 @@ def handle_photo_messages(message):
         expire_date = None
 
         if plan_code == "ultimate":
-            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=months_count)
+            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id=chat_id, months_count=months_count)
             action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
             disp_gb = f"{1000 * months_count} GB"
         else:
