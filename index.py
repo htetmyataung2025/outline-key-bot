@@ -916,7 +916,7 @@ def extract_transaction_id(text):
         return match_gen.group(1)
     return None
 
-def verify_payment_slip_ocr(ocr_text, expected_amount):
+def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
     if not ocr_text:
         return False, "OCR မဖတ်နိုင်ပါ", None, "UNKNOWN"
 
@@ -964,11 +964,12 @@ def verify_payment_slip_ocr(ocr_text, expected_amount):
     if not amount_matched:
         return False, f"လွှဲငွေ ပမာဏ ({expected_amount:,} Ks) မကိုက်ညီပါ", None, method
 
-    # ၃။ Transaction ID စစ်ဆေးခြင်း
+    # ၃။ Transaction ID စစ်ဆေးခြင်း (Admin စမ်းသပ်ပါက Trx ID တူနေသော်လည်း အမြဲခွင့်ပြုမည်)
     trx_id = extract_transaction_id(ocr_text)
     if trx_id:
         used_trx = load_used_trx_ids()
-        if str(trx_id) in used_trx:
+        is_admin = chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
+        if str(trx_id) in used_trx and not is_admin:
             return False, f"ဤ ပြေစာ (Trx ID: {trx_id}) အား အသုံးပြုပြီးသား ဖြစ်နေပါသည်", trx_id, method
 
     return True, "Verified Successfully", trx_id, method
@@ -1311,7 +1312,7 @@ def handle_photo_messages(message):
     
     photo_file = bot.get_file(message.photo[-1].file_id)
     ocr_raw_text = parse_slip_ocr(photo_file.file_path)
-    is_verified, reason, trx_id, pay_method = verify_payment_slip_ocr(ocr_raw_text, price_int)
+    is_verified, reason, trx_id, pay_method = verify_payment_slip_ocr(ocr_raw_text, price_int, chat_id=chat_id)
 
     # 🟢 Auto-Approved အောင်မြင်ပါက Key အလိုအလျောက် တန်းထုတ်ပေးမည်
     if is_verified:
