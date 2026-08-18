@@ -24,7 +24,7 @@ REQUIRED_CHANNEL = "@hefeature"
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
-# 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
+# 🔑 Admin Telegram Chat IDs
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
 # 🔍 OCR Space API Key Configuration
@@ -34,7 +34,7 @@ MY_PAYMENT_PHONES = ["09699970092", "699970092", "9699970092", "0092", "70092", 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# 🌐 Vercel Upstash Redis REST API Setup (Permanently Data သိမ်းရန်)
+# 🌐 Vercel Upstash Redis REST API Setup
 KV_URL = os.environ.get("KV_REST_API_URL")
 KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
 
@@ -60,7 +60,6 @@ def redis_set(key, value):
     except:
         return False
 
-# Temp Files & Redis Fallback Configs
 STATE_FILE = "/tmp/user_plans.json"
 MAPPING_FILE = "/tmp/key_mappings.json"
 REDEEM_FILE = "/tmp/redeem_codes.json"
@@ -76,7 +75,6 @@ ALL_USERS_FILE = "/tmp/all_users.json"
 USED_TRX_FILE = "/tmp/used_trx_ids.json"
 PROCESSED_CALLBACKS = set()
 
-# Lock Check Function
 def is_callback_processed(call_id):
     if call_id in PROCESSED_CALLBACKS:
         return True
@@ -85,7 +83,6 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 📢 Bot သုံးဖူးသော User အားလုံး၏ Chat ID ကို မှတ်သားသည့် စနစ်
 def save_user_id(chat_id):
     users = redis_get("all_users") or []
     if str(chat_id) not in [str(u) for u in users]:
@@ -98,7 +95,6 @@ def load_all_users():
         return data
     return []
 
-# 📢 Broadcast State
 def set_broadcast_state(chat_id, is_waiting=True):
     states = redis_get("admin_broadcast_state") or {}
     states[str(chat_id)] = is_waiting
@@ -628,7 +624,6 @@ def search_users_by_query(query):
 
     return found_matches, markup
 
-# 🔙 Back to Main Menu Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
 def handle_back_to_main_callback(call):
     chat_id = call.message.chat.id
@@ -644,7 +639,6 @@ def handle_back_to_main_callback(call):
     )
     bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
 
-# 🔙 Admin Back to Gen RD Code Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_gen_rd")
 def handle_back_to_gen_rd(call):
     bot.answer_callback_query(call.id)
@@ -752,7 +746,6 @@ def handle_admin_del_key(call):
     elif action == "cancel":
         bot.edit_message_text("❌ Key ဖျက်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီခင်ဗျာ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
 
-# 💡 လက်ရှိရှိပြီးသား Key များထဲမှ အကြီးဆုံး ဂဏန်း (Number) ကို ရှာပေးမည့် စနစ်
 def get_user_next_key_number(user_name, target_chat_id=None):
     max_num = 0
     found_any = False
@@ -882,7 +875,6 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
         print("Key Generation Error:", e)
     return None, None, None
 
-# 🔍 OCR Space Direct File Upload Function
 def parse_slip_ocr(file_path):
     try:
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
@@ -909,10 +901,15 @@ def parse_slip_ocr(file_path):
 def convert_myanmar_digits_to_english(text):
     if not text:
         return ""
-    mm_digits = "၀၁၂၃၄၅၆၇၈၉"
-    en_digits = "0123456789"
-    trans_table = str.maketrans(mm_digits, en_digits)
-    return text.translate(trans_table)
+    # မြန်မာဂဏန်း (Unicode + Zawgyi)
+    mm_map = {
+        '၀': '0', '၁': '1', '၂': '2', '၃': '3', '၄': '4',
+        '၅': '5', '၆': '6', '၇': '7', '၈': '8', '၉': '9',
+        'O': '0', 'o': '0'
+    }
+    for mm_char, en_char in mm_map.items():
+        text = text.replace(mm_char, en_char)
+    return text
 
 def extract_transaction_id(text):
     converted_text = convert_myanmar_digits_to_english(text)
@@ -932,7 +929,6 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
     if not ocr_text:
         return False, "OCR မဖတ်နိုင်ပါ", None, "UNKNOWN"
 
-    # မြန်မာဂဏန်းများကို အင်္ဂလိပ်ဂဏန်းသို့ အရင်ပြောင်းလဲခြင်း
     ocr_text_normalized = convert_myanmar_digits_to_english(ocr_text)
     lower_text = ocr_text_normalized.lower()
 
@@ -954,28 +950,34 @@ def verify_payment_slip_ocr(ocr_text, expected_amount, chat_id=None):
             break
             
     if not receiver_matched:
-        name_keywords = ["htet", "myat", "aung", "mg htet", "myataung", "htetmyataung", "het", "htat"]
+        name_keywords = ["htet", "myat", "aung", "mg htet", "myataung", "htetmyataung", "het", "htat", "active"]
         matched_kw_count = sum(1 for kw in name_keywords if kw in lower_text)
         if matched_kw_count >= 1:
             receiver_matched = True
 
-    if not receiver_matched and (method == "WAVEPAY" or "လုပ်ဆောင်ချက်အိုင်ဒီ" in ocr_text or "အောင်မြင်ပါသည်" in ocr_text):
+    if not receiver_matched and (method == "WAVEPAY" or "လုပ်ဆောင်ချက်" in ocr_text or "အောင်မြင်ပါသည်" in ocr_text):
         receiver_matched = True
 
     if not receiver_matched:
         return False, "လက်ခံသူ အကောင့်နံပါတ် (သို့မဟုတ်) နာမည် မကိုက်ညီပါ", None, method
 
-    # ၂။ လွှဲငွေ ပမာဏ စစ်ဆေးခြင်း (မြန်မာဂဏန်း/အင်္ဂလိပ်ဂဏန်း နှစ်မျိုးလုံး စစ်ဆေးပေးသည်)
+    # ၂။ လွှဲငွေ ပမာဏ စစ်ဆေးခြင်း (1000, 1,000, 1,000.00, ၁,၀၀၀, ၁၀၀၀ အကုန်စစ်ဆေးပေးသည်)
     amount_matched = False
-    price_str = str(expected_amount)
-    
-    clean_nums = re.findall(r'\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b', ocr_text_normalized)
-    for num in clean_nums:
-        val_clean = num.replace(",", "").split(".")[0]
-        if str(val_clean) == price_str:
-            amount_matched = True
-            break
-            
+    price_int = int(expected_amount)
+    price_str = str(price_int)
+
+    # စာလုံးတွေထဲက ဂဏန်းတန်ဖိုးတွေကို အကုန်ဆွဲထုတ်ပြီး စစ်ဆေးခြင်း
+    extracted_tokens = re.findall(r'[\d,]+(?:\.\d+)?', ocr_text_normalized)
+    for token in extracted_tokens:
+        clean_num = token.replace(",", "")
+        try:
+            val_float = float(clean_num)
+            if int(val_float) == price_int:
+                amount_matched = True
+                break
+        except:
+            pass
+
     if not amount_matched:
         clean_all_digits = re.sub(r'[^0-9]', '', ocr_text_normalized)
         if price_str in clean_all_digits:
@@ -1155,6 +1157,8 @@ def handle_select_plan(call):
             f"📱 AYA Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Uab Pay - 09699970092\n"
+            f"👤 Htet Myat Aung\n\n"
+            f"📱 CB Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
             f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
@@ -1183,7 +1187,6 @@ def handle_back_to_plans(call):
         reply_markup=get_plan_keyboard()
     )
 
-# Admin Server 1 / Server 2 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
 def handle_approve_callback(call):
     lock_key = f"appr_{call.message.message_id}_{call.data}"
@@ -1273,7 +1276,6 @@ def handle_approve_callback(call):
         except:
             pass
 
-# 📸 Photo Message Handler (Screenshot, Broadcast & Auto OCR Support)
 @bot.message_handler(content_types=['photo'])
 def handle_photo_messages(message):
     chat_id = message.chat.id
@@ -1494,7 +1496,6 @@ def fetch_key_from_server(api_url, input_value):
         pass
     return None, None, None
 
-# 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
     lock_key = f"repl_{call.message.message_id}_{call.data}"
@@ -1945,7 +1946,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ Data Usage Check (ကျန်ရှိသော Data တွက်ချက်ပြသသည့် စနစ် ပါဝင်သည်)
+    # ⚡️ Data Usage Check
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -2001,7 +2002,6 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # 🗃️ ကျန်ရှိသော Data တွက်ချက်ခြင်း
             if limit_bytes:
                 rem_gb_val = max(0, round(plan_gb_val - usage_gb, 2))
                 rem_gb_str = f"{rem_gb_val} GB"
