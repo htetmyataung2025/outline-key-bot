@@ -27,6 +27,10 @@ OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 # 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
+# 🔍 OCR Space API Key Configuration
+OCR_API_KEY = "K87641025188957"
+MY_PAYMENT_PHONES = ["09699970092", "699970092", "9699970092"]
+
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
@@ -69,6 +73,7 @@ ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
 REPLACEMENT_MSG_MAP_FILE = "/tmp/replacement_msg_map.json"
 BROADCAST_STATE_FILE = "/tmp/admin_broadcast_state.json"
 ALL_USERS_FILE = "/tmp/all_users.json"
+USED_TRX_FILE = "/tmp/used_trx_ids.json"
 PROCESSED_CALLBACKS = set()
 
 # Lock Check Function
@@ -255,6 +260,32 @@ def save_used_redeemer(chat_id):
     if str(chat_id) not in used_list:
         used_list.append(str(chat_id))
         redis_set("used_redeemers", used_list)
+
+def load_used_trx_ids():
+    data = redis_get("used_trx_ids")
+    if data is not None:
+        return data
+    if os.path.exists(USED_TRX_FILE):
+        try:
+            with open(USED_TRX_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+def save_used_trx_id(trx_id):
+    if not trx_id:
+        return
+    used_trx = load_used_trx_ids()
+    clean_trx = str(trx_id).strip()
+    if clean_trx not in used_trx:
+        used_trx.append(clean_trx)
+        redis_set("used_trx_ids", used_trx)
+        try:
+            with open(USED_TRX_FILE, 'w') as f:
+                json.dump(used_trx, f)
+        except:
+            pass
 
 def has_active_giveaway_key(chat_id):
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
@@ -852,6 +883,91 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
         print("Key Generation Error:", e)
     return None, None, None
 
+# 🔍 OCR Space Helper Function (Image to Text Converter)
+def parse_slip_ocr(photo_url):
+    try:
+        payload = {
+            'apikey': OCR_API_KEY,
+            'url': photo_url,
+            'language': 'eng',
+            'isOverlayRequired': False,
+            'OCREngine': '2'
+        }
+        res = requests.post('https://api.ocr.space/parse/image', data=payload, timeout=15)
+        if res.status_code == 200:
+            result = res.json()
+            if result.get("IsErroredOnProcessing") == False:
+                parsed_results = result.get("ParsedResults", [])
+                if parsed_results:
+                    return parsed_results[0].get("ParsedText", "")
+    except Exception as e:
+        print("OCR API Error:", e)
+    return ""
+
+def extract_transaction_id(text):
+    clean_text = text.replace(" ", "").replace("-", "")
+    match_wave = re.search(r'(?:Trx|Transaction|လုပ်ဆောင်ချက်).*?([0-9]{8,15})', clean_text, re.IGNORECASE)
+    if match_wave:
+        return match_wave.group(1)
+    match_kpay = re.search(r'([0-9]{16,24})', clean_text)
+    if match_kpay:
+        return match_kpay.group(1)
+    match_gen = re.search(r'([0-9]{8,24})', clean_text)
+    if match_gen:
+        return match_gen.group(1)
+    return None
+
+def verify_payment_slip_ocr(ocr_text, expected_amount):
+    if not ocr_text:
+        return False, "OCR မဖတ်နိုင်ပါ", None, "UNKNOWN"
+
+    lower_text = ocr_text.lower()
+    method = "UNKNOWN"
+    if "wave" in lower_text or "လုပ်ဆောင်ချက်" in ocr_text:
+        method = "WAVEPAY"
+    elif "kpay" in lower_text or "kbz" in lower_text or "transferred" in lower_text:
+        method = "KPAY"
+    elif "aya" in lower_text:
+        method = "AYAPAY"
+    elif "uab" in lower_text:
+        method = "UABPAY"
+
+    phone_matched = False
+    for ph in MY_PAYMENT_PHONES:
+        clean_ph = ph.replace(" ", "").replace("-", "")
+        if clean_ph in ocr_text.replace(" ", "").replace("-", ""):
+            phone_matched = True
+            break
+    if not phone_matched and ("htet" in lower_text or "myat" in lower_text or "aung" in lower_text):
+        phone_matched = True
+
+    if not phone_matched:
+        return False, "လက်ခံသူ အကောင့်နံပါတ် (သို့မဟုတ်) နာမည် မကိုက်ညီပါ", None, method
+
+    clean_digits = re.sub(r'[^0-9]', '', ocr_text)
+    price_str = str(expected_amount)
+    amount_matched = False
+    if price_str in clean_digits:
+        amount_matched = True
+    else:
+        num_matches = re.findall(r'\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b', ocr_text)
+        for num in num_matches:
+            val_clean = num.replace(",", "").split(".")[0]
+            if str(val_clean) == str(expected_amount):
+                amount_matched = True
+                break
+
+    if not amount_matched:
+        return False, f"လွှဲငွေ ပမာဏ ({expected_amount:,} Ks) မကိုက်ညီပါ", None, method
+
+    trx_id = extract_transaction_id(ocr_text)
+    if trx_id:
+        used_trx = load_used_trx_ids()
+        if str(trx_id) in used_trx:
+            return False, f"ဤ ပြေစာ (Trx ID: {trx_id}) အား အသုံးပြုပြီးသား ဖြစ်နေပါသည်", trx_id, method
+
+    return True, "Verified Successfully", trx_id, method
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_gb_"))
 def handle_admin_gb_select(call):
     bot.answer_callback_query(call.id)
@@ -1131,7 +1247,7 @@ def handle_approve_callback(call):
         except:
             pass
 
-# 📸 Photo Message Handler (Screenshot & Broadcast Photo Support)
+# 📸 Photo Message Handler (Screenshot, Broadcast & Auto OCR Support)
 @bot.message_handler(content_types=['photo'])
 def handle_photo_messages(message):
     chat_id = message.chat.id
@@ -1181,16 +1297,97 @@ def handle_photo_messages(message):
     plan_info = user_plans.get(str(chat_id))
     plan_code = plan_info.get('code', 'starter')
     months_count = plan_info.get('months', 1)
-    price_str = plan_info.get('price_str', f"{plan_info.get('price_int', 1000):,} Ks")
+    price_int = plan_info.get('price_int', 1000)
+    price_str = plan_info.get('price_str', f"{price_int:,} Ks")
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
+    # 🤖 Auto OCR Verification Process စတင်ခြင်း
+    checking_msg = bot.reply_to(message, "⏳ <b>ငွေလွှဲပြေစာအား Bot မှ အလိုအလျောက် စစ်ဆေးနေပါသည်...</b>", parse_mode="HTML")
+    
+    photo_file = bot.get_file(message.photo[-1].file_id)
+    photo_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{photo_file.file_path}"
+    
+    ocr_raw_text = parse_slip_ocr(photo_url)
+    is_verified, reason, trx_id, pay_method = verify_payment_slip_ocr(ocr_raw_text, price_int)
+
+    # 🟢 Auto-Approved အောင်မြင်ပါက Key အလိုအလျောက် တန်းထုတ်ပေးမည်
+    if is_verified:
+        save_used_trx_id(trx_id)
+        
+        # Default Server 1 🇸🇬 တွင် Key မွေးမည် (မရပါက Server 2 သို့ ပြောင်းမည်)
+        server_num = "1"
+        if plan_code == "ultimate":
+            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=months_count)
+            action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
+            disp_gb = f"{1000 * months_count} GB"
+        else:
+            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=chat_id, months_count=months_count, is_giveaway=False)
+            if not vpn_key:
+                server_num = "2"
+                vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=chat_id, months_count=months_count, is_giveaway=False)
+            action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
+            disp_gb = f"{1000 * months_count} GB" if plan_code == "ultimate" else f"{int(plan_info['data'].split()[0]) * months_count} GB"
+
+        if vpn_key:
+            if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+                save_sale_transaction(server_num, chat_id, plan_code, plan_info['name'], months_count, price_int)
+
+            clean_name = user_name.strip().lower()
+            save_key_mapping(clean_name, chat_id)
+
+            success_message = (
+                f"✅ <b>Auto-Approved VPN Key Topup</b>\n\n"
+                f"{action_title}\n\n"
+                f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
+                f"💳 <b>Plan:</b> {plan_info['name']} ({disp_gb}) - {months_count} လစာ\n"
+                f"💵 <b>ကျသင့်ငွေ:</b> {price_str}\n"
+                f"📱 <b>Method:</b> {pay_method}\n"
+                f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
+                f"<code>{vpn_key}</code>\n\n"
+                f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+            )
+            
+            try:
+                bot.delete_message(chat_id, checking_msg.message_id)
+            except:
+                pass
+                
+            bot.send_message(chat_id, success_message, parse_mode="HTML")
+
+            # 📢 Admin များထံသို့ Auto-Approved Alert တန်းပို့ပေးမည်
+            admin_auto_alert = (
+                f"✅ <b>Auto-Approved Payment (OCR Verified)</b>\n\n"
+                f"👤 <b>ဝယ်ယူသူ:</b> {user_name} ({username})\n"
+                f"📦 <b>Plan:</b> {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
+                f"💵 <b>ပမာဏ:</b> {price_str}\n"
+                f"📱 <b>Method:</b> {pay_method}\n"
+                f"🔢 <b>Trx ID:</b> <code>{trx_id or 'Auto-Detected'}</code>\n"
+                f"📡 <b>Server:</b> Server {server_num} 🇸🇬\n"
+                f"🔑 <b>Key:</b> {key_name}\n"
+                f"🆔 <b>User ID:</b> <code>{chat_id}</code>"
+            )
+            for aid in ADMIN_CHAT_IDS:
+                try:
+                    bot.send_photo(aid, message.photo[-1].file_id, caption=admin_auto_alert, parse_mode="HTML")
+                except:
+                    pass
+            return
+
+    # 🟡 OCR Auto စစ်၍ မရပါက / မသေချာပါက Admin များထံ Manual Approve ခလုတ်များဖြင့် ပို့ပေးမည့် Fallback စနစ်
+    try:
+        bot.delete_message(chat_id, checking_msg.message_id)
+    except:
+        pass
+
     admin_alert_text = (
-        f"💰 <b>ငွေလွှဲပြေစာအသစ်</b>\n"
+        f"💰 <b>ငွေလွှဲပြေစာအသစ် (Manual Approval လိုအပ်သည်)</b>\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
         f"💵 ကျသင့်ငွေပမာဏ: {price_str}\n"
         f"📅 ပေးပို့သည့်ရက်စွဲ: {current_date}\n"
-        f"🆔 User Chat ID: {chat_id}"
+        f"🆔 User Chat ID: {chat_id}\n"
+        f"⚠️ <i>မှတ်ချက်: OCR Auto-Check မကိုက်ညီပါ ({reason})</i>"
     )
     
     approve_markup = InlineKeyboardMarkup()
