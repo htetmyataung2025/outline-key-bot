@@ -1262,7 +1262,7 @@ def handle_photo_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # 📢 Admin Broadcast Photo Handler (ပုံပါသော Broadcast ပို့ခြင်း - Admin များအား ကျော်မည်)
+    # 📢 Admin Broadcast Photo Handler
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
@@ -1306,7 +1306,7 @@ def handle_photo_messages(message):
     price_str = plan_info.get('price_str', f"{price_int:,} Ks")
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
-    # 🤖 Auto OCR Verification Process စတင်ခြင်း
+    # 🤖 Auto OCR Verification Process
     checking_msg = bot.reply_to(message, "⏳ <b>ငွေလွှဲပြေစာအား Bot မှ အလိုအလျောက် စစ်ဆေးနေပါသည်...</b>", parse_mode="HTML")
     
     photo_file = bot.get_file(message.photo[-1].file_id)
@@ -1319,7 +1319,7 @@ def handle_photo_messages(message):
         
         server_num = "1"
         if plan_code == "ultimate":
-            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=months_count)
+            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id=chat_id, months_count=months_count)
             action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
             disp_gb = f"{1000 * months_count} GB"
         else:
@@ -1375,7 +1375,7 @@ def handle_photo_messages(message):
                     pass
             return
 
-    # 🟡 OCR Auto စစ်၍ မရပါက / မသေချာပါက Admin များထံ Manual Approve ခလုတ်များဖြင့် ပို့ပေးမည့် Fallback စနစ်
+    # 🟡 OCR Auto စစ်၍ မရပါက / မသေချာပါက Admin များထံ Manual Approve စနစ်
     try:
         bot.delete_message(chat_id, checking_msg.message_id)
     except:
@@ -1469,7 +1469,7 @@ def fetch_key_from_server(api_url, input_value):
         pass
     return None, None, None
 
-# 🔄 Admin Key Replacement Approval Callback Handler (Admin 2 ယောက်လုံး ဆီမှာ REPLACED / REJECTED တပြိုင်နက် ပြင်ပေးမည့် စနစ်)
+# 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
     lock_key = f"repl_{call.message.message_id}_{call.data}"
