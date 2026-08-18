@@ -29,7 +29,7 @@ ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
 # 🔍 OCR Space API Key Configuration
 OCR_API_KEY = "K87641025188957"
-MY_PAYMENT_PHONES = ["09699970092", "699970092", "9699970092"]
+MY_PAYMENT_PHONES = ["09699970092", "699970092", "9699970092", "0092", "70092"]
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
@@ -767,10 +767,8 @@ def get_user_next_key_number(user_name, target_chat_id=None):
                     k_name = k.get("name", "")
                     k_name_lower = k_name.lower()
 
-                    # Chat ID သို့မဟုတ် User Name ပါမပါ စစ်မည်
                     if (target_chat_id and f"({target_chat_id})" in k_name) or (clean_user in k_name_lower):
                         found_any = True
-                        # နာမည်ထဲက (1), (2), (9) စတဲ့ ဂဏန်းများကို ရှာယူမည်
                         num_match = re.search(r'\((\d+)\)\s*\d{1,2}\.\d{1,2}\.', k_name)
                         if not num_match:
                             num_match = re.search(r'\((\d+)\)', k_name)
@@ -778,7 +776,6 @@ def get_user_next_key_number(user_name, target_chat_id=None):
                         if num_match:
                             try:
                                 val = int(num_match.group(1))
-                                # Chat ID မဟုတ်သော နာမည်ခွဲ ဂဏန်းများကိုပဲ ယူမည်
                                 if str(val) != str(target_chat_id):
                                     if val > max_num:
                                         max_num = val
@@ -788,11 +785,11 @@ def get_user_next_key_number(user_name, target_chat_id=None):
             pass
 
     if not found_any:
-        return 0, 1  # Key လုံးဝ မရှိသေးပါ
+        return 0, 1
     elif max_num == 0:
-        return 1, 2  # Key ၁ ခုရှိသော်လည်း ဂဏန်း တပ်မထားသေးပါ (နောက်တစ်ခုကို (2) ပေးမည်)
+        return 1, 2
     else:
-        return max_num, max_num + 1 # အကြီးဆုံးဂဏန်း၏ နောက်တစ်ဂဏန်း (ဥပမာ 9 -> 10)
+        return max_num, max_num + 1
 
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
@@ -847,7 +844,6 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     else:
         expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
     
-    # 💡 အကြီးဆုံး ဂဏန်းကို စစ်ဆေး၍ နောက်ဂဏန်း တပ်ဆင်ခြင်း
     curr_max, next_number = get_user_next_key_number(user_name, target_chat_id)
     id_str = f" ({target_chat_id})" if target_chat_id else ""
     gw_str = " [GW]" if is_giveaway else ""
@@ -883,23 +879,26 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
         print("Key Generation Error:", e)
     return None, None, None
 
-# 🔍 OCR Space Helper Function (Image to Text Converter)
-def parse_slip_ocr(photo_url):
+# 🔍 OCR Space Direct File Upload Function
+def parse_slip_ocr(file_path):
     try:
-        payload = {
-            'apikey': OCR_API_KEY,
-            'url': photo_url,
-            'language': 'eng',
-            'isOverlayRequired': False,
-            'OCREngine': '2'
-        }
-        res = requests.post('https://api.ocr.space/parse/image', data=payload, timeout=15)
-        if res.status_code == 200:
-            result = res.json()
-            if result.get("IsErroredOnProcessing") == False:
-                parsed_results = result.get("ParsedResults", [])
-                if parsed_results:
-                    return parsed_results[0].get("ParsedText", "")
+        file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
+        img_resp = requests.get(file_url, timeout=12)
+        if img_resp.status_code == 200:
+            files = {'file': ('slip.jpg', img_resp.content, 'image/jpeg')}
+            payload = {
+                'apikey': OCR_API_KEY,
+                'language': 'eng',
+                'isOverlayRequired': False,
+                'OCREngine': '2'
+            }
+            res = requests.post('https://api.ocr.space/parse/image', files=files, data=payload, timeout=25)
+            if res.status_code == 200:
+                result = res.json()
+                if result.get("IsErroredOnProcessing") == False:
+                    parsed_results = result.get("ParsedResults", [])
+                    if parsed_results:
+                        return parsed_results[0].get("ParsedText", "")
     except Exception as e:
         print("OCR API Error:", e)
     return ""
@@ -925,41 +924,47 @@ def verify_payment_slip_ocr(ocr_text, expected_amount):
     method = "UNKNOWN"
     if "wave" in lower_text or "လုပ်ဆောင်ချက်" in ocr_text:
         method = "WAVEPAY"
-    elif "kpay" in lower_text or "kbz" in lower_text or "transferred" in lower_text:
+    elif "kbz" in lower_text or "kpay" in lower_text or "transfer" in lower_text:
         method = "KPAY"
     elif "aya" in lower_text:
         method = "AYAPAY"
     elif "uab" in lower_text:
         method = "UABPAY"
 
-    phone_matched = False
+    # ၁။ လက်ခံသူ အကောင့် / ဖုန်းနံပါတ် / နာမည် စစ်ဆေးခြင်း
+    receiver_matched = False
     for ph in MY_PAYMENT_PHONES:
-        clean_ph = ph.replace(" ", "").replace("-", "")
-        if clean_ph in ocr_text.replace(" ", "").replace("-", ""):
-            phone_matched = True
+        if ph in ocr_text.replace(" ", "").replace("-", ""):
+            receiver_matched = True
             break
-    if not phone_matched and ("htet" in lower_text or "myat" in lower_text or "aung" in lower_text):
-        phone_matched = True
+            
+    if not receiver_matched:
+        if ("htet" in lower_text and "myat" in lower_text) or "aung" in lower_text:
+            receiver_matched = True
 
-    if not phone_matched:
+    if not receiver_matched:
         return False, "လက်ခံသူ အကောင့်နံပါတ် (သို့မဟုတ်) နာမည် မကိုက်ညီပါ", None, method
 
-    clean_digits = re.sub(r'[^0-9]', '', ocr_text)
-    price_str = str(expected_amount)
+    # ၂။ လွှဲငွေ ပမာဏ စစ်ဆေးခြင်း
     amount_matched = False
-    if price_str in clean_digits:
-        amount_matched = True
-    else:
-        num_matches = re.findall(r'\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b', ocr_text)
-        for num in num_matches:
-            val_clean = num.replace(",", "").split(".")[0]
-            if str(val_clean) == str(expected_amount):
-                amount_matched = True
-                break
+    price_str = str(expected_amount)
+    
+    clean_nums = re.findall(r'\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b', ocr_text)
+    for num in clean_nums:
+        val_clean = num.replace(",", "").split(".")[0]
+        if str(val_clean) == price_str:
+            amount_matched = True
+            break
+            
+    if not amount_matched:
+        clean_all_digits = re.sub(r'[^0-9]', '', ocr_text)
+        if price_str in clean_all_digits:
+            amount_matched = True
 
     if not amount_matched:
         return False, f"လွှဲငွေ ပမာဏ ({expected_amount:,} Ks) မကိုက်ညီပါ", None, method
 
+    # ၃။ Transaction ID စစ်ဆေးခြင်း
     trx_id = extract_transaction_id(ocr_text)
     if trx_id:
         used_trx = load_used_trx_ids()
@@ -1305,16 +1310,13 @@ def handle_photo_messages(message):
     checking_msg = bot.reply_to(message, "⏳ <b>ငွေလွှဲပြေစာအား Bot မှ အလိုအလျောက် စစ်ဆေးနေပါသည်...</b>", parse_mode="HTML")
     
     photo_file = bot.get_file(message.photo[-1].file_id)
-    photo_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{photo_file.file_path}"
-    
-    ocr_raw_text = parse_slip_ocr(photo_url)
+    ocr_raw_text = parse_slip_ocr(photo_file.file_path)
     is_verified, reason, trx_id, pay_method = verify_payment_slip_ocr(ocr_raw_text, price_int)
 
     # 🟢 Auto-Approved အောင်မြင်ပါက Key အလိုအလျောက် တန်းထုတ်ပေးမည်
     if is_verified:
         save_used_trx_id(trx_id)
         
-        # Default Server 1 🇸🇬 တွင် Key မွေးမည် (မရပါက Server 2 သို့ ပြောင်းမည်)
         server_num = "1"
         if plan_code == "ultimate":
             vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=months_count)
@@ -1355,7 +1357,6 @@ def handle_photo_messages(message):
                 
             bot.send_message(chat_id, success_message, parse_mode="HTML")
 
-            # 📢 Admin များထံသို့ Auto-Approved Alert တန်းပို့ပေးမည်
             admin_auto_alert = (
                 f"✅ <b>Auto-Approved Payment (OCR Verified)</b>\n\n"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name} ({username})\n"
