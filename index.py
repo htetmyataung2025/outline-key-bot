@@ -27,6 +27,9 @@ OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 # 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
+# 🔍 OCR Space API Key Configuration (Trx ID ဖတ်ရန်အတွက်)
+OCR_API_KEY = "K87641025188957"
+
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
@@ -69,6 +72,8 @@ ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
 REPLACEMENT_MSG_MAP_FILE = "/tmp/replacement_msg_map.json"
 BROADCAST_STATE_FILE = "/tmp/admin_broadcast_state.json"
 ALL_USERS_FILE = "/tmp/all_users.json"
+ORDERS_FILE = "/tmp/orders_data.json"
+KEY_ORDERS_FILE = "/tmp/key_orders.json"
 PROCESSED_CALLBACKS = set()
 
 # Lock Check Function
@@ -79,6 +84,136 @@ def is_callback_processed(call_id):
     if len(PROCESSED_CALLBACKS) > 1000:
         PROCESSED_CALLBACKS.clear()
     return False
+
+# 🔍 OCR Space Helper Functions for Slip Trx ID Reading (English & Myanmar Digits Support)
+def parse_slip_ocr(file_path):
+    try:
+        file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
+        img_resp = requests.get(file_url, timeout=12)
+        if img_resp.status_code == 200:
+            files = {'file': ('slip.jpg', img_resp.content, 'image/jpeg')}
+            payload = {
+                'apikey': OCR_API_KEY,
+                'language': 'eng',
+                'isOverlayRequired': False,
+                'OCREngine': '2'
+            }
+            res = requests.post('https://api.ocr.space/parse/image', files=files, data=payload, timeout=20)
+            if res.status_code == 200:
+                result = res.json()
+                if result.get("IsErroredOnProcessing") == False:
+                    parsed_results = result.get("ParsedResults", [])
+                    if parsed_results:
+                        return parsed_results[0].get("ParsedText", "")
+    except Exception as e:
+        print("OCR API Error:", e)
+    return ""
+
+def clean_ocr_text_thoroughly(text):
+    if not text:
+        return ""
+    
+    # မြန်မာဂဏန်း (၀၁၂၃၄၅၆၇၈၉) မှ အင်္ဂလိပ်ဂဏန်း (0123456789) သို့ အလိုအလျောက် ပြောင်းလဲခြင်း
+    mm_map = {
+        '၀': '0', '၁': '1', '၂': '2', '၃': '3', '၄': '4',
+        '၅': '5', '၆': '6', '၇': '7', '၈': '8', '၉': '9'
+    }
+    for mm_char, en_char in mm_map.items():
+        text = text.replace(mm_char, en_char)
+        
+    return text
+
+def extract_transaction_last6(ocr_text):
+    if not ocr_text:
+        return None
+    converted_text = clean_ocr_text_thoroughly(ocr_text)
+    clean_text = converted_text.replace(" ", "").replace("-", "")
+    
+    # WavePay (Trx ID, လုပ်ဆောင်ချက်အိုင်ဒီ, လုပ်ဆောင်မှုအမှတ် ၈-၁၅ လုံး)
+    match_wave = re.search(r'(?:Trx|Transaction|လုပ်ဆောင်ချက်|လုပ်ဆောင်မှု).*?([0-9]{8,15})', clean_text, re.IGNORECASE)
+    if match_wave:
+        full_trx = match_wave.group(1)
+        return full_trx[-6:]
+        
+    # KPay (Transaction No ၁၆-၂၄ လုံး)
+    match_kpay = re.search(r'([0-9]{16,24})', clean_text)
+    if match_kpay:
+        full_trx = match_kpay.group(1)
+        return full_trx[-6:]
+
+    # Generic Numeric Sequences (၈ လုံးနှင့် အထက် ဂဏန်းတွဲများ)
+    match_gen = re.search(r'([0-9]{8,24})', clean_text)
+    if match_gen:
+        full_trx = match_gen.group(1)
+        return full_trx[-6:]
+        
+    return None
+
+# 🆔 Order ID Generator (ပြေစာထဲမှ Trx ID နောက်ဆုံး ၆ လုံးဖြင့် Order ID သတ်မှတ်ခြင်း)
+def generate_order_id_from_slip(file_path=None):
+    if file_path:
+        ocr_text = parse_slip_ocr(file_path)
+        last6 = extract_transaction_last6(ocr_text)
+        if last6 and len(last6) == 6:
+            return f"ORD-{last6}"
+            
+    # Fallback if OCR fails or unclear
+    chars = string.ascii_uppercase + string.digits
+    rand_part = ''.join(random.choices(chars, k=6))
+    return f"ORD-{rand_part}"
+
+def load_orders():
+    data = redis_get("orders_data")
+    if data is not None:
+        return data
+    if os.path.exists(ORDERS_FILE):
+        try:
+            with open(ORDERS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_order(order_id, order_data):
+    orders = load_orders()
+    orders[str(order_id)] = order_data
+    redis_set("orders_data", orders)
+    try:
+        with open(ORDERS_FILE, 'w') as f:
+            json.dump(orders, f)
+    except:
+        pass
+
+# 🔑 Key to Order ID Mapping
+def load_key_orders():
+    data = redis_get("key_orders")
+    if data is not None:
+        return data
+    if os.path.exists(KEY_ORDERS_FILE):
+        try:
+            with open(KEY_ORDERS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def map_key_to_order(key_name, order_id):
+    if not order_id or not key_name:
+        return
+    data = load_key_orders()
+    clean_k = key_name.strip().lower()
+    data[clean_k] = str(order_id)
+    redis_set("key_orders", data)
+    try:
+        with open(KEY_ORDERS_FILE, 'w') as f:
+            json.dump(data, f)
+    except:
+        pass
+
+def get_order_id_for_key(key_name):
+    data = load_key_orders()
+    clean_k = key_name.strip().lower()
+    return data.get(clean_k, "N/A")
 
 # 📢 Bot သုံးဖူးသော User အားလုံး၏ Chat ID ကို မှတ်သားသည့် စနစ်
 def save_user_id(chat_id):
@@ -159,7 +294,7 @@ def load_sales_history():
             pass
     return []
 
-def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int):
+def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int, order_id=None):
     sales = load_sales_history()
     now = datetime.utcnow() + timedelta(hours=6, minutes=30)  # MMT Timezone
     sale_data = {
@@ -172,7 +307,8 @@ def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_coun
         "plan_code": plan_code,
         "plan_name": plan_name,
         "months": months_count,
-        "price": int(price_int) if price_int else 0
+        "price": int(price_int) if price_int else 0,
+        "order_id": order_id or "N/A"
     }
     sales.append(sale_data)
     redis_set("sales_history", sales)
@@ -431,7 +567,7 @@ def get_admin_count_keyboard(gb, days):
     markup = InlineKeyboardMarkup()
     markup.row(
         InlineKeyboardButton("1 ခု", callback_data=f"adm_cnt_{gb}_{days}_1"),
-        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_{days}_5")
+        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_{days}_3")
     )
     markup.row(
         InlineKeyboardButton("5 ခု", callback_data=f"adm_cnt_{gb}_{days}_5"),
@@ -571,6 +707,7 @@ def search_users_by_query(query):
     query_clean = query.strip().lower()
     markup = InlineKeyboardMarkup()
     found_matches = []
+    key_orders_map = load_key_orders()
 
     for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2)]:
         try:
@@ -580,12 +717,13 @@ def search_users_by_query(query):
                 for k in keys:
                     k_name = k.get("name", "").strip()
                     k_name_lower = k_name.lower()
+                    assigned_ord = key_orders_map.get(k_name_lower, "").lower()
 
                     if len(query_clean) == 1:
                         if k_name_lower.startswith(query_clean):
                             found_matches.append((server_num, str(k.get("id")), k_name))
                     else:
-                        if query_clean in k_name_lower:
+                        if query_clean in k_name_lower or (assigned_ord and query_clean in assigned_ord):
                             found_matches.append((server_num, str(k.get("id")), k_name))
         except:
             pass
@@ -666,6 +804,9 @@ def handle_view_key_detail(call):
                 date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
                 end_date = date_match.group(0) if date_match else "မသိရှိပါ"
                 
+                order_id_disp = get_order_id_for_key(full_name)
+                order_line = f"🆔 <b>Order ID:</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
+                
                 server_name = "Server 1 🇸🇬" if server_num == "1" else "Server 2 🇸🇬"
                 
                 markup = InlineKeyboardMarkup()
@@ -674,6 +815,7 @@ def handle_view_key_detail(call):
                 detail_msg = (
                     f"👤 <b>Customer Information✅ </b>\n\n"
                     f"🤖 <b>Name:</b> {html.escape(full_name)}\n"
+                    f"{order_line}"
                     f"📡 <b>Server:</b> {server_name}\n"
                     f"🧰 <b>Data Usage :</b> <code>{usage_gb} GB</code> / <code>{plan_gb}</code>\n"
                     f"⏰ <b>Expired Date:</b> {end_date}\n"
@@ -736,10 +878,8 @@ def get_user_next_key_number(user_name, target_chat_id=None):
                     k_name = k.get("name", "")
                     k_name_lower = k_name.lower()
 
-                    # Chat ID သို့မဟုတ် User Name ပါမပါ စစ်မည်
                     if (target_chat_id and f"({target_chat_id})" in k_name) or (clean_user in k_name_lower):
                         found_any = True
-                        # နာမည်ထဲက (1), (2), (9) စတဲ့ ဂဏန်းများကို ရှာယူမည်
                         num_match = re.search(r'\((\d+)\)\s*\d{1,2}\.\d{1,2}\.', k_name)
                         if not num_match:
                             num_match = re.search(r'\((\d+)\)', k_name)
@@ -747,7 +887,6 @@ def get_user_next_key_number(user_name, target_chat_id=None):
                         if num_match:
                             try:
                                 val = int(num_match.group(1))
-                                # Chat ID မဟုတ်သော နာမည်ခွဲ ဂဏန်းများကိုပဲ ယူမည်
                                 if str(val) != str(target_chat_id):
                                     if val > max_num:
                                         max_num = val
@@ -757,13 +896,13 @@ def get_user_next_key_number(user_name, target_chat_id=None):
             pass
 
     if not found_any:
-        return 0, 1  # Key လုံးဝ မရှိသေးပါ
+        return 0, 1
     elif max_num == 0:
-        return 1, 2  # Key ၁ ခုရှိသော်လည်း ဂဏန်း တပ်မထားသေးပါ (နောက်တစ်ခုကို (2) ပေးမည်)
+        return 1, 2
     else:
-        return max_num, max_num + 1 # အကြီးဆုံးဂဏန်း၏ နောက်တစ်ဂဏန်း (ဥပမာ 9 -> 10)
+        return max_num, max_num + 1
 
-def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1):
+def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, order_id=None):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     today = datetime.now()
     new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
@@ -798,16 +937,19 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
                 requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
                 requests.put(f"{api_url}/access-keys/{target_key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=8)
                 
+                if order_id:
+                    map_key_to_order(updated_name, order_id)
+
                 raw_access_url = k.get("accessUrl", "")
                 final_key = f"{raw_access_url}#{updated_name}"
                 return final_key, updated_name, new_expire_date, True
     except Exception as e:
         print("Unlimited Renewal Error:", e)
 
-    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
+    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False, order_id=order_id)
     return vpn_key, key_name, expire_date, False
 
-def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None):
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None, order_id=None):
     today = datetime.now()
     if custom_expire_date:
         expire_date = custom_expire_date
@@ -816,7 +958,6 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     else:
         expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
     
-    # 💡 အကြီးဆုံး ဂဏန်းကို စစ်ဆေး၍ နောက်ဂဏန်း တပ်ဆင်ခြင်း
     curr_max, next_number = get_user_next_key_number(user_name, target_chat_id)
     id_str = f" ({target_chat_id})" if target_chat_id else ""
     gw_str = " [GW]" if is_giveaway else ""
@@ -845,12 +986,20 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
             if limit_bytes:
                 requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
             
+            if order_id:
+                map_key_to_order(key_name, order_id)
+
             raw_access_url = key_data.get("accessUrl", "")
             final_key = f"{raw_access_url}#{key_name}"
             return final_key, key_name, expire_date
     except Exception as e:
         print("Key Generation Error:", e)
     return None, None, None
+
+# 🎟️ Random Redeem Code Generator (abc123xyz ပုံစံ 10 လုံး Random)
+def generate_random_redeem_code():
+    chars = string.ascii_lowercase + string.digits
+    return ''.join(random.choices(chars, k=10))
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_gb_"))
 def handle_admin_gb_select(call):
@@ -903,8 +1052,7 @@ def handle_admin_code_generate(call):
     generated_list = []
     
     for _ in range(count):
-        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        code = f"H&E-{gb_amount}GB-{random_str}"
+        code = generate_random_redeem_code()
         codes[code] = {"gb": gb_amount, "days": days_amount}
         generated_list.append(f"<code>{code}</code>")
         
@@ -1013,6 +1161,8 @@ def handle_select_plan(call):
             f"📱 AYA Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 Uab Pay - 09699970092\n"
+            f"👤 Htet Myat Aung\n\n"
+            f"📱 CB Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
             f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
@@ -1062,6 +1212,7 @@ def handle_approve_callback(call):
         plan_code = parts[3]
         months_count = int(parts[4]) if len(parts) > 4 else 1
         action_type = parts[5] if len(parts) > 5 else "new"
+        order_id = parts[6] if len(parts) > 6 else None
         
         plan_info = PLANS.get(plan_code, PLANS["starter"])
         
@@ -1082,20 +1233,22 @@ def handle_approve_callback(call):
         expire_date = None
 
         if plan_code == "ultimate" and action_type == "renew":
-            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=months_count)
+            vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=months_count, order_id=order_id)
             action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
             disp_gb = f"{1000 * months_count} GB"
         else:
-            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False)
+            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False, order_id=order_id)
             action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
             disp_gb = f"{1000 * months_count} GB" if plan_code == "ultimate" else f"{int(plan_info['data'].split()[0]) * months_count} GB"
         
         if vpn_key:
             if str(target_chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
-                save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int)
+                save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int, order_id=order_id)
 
+            ord_line = f"🆔 <b>Order ID:</b> <code>{order_id}</code>\n" if order_id else ""
             success_message = (
                 f"{action_title}\n\n"
+                f"{ord_line}"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
                 f"💳 <b>Plan:</b> {plan_info['name']} ({disp_gb}) - {months_count} လစာ\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
@@ -1141,7 +1294,7 @@ def handle_photo_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # 📢 Admin Broadcast Photo Handler (ပုံပါသော Broadcast ပို့ခြင်း - Admin များအား ကျော်မည်)
+    # 📢 Admin Broadcast Photo Handler
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
@@ -1184,8 +1337,27 @@ def handle_photo_messages(message):
     price_str = plan_info.get('price_str', f"{plan_info.get('price_int', 1000):,} Ks")
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
+    # 🧾 ပြေစာပေါ်မှ Trx ID (English & မြန်မာဂဏန်း) နောက်ဆုံး ၆ လုံးအား Order ID အဖြစ် ဆွဲထုတ်ခြင်း
+    photo_file = bot.get_file(message.photo[-1].file_id)
+    order_id = generate_order_id_from_slip(photo_file.file_path)
+
+    order_record = {
+        "order_id": order_id,
+        "chat_id": str(chat_id),
+        "user_name": user_name,
+        "username": username,
+        "plan_code": plan_code,
+        "plan_name": plan_info['name'],
+        "months": months_count,
+        "price_str": price_str,
+        "date": current_date,
+        "timestamp": (datetime.utcnow() + timedelta(hours=6, minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+    }
+    save_order(order_id, order_record)
+
     admin_alert_text = (
         f"💰 <b>ငွေလွှဲပြေစာအသစ်</b>\n"
+        f"🆔 Order ID: <code>{order_id}</code>\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
         f"💵 ကျသင့်ငွေပမာဏ: {price_str}\n"
@@ -1196,17 +1368,17 @@ def handle_photo_messages(message):
     approve_markup = InlineKeyboardMarkup()
     if plan_code == "ultimate":
         approve_markup.row(
-            InlineKeyboardButton("📡 S1 🇸🇬 Renew", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_renew"),
-            InlineKeyboardButton("📡 S1 🇸🇬 New", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new")
+            InlineKeyboardButton("📡 S1 🇸🇬 Renew", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_renew_{order_id}"),
+            InlineKeyboardButton("📡 S1 🇸🇬 New", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
         )
         approve_markup.row(
-            InlineKeyboardButton("📡 S2 🇸🇬 Renew", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_renew"),
-            InlineKeyboardButton("📡 S2 🇸🇬 New", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new")
+            InlineKeyboardButton("📡 S2 🇸🇬 Renew", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_renew_{order_id}"),
+            InlineKeyboardButton("📡 S2 🇸🇬 New", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
         )
     else:
         approve_markup.row(
-            InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new"),
-            InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new")
+            InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new_{order_id}"),
+            InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
         )
     
     admin_msg_dict = {}
@@ -1220,7 +1392,14 @@ def handle_photo_messages(message):
                 pass
         
         save_admin_msg_map(chat_id, admin_msg_dict)
-        bot.reply_to(message, "💌 ငွေလွှဲပြေစာအား စစ်ဆေးနေပါသည်။ Admin အတည်ပြုပြီးပါက VPN Key ကို ချက်ချင်းပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏")
+        user_reply_text = (
+            f"💌 <b>ငွေလွှဲပြေစာအား လက်ခံရရှိပါသည်ခင်ဗျာ။</b>\n\n"
+            f"🆔 <b>Order ID:</b> <code>{order_id}</code>\n"
+            f"📌 <b>Plan:</b> {plan_info['name']} ({plan_info.get('data', '')})\n"
+            f"💵 <b>ပမာဏ:</b> {price_str}\n\n"
+            f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် VPN Key ကို ချက်ချင်း ပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
+        )
+        bot.reply_to(message, user_reply_text, parse_mode="HTML")
     except Exception as e:
         bot.reply_to(message, f"❌ Admin ထံ ပို့၍မရပါ - Bot အား အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
@@ -1271,7 +1450,7 @@ def fetch_key_from_server(api_url, input_value):
         pass
     return None, None, None
 
-# 🔄 Admin Key Replacement Approval Callback Handler (Admin 2 ယောက်လုံး ဆီမှာ REPLACED / REJECTED တပြိုင်နက် ပြင်ပေးမည့် စနစ်)
+# 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
     lock_key = f"repl_{call.message.message_id}_{call.data}"
@@ -1459,7 +1638,7 @@ def handle_all_messages(message):
         set_redeem_state(chat_id, True)
         redeem_guide = (
             "🎟️ <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
-            "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>H&E-50GB-XXXXXX</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
+            "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
         )
         bot.send_message(chat_id, redeem_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
@@ -1481,7 +1660,7 @@ def handle_all_messages(message):
         set_search_state(chat_id, True)
         bot.send_message(
             chat_id, 
-            "🔍 <b>Customer ရှာဖွေရန်:</b>\n\n👇 ရှာဖွေလိုသော <b>Cus နာမည်အစ စာလုံး (ဥပမာ - H, T, A)</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:", 
+            "🔍 <b>Customer ရှာဖွေရန်:</b>\n\n👇 ရှာဖွေလိုသော <b>Cus နာမည်အစ စာလုံး (ဥပမာ - H, T, A) သို့မဟုတ် Order ID</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:", 
             parse_mode="HTML",
             reply_markup=get_back_inline_keyboard()
         )
@@ -1523,7 +1702,7 @@ def handle_all_messages(message):
 
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_search_state(chat_id):
         set_search_state(chat_id, False)
-        bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် စတင်သော Cus များကို 📡 Server 1 & 2 ထဲတွင် ရှာဖွေနေပါသည်...", parse_mode="HTML")
+        bot.send_message(chat_id, f"⏳ <b>'{input_value}'</b> ဖြင့် ရှာဖွေနေပါသည်...", parse_mode="HTML")
         
         matches, search_markup = search_users_by_query(input_value)
         if matches:
@@ -1535,7 +1714,7 @@ def handle_all_messages(message):
                 reply_markup=search_markup
             )
         else:
-            bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် စတင်သော User မရှိပါခင်ဗျာ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+            bot.send_message(chat_id, f"❌ <b>'{input_value}'</b> ဖြင့် ရှာဖွေ၍ မတွေ့ပါခင်ဗျာ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
     if get_replacement_state(chat_id):
@@ -1553,6 +1732,9 @@ def handle_all_messages(message):
             
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             exp_date = date_match.group(0) if date_match else "30.09.2026"
+
+            order_id_disp = get_order_id_for_key(full_name)
+            order_line = f"🆔 Order ID: <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
             
             limit_bytes = target_key.get("dataLimit", {}).get("bytes", 0)
             usage_bytes = bytes_transferred.get(key_id, 0)
@@ -1568,6 +1750,7 @@ def handle_all_messages(message):
 
             alert_text = (
                 f"♻️ <b>KEY REPLACEMENT REQUEST</b>\n\n"
+                f"{order_line}"
                 f"👤 ဝယ်ယူသူ: {user_name} ({username})\n"
                 f"🆔 Chat ID: <code>{chat_id}</code>\n"
                 f"📡 လက်ရှိ Server: Server {server_num}\n"
@@ -1616,9 +1799,16 @@ def handle_all_messages(message):
             return
 
         codes = load_redeem_codes()
+        code_input = input_value.strip().lower()
         
-        if input_value in codes:
-            code_info = codes[input_value]
+        matched_code_key = None
+        for c_k in codes.keys():
+            if c_k.strip().lower() == code_input:
+                matched_code_key = c_k
+                break
+
+        if matched_code_key:
+            code_info = codes[matched_code_key]
             if isinstance(code_info, dict):
                 gb_val = code_info.get("gb", 25)
                 days_val = code_info.get("days", 30)
@@ -1628,7 +1818,7 @@ def handle_all_messages(message):
 
             user_name = message.from_user.first_name if message.from_user.first_name else "Giveaway Winner"
             
-            del codes[input_value]
+            del codes[matched_code_key]
             save_redeem_codes(codes)
 
             bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
@@ -1656,7 +1846,7 @@ def handle_all_messages(message):
                     try:
                         bot.send_message(
                             aid, 
-                            f"🎟️ <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{input_value}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
+                            f"🎟️ <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{matched_code_key}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
                             parse_mode="HTML"
                         )
                     except:
@@ -1785,9 +1975,13 @@ def handle_all_messages(message):
             else:
                 rem_gb_str = "Unlimited"
             
+            order_id_disp = get_order_id_for_key(full_name)
+            ord_line = f"🆔 Order ID : <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
+
             if has_date:
                 result_text = (
                     f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"{ord_line}"
                     f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
                     f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
                     f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}\n"
@@ -1796,6 +1990,7 @@ def handle_all_messages(message):
             else:
                 result_text = (
                     f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"{ord_line}"
                     f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
                     f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
                     f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}"
@@ -1865,16 +2060,19 @@ def cron_check():
                     except:
                         pass
 
+                order_id_tag = get_order_id_for_key(full_name)
+
                 if should_delete:
                     try:
                         del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
                         if del_res.status_code in [200, 204]:
                             deleted_count += 1
+                            ord_txt = f"🆔 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
                             for aid in ADMIN_CHAT_IDS:
                                 try:
                                     bot.send_message(
                                         aid, 
-                                        f"🗑️ <b>Auto Delete Alert:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ၁ ရက်ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
+                                        f"🗑️ <b>Auto Delete Alert:</b>\n\n{ord_txt}Key: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ၁ ရက်ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
                                         parse_mode="HTML"
                                     )
                                 except:
@@ -1914,8 +2112,10 @@ def cron_check():
 
                     if target_chat_id:
                         try:
+                            ord_txt = f"🆔 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
                             user_noti = (
                                 f"⚠️ <b>သတိပေးချက်:</b>\n\n"
+                                f"{ord_txt}"
                                 f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် <b>{user_warning}</b>\n\n"
                                 f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '💳 Plan များ ကြည့်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
                             )
@@ -1926,6 +2126,7 @@ def cron_check():
 
                     admin_noti = (
                         f"📢 <b>Notification Alert</b>\n"
+                        f"{f'🆔 <b>Order ID:</b> <code>{order_id_tag}</code>' + chr(10) if order_id_tag != 'N/A' else ''}"
                         f"👤 အသုံးပြုသူ: {full_name}\n"
                         f"📌 အခြေအနေ: {reason_text}\n"
                         f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
