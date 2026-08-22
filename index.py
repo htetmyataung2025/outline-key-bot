@@ -29,6 +29,7 @@ ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
 # 🔍 OCR Space API Key Configuration (Trx ID ဖတ်ရန်အတွက်)
 OCR_API_KEY = "K87641025188957"
+MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
@@ -85,7 +86,7 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 🔍 OCR Space Helper Functions for Slip Trx ID Reading (English & Myanmar Digits Support)
+# 🔍 OCR Space Helper Functions for Slip Trx ID Reading
 def parse_slip_ocr(file_path):
     try:
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
@@ -112,41 +113,51 @@ def parse_slip_ocr(file_path):
 def clean_ocr_text_thoroughly(text):
     if not text:
         return ""
-    
-    # မြန်မာဂဏန်း (၀၁၂၃၄၅၆၇၈၉) မှ အင်္ဂလိပ်ဂဏန်း (0123456789) သို့ အလိုအလျောက် ပြောင်းလဲခြင်း
     mm_map = {
         '၀': '0', '၁': '1', '၂': '2', '၃': '3', '၄': '4',
         '၅': '5', '၆': '6', '၇': '7', '၈': '8', '၉': '9'
     }
     for mm_char, en_char in mm_map.items():
         text = text.replace(mm_char, en_char)
-        
     return text
 
 def extract_transaction_last6(ocr_text):
     if not ocr_text:
         return None
-    converted_text = clean_ocr_text_thoroughly(ocr_text)
-    clean_text = converted_text.replace(" ", "").replace("-", "")
+        
+    normalized_text = clean_ocr_text_thoroughly(ocr_text)
     
-    # WavePay (Trx ID, လုပ်ဆောင်ချက်အိုင်ဒီ, လုပ်ဆောင်မှုအမှတ် ၈-၁၅ လုံး)
-    match_wave = re.search(r'(?:Trx|Transaction|လုပ်ဆောင်ချက်|လုပ်ဆောင်မှု).*?([0-9]{8,15})', clean_text, re.IGNORECASE)
-    if match_wave:
-        full_trx = match_wave.group(1)
-        return full_trx[-6:]
-        
-    # KPay (Transaction No ၁၆-၂၄ လုံး)
-    match_kpay = re.search(r'([0-9]{16,24})', clean_text)
-    if match_kpay:
-        full_trx = match_kpay.group(1)
-        return full_trx[-6:]
+    # 🚫 ကိုယ့်လက်ခံဖုန်းနံပါတ်များအား အရင်ဆုံး ဖယ်ထုတ်ရှင်းလင်းခြင်း
+    for ph in MY_PAYMENT_PHONES:
+        normalized_text = normalized_text.replace(ph, "")
 
-    # Generic Numeric Sequences (၈ လုံးနှင့် အထက် ဂဏန်းတွဲများ)
-    match_gen = re.search(r'([0-9]{8,24})', clean_text)
-    if match_gen:
-        full_trx = match_gen.group(1)
-        return full_trx[-6:]
-        
+    lines = normalized_text.splitlines()
+
+    # ၁။ Transaction ID / လုပ်ဆောင်ချက်အိုင်ဒီ ပါသော စာကြောင်းထဲမှ ဂဏန်းရှာခြင်း
+    for i, line in enumerate(lines):
+        clean_l = line.replace(" ", "").replace("-", "")
+        if any(k in clean_l.lower() for k in ["transaction", "trx", "လုပ်ဆောင်ချက်", "လုပ်ဆောင်မှု", "အိုင်ဒီ", "အမှတ်"]):
+            digits = re.findall(r'\d{6,24}', clean_l)
+            if digits:
+                return digits[0][-6:]
+            # အောက်စာကြောင်းတွင် ကပ်ပါနေပါက
+            if i + 1 < len(lines):
+                next_l = lines[i+1].replace(" ", "").replace("-", "")
+                next_digits = re.findall(r'\d{6,24}', next_l)
+                if next_digits:
+                    return next_digits[0][-6:]
+
+    # ၂။ KPay 20-digit Transaction No ရှာခြင်း
+    kpay_match = re.search(r'\b(010\d{13,20})\b', normalized_text.replace(" ", ""))
+    if kpay_match:
+        return kpay_match.group(1)[-6:]
+
+    # ၃။ WavePay 8-10 digit Transaction ID ရှာခြင်း (ဖုန်းနံပါတ် 09... များကို ကျော်မည်)
+    all_numbers = re.findall(r'\b\d{8,15}\b', normalized_text.replace("-", " "))
+    for num in all_numbers:
+        if not num.startswith("09") and not num.startswith("9699"):
+            return num[-6:]
+
     return None
 
 # 🆔 Order ID Generator (ပြေစာထဲမှ Trx ID နောက်ဆုံး ၆ လုံးဖြင့် Order ID သတ်မှတ်ခြင်း)
@@ -157,7 +168,7 @@ def generate_order_id_from_slip(file_path=None):
         if last6 and len(last6) == 6:
             return f"ORD-{last6}"
             
-    # Fallback if OCR fails or unclear
+    # Fallback if OCR fails
     chars = string.ascii_uppercase + string.digits
     rand_part = ''.join(random.choices(chars, k=6))
     return f"ORD-{rand_part}"
@@ -805,7 +816,7 @@ def handle_view_key_detail(call):
                 end_date = date_match.group(0) if date_match else "မသိရှိပါ"
                 
                 order_id_disp = get_order_id_for_key(full_name)
-                order_line = f"🆔 <b>Order ID:</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
+                order_line = f"🧾 <b>Order ID:</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
                 
                 server_name = "Server 1 🇸🇬" if server_num == "1" else "Server 2 🇸🇬"
                 
@@ -1163,7 +1174,7 @@ def handle_select_plan(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 CB Pay - 09699970092\n"
-            f"👤 Htet Myat Aung\n"
+            f"👤 Htet Myat Aung\n\n"
             f"━━━━━━━━━━━━━━━\n\n"
             f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
@@ -1245,7 +1256,7 @@ def handle_approve_callback(call):
             if str(target_chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int, order_id=order_id)
 
-            ord_line = f"🆔 <b>Order ID:</b> <code>{order_id}</code>\n" if order_id else ""
+            ord_line = f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n" if order_id else ""
             success_message = (
                 f"{action_title}\n\n"
                 f"{ord_line}"
@@ -1337,7 +1348,7 @@ def handle_photo_messages(message):
     price_str = plan_info.get('price_str', f"{plan_info.get('price_int', 1000):,} Ks")
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
-    # 🧾 ပြေစာပေါ်မှ Trx ID (English & မြန်မာဂဏန်း) နောက်ဆုံး ၆ လုံးအား Order ID အဖြစ် ဆွဲထုတ်ခြင်း
+    # 🧾 ပြေစာပေါ်မှ Trx ID စစ်စစ်၏ နောက်ဆုံး ၆ လုံးအား Order ID အဖြစ် ဆွဲထုတ်ခြင်း (ဖုန်းနံပါတ်များ မပါဝင်ပါ)
     photo_file = bot.get_file(message.photo[-1].file_id)
     order_id = generate_order_id_from_slip(photo_file.file_path)
 
@@ -1357,7 +1368,7 @@ def handle_photo_messages(message):
 
     admin_alert_text = (
         f"💰 <b>ငွေလွှဲပြေစာအသစ်</b>\n"
-        f"🆔 Order ID: <code>{order_id}</code>\n"
+        f"🧾 Order ID: <code>{order_id}</code>\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
         f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
         f"💵 ကျသင့်ငွေပမာဏ: {price_str}\n"
@@ -1394,7 +1405,7 @@ def handle_photo_messages(message):
         save_admin_msg_map(chat_id, admin_msg_dict)
         user_reply_text = (
             f"💌 <b>ငွေလွှဲပြေစာအား လက်ခံရရှိပါသည်ခင်ဗျာ။</b>\n\n"
-            f"🆔 <b>Order ID:</b> <code>{order_id}</code>\n"
+            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
             f"📌 <b>Plan:</b> {plan_info['name']} ({plan_info.get('data', '')})\n"
             f"💵 <b>ပမာဏ:</b> {price_str}\n\n"
             f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် VPN Key ကို ချက်ချင်း ပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
@@ -1734,7 +1745,7 @@ def handle_all_messages(message):
             exp_date = date_match.group(0) if date_match else "30.09.2026"
 
             order_id_disp = get_order_id_for_key(full_name)
-            order_line = f"🆔 Order ID: <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
+            order_line = f"🧾 Order ID: <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
             
             limit_bytes = target_key.get("dataLimit", {}).get("bytes", 0)
             usage_bytes = bytes_transferred.get(key_id, 0)
@@ -1976,7 +1987,7 @@ def handle_all_messages(message):
                 rem_gb_str = "Unlimited"
             
             order_id_disp = get_order_id_for_key(full_name)
-            ord_line = f"🆔 Order ID : <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
+            ord_line = f"🧾 Order ID : <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
 
             if has_date:
                 result_text = (
@@ -2067,7 +2078,7 @@ def cron_check():
                         del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
                         if del_res.status_code in [200, 204]:
                             deleted_count += 1
-                            ord_txt = f"🆔 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
+                            ord_txt = f"🧾 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
                             for aid in ADMIN_CHAT_IDS:
                                 try:
                                     bot.send_message(
@@ -2112,7 +2123,7 @@ def cron_check():
 
                     if target_chat_id:
                         try:
-                            ord_txt = f"🆔 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
+                            ord_txt = f"🧾 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
                             user_noti = (
                                 f"⚠️ <b>သတိပေးချက်:</b>\n\n"
                                 f"{ord_txt}"
@@ -2126,7 +2137,7 @@ def cron_check():
 
                     admin_noti = (
                         f"📢 <b>Notification Alert</b>\n"
-                        f"{f'🆔 <b>Order ID:</b> <code>{order_id_tag}</code>' + chr(10) if order_id_tag != 'N/A' else ''}"
+                        f"{f'🧾 <b>Order ID:</b> <code>{order_id_tag}</code>' + chr(10) if order_id_tag != 'N/A' else ''}"
                         f"👤 အသုံးပြုသူ: {full_name}\n"
                         f"📌 အခြေအနေ: {reason_text}\n"
                         f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
