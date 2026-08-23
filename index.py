@@ -13,10 +13,8 @@ import html
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
-# 🎨 Matplotlib Setup for Image Card Generation
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+# 🎨 Pillow Native Image Drawing (Fast, Lightweight & Safe on Vercel)
+from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 
@@ -33,7 +31,7 @@ OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 # 🔑 Admin Telegram Chat IDs
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
-# 🔍 OCR Space API Key Configuration (Trx ID ဖတ်ရန်အတွက်)
+# 🔍 OCR Space API Key Configuration
 OCR_API_KEY = "K87641025188957"
 MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
 
@@ -91,76 +89,79 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 🎨 Dynamic Donut Chart Image Generator (Used = Red 🔴, Remaining = Green 🟢)
+# 🎨 100% Native Pillow Card Generator (🔴 Used: Red / 🟢 Remaining: Green)
 def generate_traffic_card_image(user_name, used_gb, total_gb, rem_gb, end_date, server_num, order_id="N/A"):
-    fig, ax = plt.subplots(figsize=(6.5, 7.5), facecolor='#0d131a')
-    
-    # Values Calculation for Chart
-    chart_used = used_gb
-    chart_rem = max(0, total_gb - used_gb) if total_gb > 0 else 1
-    
-    if chart_used == 0 and chart_rem == 0:
-        chart_rem = 1
+    width, height = 700, 800
+    img = Image.new('RGB', (width, height), color='#0d131a')
+    draw = ImageDraw.Draw(img)
 
-    values = [chart_used, chart_rem]
-    # 🔴 Thone Tar = Red (#FF3B30), 🟢 Kyan Tar = Green (#30D158)
-    colors = ['#FF3B30', '#30D158']
-    
-    # Donut Chart Drawing
-    wedges, _ = ax.pie(
-        values,
-        colors=colors,
-        startangle=90,
-        wedgeprops=dict(width=0.28, edgecolor='#0d131a', linewidth=3),
-        center=(0, 0.45),
-        radius=0.48
-    )
-    
-    # Donut Center Text
-    ax.text(0, 0.50, f"{used_gb} GB", ha='center', va='center', color='#FF3B30', fontsize=18, fontweight='bold')
-    ax.text(0, 0.38, f"of {total_gb} GB", ha='center', va='center', color='#8E8E93', fontsize=12)
-    
-    # Top Title
-    ax.text(0, 1.02, f"Traffic Report : {user_name}", ha='center', va='center', color='#FFFFFF', fontsize=15, fontweight='bold')
-    
-    # Chart Legend Indicators
-    ax.scatter([-0.35], [-0.15], color='#FF3B30', s=100, marker='s')
-    ax.text(-0.25, -0.165, "Used (GB)", color='#FFFFFF', fontsize=11, fontweight='semibold')
-    
-    ax.scatter([0.15], [-0.15], color='#30D158', s=100, marker='s')
-    ax.text([0.25], [-0.165], "Remaining (GB)", color='#FFFFFF', fontsize=11, fontweight='semibold')
-    
+    try:
+        font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
+        font_center = ImageFont.truetype("DejaVuSans-Bold.ttf", 36)
+        font_sub = ImageFont.truetype("DejaVuSans.ttf", 20)
+        font_text = ImageFont.truetype("DejaVuSans.ttf", 22)
+        font_bold = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
+    except:
+        font_title = font_center = font_sub = font_text = font_bold = ImageFont.load_default()
+
+    # Top Header Title
+    title_str = f"Traffic Report : {user_name[:22]}"
+    draw.text((width // 2, 45), title_str, fill="#FFFFFF", font=font_title, anchor="mm")
+
+    # Donut Chart Parameters
+    cx, cy = width // 2, 225
+    r_outer = 135
+    thickness = 32
+
+    total_val = float(total_gb) if float(total_gb) > 0 else 1.0
+    used_val = float(used_gb)
+    used_angle = min(360.0, max(0.0, (used_val / total_val) * 360.0))
+
+    bbox_outer = [cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer]
+
+    # Full Circle in Green (🟢 Remaining)
+    draw.arc(bbox_outer, start=0, end=360, fill="#30D158", width=thickness)
+
+    # Partial Arc in Red (🔴 Used)
+    if used_angle > 0:
+        draw.arc(bbox_outer, start=-90, end=-90 + used_angle, fill="#FF3B30", width=thickness)
+
+    # Center Text
+    draw.text((cx, cy - 12), f"{used_gb} GB", fill="#FF3B30", font=font_center, anchor="mm")
+    draw.text((cx, cy + 28), f"of {total_gb} GB", fill="#8E8E93", font=font_sub, anchor="mm")
+
+    # Indicators (🔴 Used / 🟢 Remaining)
+    draw.rectangle([140, 390, 162, 412], fill="#FF3B30")
+    draw.text((172, 401), "Used (GB)", fill="#FFFFFF", font=font_text, anchor="lm")
+
+    draw.rectangle([390, 390, 412, 412], fill="#30D158")
+    draw.text((422, 401), "Remaining (GB)", fill="#FFFFFF", font=font_text, anchor="lm")
+
     # Divider Line
-    ax.plot([-0.85, 0.85], [-0.25, -0.25], color='#2C3848', lw=1.5)
+    draw.line([(50, 440), (650, 440)], fill="#2C3848", width=2)
+
+    # Info Details List
+    srv_name = "Singapore Server 1 🇸🇬" if str(server_num) == "1" else "Singapore Server 2 🇸🇬"
     
-    # Report Text Info
-    srv_name = "Singapore Server 1 🇸🇬" if server_num == "1" else "Singapore Server 2 🇸🇬"
-    
-    info_lines = [
-        ("📡 Server", f": {srv_name}", '#58A6FF'),
-        ("📦 Total Quota", f": {total_gb} GB", '#FFFFFF'),
-        ("📉 Used Data", f": {used_gb} GB", '#FF3B30'),
-        ("🔋 Remaining", f": {rem_gb} GB", '#30D158'),
-        ("⏰ Expired Date", f": {end_date}", '#FFD60A')
+    info_rows = [
+        ("📡 Server", f": {srv_name}", "#58A6FF"),
+        ("📦 Total Quota", f": {total_gb} GB", "#FFFFFF"),
+        ("📉 Used Data", f": {used_gb} GB", "#FF3B30"),
+        ("🔋 Remaining", f": {rem_gb} GB", "#30D158"),
+        ("⏰ Expired Date", f": {end_date}", "#FFD60A")
     ]
-    
     if order_id != "N/A":
-        info_lines.insert(1, ("🧾 Order ID", f": {order_id}", '#00D2FF'))
-    
-    y_pos = -0.36
-    for label, val, val_color in info_lines:
-        ax.text(-0.80, y_pos, label, color='#8B949E', fontsize=11.5, fontweight='medium', va='center')
-        ax.text(-0.20, y_pos, val, color=val_color, fontsize=11.5, fontweight='bold', va='center')
-        y_pos -= 0.10
-        
-    ax.set_xlim(-1, 1)
-    ax.set_ylim(-1.0, 1.15)
-    ax.axis('off')
-    
+        info_rows.insert(1, ("🧾 Order ID", f": {order_id}", "#00D2FF"))
+
+    y_cur = 475
+    for label, val, val_color in info_rows:
+        draw.text((65, y_cur), label, fill="#8B949E", font=font_text, anchor="lm")
+        draw.text((290, y_cur), val, fill=val_color, font=font_bold, anchor="lm")
+        y_cur += 48
+
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=180, facecolor=fig.get_facecolor(), edgecolor='none')
+    img.save(buf, format='PNG')
     buf.seek(0)
-    plt.close(fig)
     return buf
 
 # 🔍 OCR Space Helper Functions for Slip Trx ID Reading
@@ -1238,7 +1239,7 @@ def handle_select_plan(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 CB Pay - 09699970092\n"
-            f"👤 Htet Myat Aung\n"
+            f"👤 Htet Myat Aung\n\n"
             f"━━━━━━━━━━━━━━━\n\n"
             f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
@@ -1986,7 +1987,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ 🧰 Data Usage Check (Dynamic Image Card Generating - 🔴 Used / 🟢 Remaining)
+    # ⚡️ 🧰 Data Usage Check (Native Pillow Image Card Generating)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -2035,19 +2036,19 @@ def handle_all_messages(message):
                 end_date = "မသိရှိပါ"
 
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            plan_gb_val = bytes_to_gb(limit_bytes) if limit_bytes else 1000
+            plan_gb_val = bytes_to_gb(limit_bytes) if limit_bytes else 1000.0
             
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
             if limit_bytes:
-                rem_gb_val = max(0, round(plan_gb_val - usage_gb, 2))
+                rem_gb_val = max(0.0, round(float(plan_gb_val) - float(usage_gb), 2))
             else:
-                rem_gb_val = max(0, round(1000 - usage_gb, 2))
+                rem_gb_val = max(0.0, round(1000.0 - float(usage_gb), 2))
             
             order_id_disp = get_order_id_for_key(full_name)
 
-            # 🖼️ Donut Chart Image Card Generate ပြုလုပ်ပြီး ပို့ပေးခြင်း
+            # 🖼️ Native Pillow ဖြင့် Image Card Generate ပြုလုပ်ခြင်း
             card_img_buf = generate_traffic_card_image(
                 user_name=display_name,
                 used_gb=usage_gb,
