@@ -89,61 +89,79 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 🎨 Ultra HD Modern Progress Bar Image Generator (ကြည်လင်ပြတ်သားသော Capsule Design)
+# 🎨 Futuristic Cyberpunk / Neon Glassmorphism Card Generator
 def generate_traffic_card_image(user_name, used_gb, total_gb, rem_gb):
-    width, height = 900, 480
-    img = Image.new('RGB', (width, height), color='#0d131a')
+    width, height = 1000, 1000
+    img = Image.new('RGB', (width, height), color='#07090e')
     draw = ImageDraw.Draw(img)
 
-    # Fonts Setup (High DPI fallback scaling)
     try:
-        font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
-        font_percent = ImageFont.truetype("DejaVuSans-Bold.ttf", 46)
-        font_num = ImageFont.truetype("DejaVuSans-Bold.ttf", 30)
-        font_label = ImageFont.truetype("DejaVuSans.ttf", 24)
+        font_badge = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
+        font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 40)
+        font_speedo = ImageFont.truetype("DejaVuSans-Bold.ttf", 80)
+        font_speedo_sub = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
+        font_card_val = ImageFont.truetype("DejaVuSans-Bold.ttf", 36)
+        font_card_lbl = ImageFont.truetype("DejaVuSans.ttf", 22)
+        font_footer = ImageFont.truetype("DejaVuSans-Bold.ttf", 28)
     except:
-        font_title = font_percent = font_num = font_label = ImageFont.load_default()
+        font_badge = font_title = font_speedo = font_speedo_sub = font_card_val = font_card_lbl = font_footer = ImageFont.load_default()
 
-    # Outer Card Border
-    draw.rounded_rectangle([15, 15, width - 15, height - 15], radius=24, outline="#1f2c3d", width=3)
+    # 1. Outer Neon Border Box
+    draw.rounded_rectangle([20, 20, width - 20, height - 20], radius=36, outline="#162235", width=4)
+    draw.rounded_rectangle([22, 22, width - 22, height - 22], radius=34, outline="#00F0FF", width=1)
 
-    # 1. Customer Full Name Header
-    draw.text((45, 60), f"Traffic : {user_name}", fill="#FFFFFF", font=font_title, anchor="la")
+    # 2. Status Badge & Customer Full Name
+    draw.rounded_rectangle([50, 50, 240, 95], radius=16, fill="#0d1b2a", outline="#00F0FF", width=2)
+    draw.text((145, 72), "LIVE TRAFFIC", fill="#00F0FF", font=font_badge, anchor="mm")
 
-    # Percentage Calculation
+    draw.text((50, 140), f"{user_name}", fill="#FFFFFF", font=font_title, anchor="la")
+
+    # 3. Cyberpunk 240° Semi-Arc Speedometer Gauge
+    cx, cy = width // 2, 410
+    r = 210
+    bbox = [cx - r, cy - r, cx + r, cy + r]
+    arc_start, arc_end = 150, 390
+    arc_span = arc_end - arc_start
+
     total_val = float(total_gb) if float(total_gb) > 0 else 1.0
     used_val = float(used_gb)
-    used_percent = min(100.0, max(0.0, (used_val / total_val) * 100.0))
-    rem_percent = max(0.0, 100.0 - used_percent)
+    ratio = min(1.0, max(0.0, used_val / total_val))
+    active_end = arc_start + (ratio * arc_span)
 
-    # 2. Main Capsule Progress Bar
-    bar_x1, bar_y1, bar_x2, bar_y2 = 45, 150, width - 45, 220
-    bar_width = bar_x2 - bar_x1
+    # Background Track (Neon Violet Outline)
+    draw.arc(bbox, start=arc_start, end=arc_end, fill="#1c2538", width=34)
 
-    # Base Background (Remaining - 🟢 Green)
-    draw.rounded_rectangle([bar_x1, bar_y1, bar_x2, bar_y2], radius=35, fill="#30D158")
+    # Active Progress Glow & Track (Neon Electric Violet to Hot Rose)
+    if ratio > 0:
+        draw.arc([cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2], start=arc_start, end=active_end, fill="#3A0CA3", width=38)
+        draw.arc(bbox, start=arc_start, end=active_end, fill="#FF0055" if ratio > 0.85 else "#00F0FF", width=30)
 
-    # Used Fill (Used - 🔴 Red)
-    used_fill_w = int((used_percent / 100.0) * bar_width)
-    if used_fill_w > 0:
-        fill_right = max(bar_x1 + 35, bar_x1 + used_fill_w)
-        draw.rounded_rectangle([bar_x1, bar_y1, fill_right, bar_y2], radius=35, fill="#FF3B30")
+    # Gauge Center Displays
+    percent_str = f"{int(ratio * 100)}%"
+    draw.text((cx, cy - 25), percent_str, fill="#00F0FF" if ratio <= 0.85 else "#FF0055", font=font_speedo, anchor="mm")
+    draw.text((cx, cy + 45), f"DATA CONSUMED", fill="#8B949E", font=font_speedo_sub, anchor="mm")
 
-    # 3. Usage Stats Under Progress Bar
-    # Used Block (Left)
-    draw.rectangle([45, 270, 75, 300], fill="#FF3B30")
-    draw.text((90, 275), "Used Data", fill="#8B949E", font=font_label, anchor="la")
-    draw.text((90, 310), f"{used_gb} GB  ({used_percent:.1f}%)", fill="#FF3B30", font=font_num, anchor="la")
+    # 4. Dual Glassmorphism Neon Metric Cards
+    card_y = 660
+    card_w, card_h = 425, 175
 
-    # Remaining Block (Right)
-    draw.rectangle([width - 345, 270, width - 315, 300], fill="#30D158")
-    draw.text((width - 300, 275), "Remaining Data", fill="#8B949E", font=font_label, anchor="la")
-    draw.text((width - 300, 310), f"{rem_gb} GB  ({rem_percent:.1f}%)", fill="#30D158", font=font_num, anchor="la")
+    # Left Panel: 🔴 USED DATA (Neon Rose Glow)
+    draw.rounded_rectangle([50, card_y, 50 + card_w, card_y + card_h], radius=24, fill="#110d18", outline="#FF0055", width=2)
+    draw.ellipse([75, card_y + 35, 95, card_y + 55], fill="#FF0055")
+    draw.text((110, card_y + 45), "USED TRAFFIC", fill="#FF7096", font=font_card_lbl, anchor="lm")
+    draw.text((75, card_y + 110), f"{used_gb} GB", fill="#FFFFFF", font=font_card_val, anchor="lm")
 
-    # 4. Total Quota Footer
-    draw.line([(45, 385), (width - 45, 385)], fill="#1f2c3d", width=2)
-    draw.text((45, 420), "Total Quota Plan", fill="#8B949E", font=font_label, anchor="la")
-    draw.text((width - 45, 415), f"{total_gb} GB", fill="#FFFFFF", font=font_num, anchor="ra")
+    # Right Panel: 🟢 REMAINING DATA (Toxic Lime Glow)
+    draw.rounded_rectangle([525, card_y, 525 + card_w, card_y + card_h], radius=24, fill="#0b1716", outline="#00FF66", width=2)
+    draw.ellipse([550, card_y + 35, 570, card_y + 55], fill="#00FF66")
+    draw.text((585, card_y + 45), "REMAINING TRAFFIC", fill="#70FF96", font=font_card_lbl, anchor="lm")
+    draw.text((550, card_y + 110), f"{rem_gb} GB", fill="#FFFFFF", font=font_card_val, anchor="lm")
+
+    # 5. Bottom Hologram Banner (Total Quota Allocation)
+    banner_y = 875
+    draw.rounded_rectangle([50, banner_y, width - 50, banner_y + 75], radius=18, fill="#0d1424", outline="#1F2E4D", width=2)
+    draw.text((80, banner_y + 37), "TOTAL ALLOCATED QUOTA", fill="#8B949E", font=font_badge, anchor="lm")
+    draw.text((width - 80, banner_y + 37), f"{total_gb} GB", fill="#00F0FF", font=font_footer, anchor="rm")
 
     buf = io.BytesIO()
     img.save(buf, format='PNG', dpi=(300, 300))
@@ -1973,7 +1991,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ 🧰 Data Usage Check (Ultra HD Capsule Design Card Generation)
+    # ⚡️ 🧰 Data Usage Check (Cyberpunk Neon Card Generator)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -2034,7 +2052,7 @@ def handle_all_messages(message):
             order_id_disp = get_order_id_for_key(full_name)
             ord_line = f"🧾 <b>Order ID :</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
 
-            # 🖼️ Ultra HD Progress Card Generator
+            # 🖼️ Cyberpunk Neon Card Generate ပြုလုပ်ခြင်း
             card_img_buf = generate_traffic_card_image(
                 user_name=display_name,
                 used_gb=usage_gb,
