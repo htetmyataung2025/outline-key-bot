@@ -89,54 +89,64 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 🎨 အဝိုင်းသီးသန့် Donut Chart Image Generator (🔴 Used: Red / 🟢 Remaining: Green)
-def generate_traffic_card_image(user_name, used_gb, total_gb):
-    width, height = 600, 600
-    img = Image.new('RGB', (width, height), color='#0b1118')
+# 🎨 Ultra HD Modern Progress Bar Image Generator (ကြည်လင်ပြတ်သားသော Capsule Design)
+def generate_traffic_card_image(user_name, used_gb, total_gb, rem_gb):
+    width, height = 900, 480
+    img = Image.new('RGB', (width, height), color='#0d131a')
     draw = ImageDraw.Draw(img)
 
+    # Fonts Setup (High DPI fallback scaling)
     try:
-        font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
-        font_center_used = ImageFont.truetype("DejaVuSans-Bold.ttf", 46)
-        font_center_total = ImageFont.truetype("DejaVuSans.ttf", 24)
-        font_label = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
+        font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
+        font_percent = ImageFont.truetype("DejaVuSans-Bold.ttf", 46)
+        font_num = ImageFont.truetype("DejaVuSans-Bold.ttf", 30)
+        font_label = ImageFont.truetype("DejaVuSans.ttf", 24)
     except:
-        font_title = font_center_used = font_center_total = font_label = ImageFont.load_default()
+        font_title = font_percent = font_num = font_label = ImageFont.load_default()
 
-    # Top Traffic Title
-    draw.text((width // 2, 40), f"Traffic : {user_name[:20]}", fill="#FFFFFF", font=font_title, anchor="mm")
+    # Outer Card Border
+    draw.rounded_rectangle([15, 15, width - 15, height - 15], radius=24, outline="#1f2c3d", width=3)
 
-    # Donut Circle Parameters
-    cx, cy = width // 2, 275
-    r_outer = 175
-    thickness = 40
+    # 1. Customer Full Name Header
+    draw.text((45, 60), f"Traffic : {user_name}", fill="#FFFFFF", font=font_title, anchor="la")
 
+    # Percentage Calculation
     total_val = float(total_gb) if float(total_gb) > 0 else 1.0
     used_val = float(used_gb)
-    used_angle = min(360.0, max(0.0, (used_val / total_val) * 360.0))
+    used_percent = min(100.0, max(0.0, (used_val / total_val) * 100.0))
+    rem_percent = max(0.0, 100.0 - used_percent)
 
-    bbox = [cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer]
+    # 2. Main Capsule Progress Bar
+    bar_x1, bar_y1, bar_x2, bar_y2 = 45, 150, width - 45, 220
+    bar_width = bar_x2 - bar_x1
 
-    # Full Circle (🟢 Remaining - Green)
-    draw.arc(bbox, start=0, end=360, fill="#30D158", width=thickness)
+    # Base Background (Remaining - 🟢 Green)
+    draw.rounded_rectangle([bar_x1, bar_y1, bar_x2, bar_y2], radius=35, fill="#30D158")
 
-    # Partial Arc (🔴 Used - Red)
-    if used_angle > 0:
-        draw.arc(bbox, start=-90, end=-90 + used_angle, fill="#FF3B30", width=thickness)
+    # Used Fill (Used - 🔴 Red)
+    used_fill_w = int((used_percent / 100.0) * bar_width)
+    if used_fill_w > 0:
+        fill_right = max(bar_x1 + 35, bar_x1 + used_fill_w)
+        draw.rounded_rectangle([bar_x1, bar_y1, fill_right, bar_y2], radius=35, fill="#FF3B30")
 
-    # Center Text
-    draw.text((cx, cy - 15), f"{used_gb} GB", fill="#FF3B30", font=font_center_used, anchor="mm")
-    draw.text((cx, cy + 35), f"of {total_gb} GB", fill="#8E8E93", font=font_center_total, anchor="mm")
+    # 3. Usage Stats Under Progress Bar
+    # Used Block (Left)
+    draw.rectangle([45, 270, 75, 300], fill="#FF3B30")
+    draw.text((90, 275), "Used Data", fill="#8B949E", font=font_label, anchor="la")
+    draw.text((90, 310), f"{used_gb} GB  ({used_percent:.1f}%)", fill="#FF3B30", font=font_num, anchor="la")
 
-    # Bottom Legend Indicators
-    draw.rectangle([110, 500, 138, 528], fill="#FF3B30")
-    draw.text((150, 514), "Used (GB)", fill="#FFFFFF", font=font_label, anchor="lm")
+    # Remaining Block (Right)
+    draw.rectangle([width - 345, 270, width - 315, 300], fill="#30D158")
+    draw.text((width - 300, 275), "Remaining Data", fill="#8B949E", font=font_label, anchor="la")
+    draw.text((width - 300, 310), f"{rem_gb} GB  ({rem_percent:.1f}%)", fill="#30D158", font=font_num, anchor="la")
 
-    draw.rectangle([330, 500, 358, 528], fill="#30D158")
-    draw.text((370, 514), "Remaining (GB)", fill="#FFFFFF", font=font_label, anchor="lm")
+    # 4. Total Quota Footer
+    draw.line([(45, 385), (width - 45, 385)], fill="#1f2c3d", width=2)
+    draw.text((45, 420), "Total Quota Plan", fill="#8B949E", font=font_label, anchor="la")
+    draw.text((width - 45, 415), f"{total_gb} GB", fill="#FFFFFF", font=font_num, anchor="ra")
 
     buf = io.BytesIO()
-    img.save(buf, format='PNG')
+    img.save(buf, format='PNG', dpi=(300, 300))
     buf.seek(0)
     return buf
 
@@ -1963,7 +1973,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ 🧰 Data Usage Check (အဝိုင်းသီးသန့် Donut Chart Image + Clean Caption Text)
+    # ⚡️ 🧰 Data Usage Check (Ultra HD Capsule Design Card Generation)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -1983,8 +1993,7 @@ def handle_all_messages(message):
             if date_match_str:
                 display_name = display_name.replace(date_match_str, "")
             
-            display_name = display_name.replace("[GW]", "").replace("[gw]", "")
-            display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
+            display_name = display_name.replace("[GW]", "").replace("[gw]", "").replace("_", " ").strip()
             
             if not display_name:
                 display_name = "HMA Customer"
@@ -2025,11 +2034,12 @@ def handle_all_messages(message):
             order_id_disp = get_order_id_for_key(full_name)
             ord_line = f"🧾 <b>Order ID :</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
 
-            # 🖼️ အဝိုင်းသီးသန့် Donut Chart Generate လုပ်ခြင်း
+            # 🖼️ Ultra HD Progress Card Generator
             card_img_buf = generate_traffic_card_image(
                 user_name=display_name,
                 used_gb=usage_gb,
-                total_gb=plan_gb_val
+                total_gb=plan_gb_val,
+                rem_gb=rem_gb_val
             )
             
             srv_text = "Singapore Server 1 🇸🇬" if str(server_num) == "1" else "Singapore Server 2 🇸🇬"
