@@ -1,4 +1,5 @@
 import os
+import io
 import requests
 import random
 import string
@@ -12,6 +13,11 @@ import html
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
+# 🎨 Matplotlib Setup for Image Card Generation
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 app = Flask(__name__)
 
 # Token & API Configuration
@@ -24,7 +30,7 @@ REQUIRED_CHANNEL = "@hefeature"
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
-# 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
+# 🔑 Admin Telegram Chat IDs
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
 # 🔍 OCR Space API Key Configuration (Trx ID ဖတ်ရန်အတွက်)
@@ -34,7 +40,7 @@ MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# 🌐 Vercel Upstash Redis REST API Setup (Permanently Data သိမ်းရန်)
+# 🌐 Vercel Upstash Redis REST API Setup
 KV_URL = os.environ.get("KV_REST_API_URL")
 KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
 
@@ -77,7 +83,6 @@ ORDERS_FILE = "/tmp/orders_data.json"
 KEY_ORDERS_FILE = "/tmp/key_orders.json"
 PROCESSED_CALLBACKS = set()
 
-# Lock Check Function
 def is_callback_processed(call_id):
     if call_id in PROCESSED_CALLBACKS:
         return True
@@ -85,6 +90,78 @@ def is_callback_processed(call_id):
     if len(PROCESSED_CALLBACKS) > 1000:
         PROCESSED_CALLBACKS.clear()
     return False
+
+# 🎨 Dynamic Donut Chart Image Generator (Used = Red 🔴, Remaining = Green 🟢)
+def generate_traffic_card_image(user_name, used_gb, total_gb, rem_gb, end_date, server_num, order_id="N/A"):
+    fig, ax = plt.subplots(figsize=(6.5, 7.5), facecolor='#0d131a')
+    
+    # Values Calculation for Chart
+    chart_used = used_gb
+    chart_rem = max(0, total_gb - used_gb) if total_gb > 0 else 1
+    
+    if chart_used == 0 and chart_rem == 0:
+        chart_rem = 1
+
+    values = [chart_used, chart_rem]
+    # 🔴 Thone Tar = Red (#FF3B30), 🟢 Kyan Tar = Green (#30D158)
+    colors = ['#FF3B30', '#30D158']
+    
+    # Donut Chart Drawing
+    wedges, _ = ax.pie(
+        values,
+        colors=colors,
+        startangle=90,
+        wedgeprops=dict(width=0.28, edgecolor='#0d131a', linewidth=3),
+        center=(0, 0.45),
+        radius=0.48
+    )
+    
+    # Donut Center Text
+    ax.text(0, 0.50, f"{used_gb} GB", ha='center', va='center', color='#FF3B30', fontsize=18, fontweight='bold')
+    ax.text(0, 0.38, f"of {total_gb} GB", ha='center', va='center', color='#8E8E93', fontsize=12)
+    
+    # Top Title
+    ax.text(0, 1.02, f"Traffic Report : {user_name}", ha='center', va='center', color='#FFFFFF', fontsize=15, fontweight='bold')
+    
+    # Chart Legend Indicators
+    ax.scatter([-0.35], [-0.15], color='#FF3B30', s=100, marker='s')
+    ax.text(-0.25, -0.165, "Used (GB)", color='#FFFFFF', fontsize=11, fontweight='semibold')
+    
+    ax.scatter([0.15], [-0.15], color='#30D158', s=100, marker='s')
+    ax.text([0.25], [-0.165], "Remaining (GB)", color='#FFFFFF', fontsize=11, fontweight='semibold')
+    
+    # Divider Line
+    ax.plot([-0.85, 0.85], [-0.25, -0.25], color='#2C3848', lw=1.5)
+    
+    # Report Text Info
+    srv_name = "Singapore Server 1 🇸🇬" if server_num == "1" else "Singapore Server 2 🇸🇬"
+    
+    info_lines = [
+        ("📡 Server", f": {srv_name}", '#58A6FF'),
+        ("📦 Total Quota", f": {total_gb} GB", '#FFFFFF'),
+        ("📉 Used Data", f": {used_gb} GB", '#FF3B30'),
+        ("🔋 Remaining", f": {rem_gb} GB", '#30D158'),
+        ("⏰ Expired Date", f": {end_date}", '#FFD60A')
+    ]
+    
+    if order_id != "N/A":
+        info_lines.insert(1, ("🧾 Order ID", f": {order_id}", '#00D2FF'))
+    
+    y_pos = -0.36
+    for label, val, val_color in info_lines:
+        ax.text(-0.80, y_pos, label, color='#8B949E', fontsize=11.5, fontweight='medium', va='center')
+        ax.text(-0.20, y_pos, val, color=val_color, fontsize=11.5, fontweight='bold', va='center')
+        y_pos -= 0.10
+        
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1.0, 1.15)
+    ax.axis('off')
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=180, facecolor=fig.get_facecolor(), edgecolor='none')
+    buf.seek(0)
+    plt.close(fig)
+    return buf
 
 # 🔍 OCR Space Helper Functions for Slip Trx ID Reading
 def parse_slip_ocr(file_path):
@@ -127,32 +204,27 @@ def extract_transaction_last6(ocr_text):
         
     normalized_text = clean_ocr_text_thoroughly(ocr_text)
     
-    # 🚫 ကိုယ့်လက်ခံဖုန်းနံပါတ်များအား အရင်ဆုံး ဖယ်ထုတ်ရှင်းလင်းခြင်း
     for ph in MY_PAYMENT_PHONES:
         normalized_text = normalized_text.replace(ph, "")
 
     lines = normalized_text.splitlines()
 
-    # ၁။ Transaction ID / လုပ်ဆောင်ချက်အိုင်ဒီ ပါသော စာကြောင်းထဲမှ ဂဏန်းရှာခြင်း
     for i, line in enumerate(lines):
         clean_l = line.replace(" ", "").replace("-", "")
         if any(k in clean_l.lower() for k in ["transaction", "trx", "လုပ်ဆောင်ချက်", "လုပ်ဆောင်မှု", "အိုင်ဒီ", "အမှတ်"]):
             digits = re.findall(r'\d{6,24}', clean_l)
             if digits:
                 return digits[0][-6:]
-            # အောက်စာကြောင်းတွင် ကပ်ပါနေပါက
             if i + 1 < len(lines):
                 next_l = lines[i+1].replace(" ", "").replace("-", "")
                 next_digits = re.findall(r'\d{6,24}', next_l)
                 if next_digits:
                     return next_digits[0][-6:]
 
-    # ၂။ KPay 20-digit Transaction No ရှာခြင်း
     kpay_match = re.search(r'\b(010\d{13,20})\b', normalized_text.replace(" ", ""))
     if kpay_match:
         return kpay_match.group(1)[-6:]
 
-    # ၃။ WavePay 8-10 digit Transaction ID ရှာခြင်း (ဖုန်းနံပါတ် 09... များကို ကျော်မည်)
     all_numbers = re.findall(r'\b\d{8,15}\b', normalized_text.replace("-", " "))
     for num in all_numbers:
         if not num.startswith("09") and not num.startswith("9699"):
@@ -160,17 +232,14 @@ def extract_transaction_last6(ocr_text):
 
     return None
 
-# 🆔 Order ID Generator (ပြေစာထဲမှ Trx ID နောက်ဆုံး ၆ လုံးဖြင့် Order ID သတ်မှတ်ခြင်း)
 def generate_order_id_from_slip(file_path=None):
     if file_path:
         ocr_text = parse_slip_ocr(file_path)
         last6 = extract_transaction_last6(ocr_text)
-        if last6 and len(last6) == 6:
+        if last6 and len(last6) == 6 and last6.isdigit():
             return f"ORD-{last6}"
             
-    # Fallback if OCR fails
-    chars = string.ascii_uppercase + string.digits
-    rand_part = ''.join(random.choices(chars, k=6))
+    rand_part = ''.join(random.choices(string.digits, k=6))
     return f"ORD-{rand_part}"
 
 def load_orders():
@@ -195,7 +264,6 @@ def save_order(order_id, order_data):
     except:
         pass
 
-# 🔑 Key to Order ID Mapping
 def load_key_orders():
     data = redis_get("key_orders")
     if data is not None:
@@ -226,7 +294,6 @@ def get_order_id_for_key(key_name):
     clean_k = key_name.strip().lower()
     return data.get(clean_k, "N/A")
 
-# 📢 Bot သုံးဖူးသော User အားလုံး၏ Chat ID ကို မှတ်သားသည့် စနစ်
 def save_user_id(chat_id):
     users = redis_get("all_users") or []
     if str(chat_id) not in [str(u) for u in users]:
@@ -239,7 +306,6 @@ def load_all_users():
         return data
     return []
 
-# 📢 Broadcast State
 def set_broadcast_state(chat_id, is_waiting=True):
     states = redis_get("admin_broadcast_state") or {}
     states[str(chat_id)] = is_waiting
@@ -307,7 +373,7 @@ def load_sales_history():
 
 def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int, order_id=None):
     sales = load_sales_history()
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)  # MMT Timezone
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
     sale_data = {
         "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
         "date": now.strftime("%Y-%m-%d"),
@@ -874,7 +940,6 @@ def handle_admin_del_key(call):
     elif action == "cancel":
         bot.edit_message_text("❌ Key ဖျက်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီခင်ဗျာ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
 
-# 💡 လက်ရှိရှိပြီးသား Key များထဲမှ အကြီးဆုံး ဂဏန်း (Number) ကို ရှာပေးမည့် စနစ်
 def get_user_next_key_number(user_name, target_chat_id=None):
     max_num = 0
     found_any = False
@@ -1007,7 +1072,6 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
         print("Key Generation Error:", e)
     return None, None, None
 
-# 🎟️ Random Redeem Code Generator (abc123xyz ပုံစံ 10 လုံး Random)
 def generate_random_redeem_code():
     chars = string.ascii_lowercase + string.digits
     return ''.join(random.choices(chars, k=10))
@@ -1174,7 +1238,7 @@ def handle_select_plan(call):
             f"📱 Uab Pay - 09699970092\n"
             f"👤 Htet Myat Aung\n\n"
             f"📱 CB Pay - 09699970092\n"
-            f"👤 Htet Myat Aung\n\n"
+            f"👤 Htet Myat Aung\n"
             f"━━━━━━━━━━━━━━━\n\n"
             f"🙏🏻 ငွေလွှဲပြီး Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n"
             f"(ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။)"
@@ -1348,7 +1412,6 @@ def handle_photo_messages(message):
     price_str = plan_info.get('price_str', f"{plan_info.get('price_int', 1000):,} Ks")
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
-    # 🧾 ပြေစာပေါ်မှ Trx ID စစ်စစ်၏ နောက်ဆုံး ၆ လုံးအား Order ID အဖြစ် ဆွဲထုတ်ခြင်း (ဖုန်းနံပါတ်များ မပါဝင်ပါ)
     photo_file = bot.get_file(message.photo[-1].file_id)
     order_id = generate_order_id_from_slip(photo_file.file_path)
 
@@ -1923,7 +1986,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ Data Usage Check (ကျန်ရှိသော Data တွက်ချက်ပြသသည့် စနစ် ပါဝင်သည်)
+    # ⚡️ 🧰 Data Usage Check (Dynamic Image Card Generating - 🔴 Used / 🟢 Remaining)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -1966,48 +2029,44 @@ def handle_all_messages(message):
                         year = int(year_str)
                         
                     end_date = f"{day}.{month}.{year}"
-                    has_date = True
                 except:
-                    has_date = False
+                    end_date = "မသိရှိပါ"
             else:
-                has_date = False
+                end_date = "မသိရှိပါ"
 
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
             plan_gb_val = bytes_to_gb(limit_bytes) if limit_bytes else 1000
-            plan_gb = f"{plan_gb_val} GB" if limit_bytes else "Unlimited"
             
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
-            # 🗃️ ကျန်ရှိသော Data တွက်ချက်ခြင်း
             if limit_bytes:
                 rem_gb_val = max(0, round(plan_gb_val - usage_gb, 2))
-                rem_gb_str = f"{rem_gb_val} GB"
             else:
-                rem_gb_str = "Unlimited"
+                rem_gb_val = max(0, round(1000 - usage_gb, 2))
             
             order_id_disp = get_order_id_for_key(full_name)
-            ord_line = f"🧾 Order ID : <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
 
-            if has_date:
-                result_text = (
-                    f"👤 အသုံးပြုသူ : {display_name}\n"
-                    f"{ord_line}"
-                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
-                    f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}\n"
-                    f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
-                )
-            else:
-                result_text = (
-                    f"👤 အသုံးပြုသူ : {display_name}\n"
-                    f"{ord_line}"
-                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
-                    f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}"
-                )
-                
-            bot.reply_to(message, result_text, reply_markup=get_back_inline_keyboard())
+            # 🖼️ Donut Chart Image Card Generate ပြုလုပ်ပြီး ပို့ပေးခြင်း
+            card_img_buf = generate_traffic_card_image(
+                user_name=display_name,
+                used_gb=usage_gb,
+                total_gb=plan_gb_val,
+                rem_gb=rem_gb_val,
+                end_date=end_date,
+                server_num=server_num,
+                order_id=order_id_disp
+            )
+            
+            caption_text = (
+                f"👤 <b>Customer :</b> {display_name}\n"
+                f"📡 <b>Server :</b> Singapore Server {server_num} 🇸🇬\n"
+                f"🧰 <b>Used Data :</b> <code>{usage_gb} GB</code>\n"
+                f"🔋 <b>Remaining :</b> <code>{rem_gb_val} GB</code>\n"
+                f"⏰ <b>Expiry Date :</b> {end_date}"
+            )
+            
+            bot.send_photo(chat_id, card_img_buf, caption=caption_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
             return
 
         except Exception as e:
