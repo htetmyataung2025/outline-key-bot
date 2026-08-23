@@ -1,5 +1,4 @@
 import os
-import io
 import requests
 import random
 import string
@@ -13,9 +12,6 @@ import html
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
-# 🎨 Pillow Native Image Drawing
-from PIL import Image, ImageDraw, ImageFont
-
 app = Flask(__name__)
 
 # Token & API Configuration
@@ -28,17 +24,17 @@ REQUIRED_CHANNEL = "@hefeature"
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
 
-# 🔑 Admin Telegram Chat IDs
+# 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
-# 🔍 OCR Space API Key Configuration
+# 🔍 OCR Space API Key Configuration (Trx ID ဖတ်ရန်အတွက်)
 OCR_API_KEY = "K87641025188957"
 MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# 🌐 Vercel Upstash Redis REST API Setup
+# 🌐 Vercel Upstash Redis REST API Setup (Permanently Data သိမ်းရန်)
 KV_URL = os.environ.get("KV_REST_API_URL")
 KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
 
@@ -81,6 +77,7 @@ ORDERS_FILE = "/tmp/orders_data.json"
 KEY_ORDERS_FILE = "/tmp/key_orders.json"
 PROCESSED_CALLBACKS = set()
 
+# Lock Check Function
 def is_callback_processed(call_id):
     if call_id in PROCESSED_CALLBACKS:
         return True
@@ -89,86 +86,7 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 🎨 Futuristic Cyberpunk / Neon Glassmorphism Card Generator
-def generate_traffic_card_image(user_name, used_gb, total_gb, rem_gb):
-    width, height = 1000, 1000
-    img = Image.new('RGB', (width, height), color='#07090e')
-    draw = ImageDraw.Draw(img)
-
-    try:
-        font_badge = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
-        font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 40)
-        font_speedo = ImageFont.truetype("DejaVuSans-Bold.ttf", 80)
-        font_speedo_sub = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
-        font_card_val = ImageFont.truetype("DejaVuSans-Bold.ttf", 36)
-        font_card_lbl = ImageFont.truetype("DejaVuSans.ttf", 22)
-        font_footer = ImageFont.truetype("DejaVuSans-Bold.ttf", 28)
-    except:
-        font_badge = font_title = font_speedo = font_speedo_sub = font_card_val = font_card_lbl = font_footer = ImageFont.load_default()
-
-    # 1. Outer Neon Border Box
-    draw.rounded_rectangle([20, 20, width - 20, height - 20], radius=36, outline="#162235", width=4)
-    draw.rounded_rectangle([22, 22, width - 22, height - 22], radius=34, outline="#00F0FF", width=1)
-
-    # 2. Status Badge & Customer Full Name
-    draw.rounded_rectangle([50, 50, 240, 95], radius=16, fill="#0d1b2a", outline="#00F0FF", width=2)
-    draw.text((145, 72), "LIVE TRAFFIC", fill="#00F0FF", font=font_badge, anchor="mm")
-
-    draw.text((50, 140), f"{user_name}", fill="#FFFFFF", font=font_title, anchor="la")
-
-    # 3. Cyberpunk 240° Semi-Arc Speedometer Gauge
-    cx, cy = width // 2, 410
-    r = 210
-    bbox = [cx - r, cy - r, cx + r, cy + r]
-    arc_start, arc_end = 150, 390
-    arc_span = arc_end - arc_start
-
-    total_val = float(total_gb) if float(total_gb) > 0 else 1.0
-    used_val = float(used_gb)
-    ratio = min(1.0, max(0.0, used_val / total_val))
-    active_end = arc_start + (ratio * arc_span)
-
-    # Background Track (Neon Violet Outline)
-    draw.arc(bbox, start=arc_start, end=arc_end, fill="#1c2538", width=34)
-
-    # Active Progress Glow & Track (Neon Electric Violet to Hot Rose)
-    if ratio > 0:
-        draw.arc([cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2], start=arc_start, end=active_end, fill="#3A0CA3", width=38)
-        draw.arc(bbox, start=arc_start, end=active_end, fill="#FF0055" if ratio > 0.85 else "#00F0FF", width=30)
-
-    # Gauge Center Displays
-    percent_str = f"{int(ratio * 100)}%"
-    draw.text((cx, cy - 25), percent_str, fill="#00F0FF" if ratio <= 0.85 else "#FF0055", font=font_speedo, anchor="mm")
-    draw.text((cx, cy + 45), f"DATA CONSUMED", fill="#8B949E", font=font_speedo_sub, anchor="mm")
-
-    # 4. Dual Glassmorphism Neon Metric Cards
-    card_y = 660
-    card_w, card_h = 425, 175
-
-    # Left Panel: 🔴 USED DATA (Neon Rose Glow)
-    draw.rounded_rectangle([50, card_y, 50 + card_w, card_y + card_h], radius=24, fill="#110d18", outline="#FF0055", width=2)
-    draw.ellipse([75, card_y + 35, 95, card_y + 55], fill="#FF0055")
-    draw.text((110, card_y + 45), "USED TRAFFIC", fill="#FF7096", font=font_card_lbl, anchor="lm")
-    draw.text((75, card_y + 110), f"{used_gb} GB", fill="#FFFFFF", font=font_card_val, anchor="lm")
-
-    # Right Panel: 🟢 REMAINING DATA (Toxic Lime Glow)
-    draw.rounded_rectangle([525, card_y, 525 + card_w, card_y + card_h], radius=24, fill="#0b1716", outline="#00FF66", width=2)
-    draw.ellipse([550, card_y + 35, 570, card_y + 55], fill="#00FF66")
-    draw.text((585, card_y + 45), "REMAINING TRAFFIC", fill="#70FF96", font=font_card_lbl, anchor="lm")
-    draw.text((550, card_y + 110), f"{rem_gb} GB", fill="#FFFFFF", font=font_card_val, anchor="lm")
-
-    # 5. Bottom Hologram Banner (Total Quota Allocation)
-    banner_y = 875
-    draw.rounded_rectangle([50, banner_y, width - 50, banner_y + 75], radius=18, fill="#0d1424", outline="#1F2E4D", width=2)
-    draw.text((80, banner_y + 37), "TOTAL ALLOCATED QUOTA", fill="#8B949E", font=font_badge, anchor="lm")
-    draw.text((width - 80, banner_y + 37), f"{total_gb} GB", fill="#00F0FF", font=font_footer, anchor="rm")
-
-    buf = io.BytesIO()
-    img.save(buf, format='PNG', dpi=(300, 300))
-    buf.seek(0)
-    return buf
-
-# 🔍 OCR Space Helper Functions
+# 🔍 OCR Space Helper Functions for Slip Trx ID Reading
 def parse_slip_ocr(file_path):
     try:
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
@@ -209,27 +127,32 @@ def extract_transaction_last6(ocr_text):
         
     normalized_text = clean_ocr_text_thoroughly(ocr_text)
     
+    # 🚫 ကိုယ့်လက်ခံဖုန်းနံပါတ်များအား အရင်ဆုံး ဖယ်ထုတ်ရှင်းလင်းခြင်း
     for ph in MY_PAYMENT_PHONES:
         normalized_text = normalized_text.replace(ph, "")
 
     lines = normalized_text.splitlines()
 
+    # ၁။ Transaction ID / လုပ်ဆောင်ချက်အိုင်ဒီ ပါသော စာကြောင်းထဲမှ ဂဏန်းရှာခြင်း
     for i, line in enumerate(lines):
         clean_l = line.replace(" ", "").replace("-", "")
         if any(k in clean_l.lower() for k in ["transaction", "trx", "လုပ်ဆောင်ချက်", "လုပ်ဆောင်မှု", "အိုင်ဒီ", "အမှတ်"]):
             digits = re.findall(r'\d{6,24}', clean_l)
             if digits:
                 return digits[0][-6:]
+            # အောက်စာကြောင်းတွင် ကပ်ပါနေပါက
             if i + 1 < len(lines):
                 next_l = lines[i+1].replace(" ", "").replace("-", "")
                 next_digits = re.findall(r'\d{6,24}', next_l)
                 if next_digits:
                     return next_digits[0][-6:]
 
+    # ၂။ KPay 20-digit Transaction No ရှာခြင်း
     kpay_match = re.search(r'\b(010\d{13,20})\b', normalized_text.replace(" ", ""))
     if kpay_match:
         return kpay_match.group(1)[-6:]
 
+    # ၃။ WavePay 8-10 digit Transaction ID ရှာခြင်း (ဖုန်းနံပါတ် 09... များကို ကျော်မည်)
     all_numbers = re.findall(r'\b\d{8,15}\b', normalized_text.replace("-", " "))
     for num in all_numbers:
         if not num.startswith("09") and not num.startswith("9699"):
@@ -237,14 +160,17 @@ def extract_transaction_last6(ocr_text):
 
     return None
 
+# 🆔 Order ID Generator (ပြေစာထဲမှ Trx ID နောက်ဆုံး ၆ လုံးဖြင့် Order ID သတ်မှတ်ခြင်း)
 def generate_order_id_from_slip(file_path=None):
     if file_path:
         ocr_text = parse_slip_ocr(file_path)
         last6 = extract_transaction_last6(ocr_text)
-        if last6 and len(last6) == 6 and last6.isdigit():
+        if last6 and len(last6) == 6:
             return f"ORD-{last6}"
             
-    rand_part = ''.join(random.choices(string.digits, k=6))
+    # Fallback if OCR fails
+    chars = string.ascii_uppercase + string.digits
+    rand_part = ''.join(random.choices(chars, k=6))
     return f"ORD-{rand_part}"
 
 def load_orders():
@@ -269,6 +195,7 @@ def save_order(order_id, order_data):
     except:
         pass
 
+# 🔑 Key to Order ID Mapping
 def load_key_orders():
     data = redis_get("key_orders")
     if data is not None:
@@ -299,6 +226,7 @@ def get_order_id_for_key(key_name):
     clean_k = key_name.strip().lower()
     return data.get(clean_k, "N/A")
 
+# 📢 Bot သုံးဖူးသော User အားလုံး၏ Chat ID ကို မှတ်သားသည့် စနစ်
 def save_user_id(chat_id):
     users = redis_get("all_users") or []
     if str(chat_id) not in [str(u) for u in users]:
@@ -311,6 +239,7 @@ def load_all_users():
         return data
     return []
 
+# 📢 Broadcast State
 def set_broadcast_state(chat_id, is_waiting=True):
     states = redis_get("admin_broadcast_state") or {}
     states[str(chat_id)] = is_waiting
@@ -378,7 +307,7 @@ def load_sales_history():
 
 def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int, order_id=None):
     sales = load_sales_history()
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)  # MMT Timezone
     sale_data = {
         "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
         "date": now.strftime("%Y-%m-%d"),
@@ -945,6 +874,7 @@ def handle_admin_del_key(call):
     elif action == "cancel":
         bot.edit_message_text("❌ Key ဖျက်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီခင်ဗျာ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
 
+# 💡 လက်ရှိရှိပြီးသား Key များထဲမှ အကြီးဆုံး ဂဏန်း (Number) ကို ရှာပေးမည့် စနစ်
 def get_user_next_key_number(user_name, target_chat_id=None):
     max_num = 0
     found_any = False
@@ -1077,6 +1007,7 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
         print("Key Generation Error:", e)
     return None, None, None
 
+# 🎟️ Random Redeem Code Generator (abc123xyz ပုံစံ 10 လုံး Random)
 def generate_random_redeem_code():
     chars = string.ascii_lowercase + string.digits
     return ''.join(random.choices(chars, k=10))
@@ -1417,6 +1348,7 @@ def handle_photo_messages(message):
     price_str = plan_info.get('price_str', f"{plan_info.get('price_int', 1000):,} Ks")
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
+    # 🧾 ပြေစာပေါ်မှ Trx ID စစ်စစ်၏ နောက်ဆုံး ၆ လုံးအား Order ID အဖြစ် ဆွဲထုတ်ခြင်း (ဖုန်းနံပါတ်များ မပါဝင်ပါ)
     photo_file = bot.get_file(message.photo[-1].file_id)
     order_id = generate_order_id_from_slip(photo_file.file_path)
 
@@ -1991,7 +1923,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ 🧰 Data Usage Check (Cyberpunk Neon Card Generator)
+    # ⚡️ Data Usage Check (ကျန်ရှိသော Data တွက်ချက်ပြသသည့် စနစ် ပါဝင်သည်)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -2011,7 +1943,8 @@ def handle_all_messages(message):
             if date_match_str:
                 display_name = display_name.replace(date_match_str, "")
             
-            display_name = display_name.replace("[GW]", "").replace("[gw]", "").replace("_", " ").strip()
+            display_name = display_name.replace("[GW]", "").replace("[gw]", "")
+            display_name = display_name.split("tg")[0].split("Tg")[0].split("mess")[0].replace("_", " ").strip()
             
             if not display_name:
                 display_name = "HMA Customer"
@@ -2033,44 +1966,48 @@ def handle_all_messages(message):
                         year = int(year_str)
                         
                     end_date = f"{day}.{month}.{year}"
+                    has_date = True
                 except:
-                    end_date = "မသိရှိပါ"
+                    has_date = False
             else:
-                end_date = "မသိရှိပါ"
+                has_date = False
 
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            plan_gb_val = bytes_to_gb(limit_bytes) if limit_bytes else 1000.0
+            plan_gb_val = bytes_to_gb(limit_bytes) if limit_bytes else 1000
+            plan_gb = f"{plan_gb_val} GB" if limit_bytes else "Unlimited"
             
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
+            # 🗃️ ကျန်ရှိသော Data တွက်ချက်ခြင်း
             if limit_bytes:
-                rem_gb_val = max(0.0, round(float(plan_gb_val) - float(usage_gb), 2))
+                rem_gb_val = max(0, round(plan_gb_val - usage_gb, 2))
+                rem_gb_str = f"{rem_gb_val} GB"
             else:
-                rem_gb_val = max(0.0, round(1000.0 - float(usage_gb), 2))
+                rem_gb_str = "Unlimited"
             
             order_id_disp = get_order_id_for_key(full_name)
-            ord_line = f"🧾 <b>Order ID :</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
+            ord_line = f"🧾 Order ID : <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
 
-            # 🖼️ Cyberpunk Neon Card Generate ပြုလုပ်ခြင်း
-            card_img_buf = generate_traffic_card_image(
-                user_name=display_name,
-                used_gb=usage_gb,
-                total_gb=plan_gb_val,
-                rem_gb=rem_gb_val
-            )
-            
-            srv_text = "Singapore Server 1 🇸🇬" if str(server_num) == "1" else "Singapore Server 2 🇸🇬"
-            caption_text = (
-                f"👤 <b>Customer :</b> {display_name}\n"
-                f"{ord_line}"
-                f"📡 <b>Server :</b> {srv_text}\n"
-                f"📕 <b>Used Data :</b> <code>{usage_gb} GB</code>\n"
-                f"📗 <b>Remaining :</b> <code>{rem_gb_val} GB</code>\n"
-                f"⏰ <b>Expiry Date :</b> {end_date}"
-            )
-            
-            bot.send_photo(chat_id, card_img_buf, caption=caption_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+            if has_date:
+                result_text = (
+                    f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"{ord_line}"
+                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}\n"
+                    f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
+                )
+            else:
+                result_text = (
+                    f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"{ord_line}"
+                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}"
+                )
+                
+            bot.reply_to(message, result_text, reply_markup=get_back_inline_keyboard())
             return
 
         except Exception as e:
