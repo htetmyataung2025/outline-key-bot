@@ -13,7 +13,7 @@ import html
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
-# 🎨 Pillow Native Image Drawing (Fast, Lightweight & Safe on Vercel)
+# 🎨 Pillow Native Image Drawing
 from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
@@ -89,82 +89,58 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 🎨 100% Native Pillow Card Generator (🔴 Used: Red / 🟢 Remaining: Green)
-def generate_traffic_card_image(user_name, used_gb, total_gb, rem_gb, end_date, server_num, order_id="N/A"):
-    width, height = 700, 800
-    img = Image.new('RGB', (width, height), color='#0d131a')
+# 🎨 အဝိုင်းသီးသန့် Donut Chart Image Generator (🔴 Used: Red / 🟢 Remaining: Green)
+def generate_traffic_card_image(user_name, used_gb, total_gb):
+    width, height = 600, 600
+    img = Image.new('RGB', (width, height), color='#0b1118')
     draw = ImageDraw.Draw(img)
 
     try:
         font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
-        font_center = ImageFont.truetype("DejaVuSans-Bold.ttf", 36)
-        font_sub = ImageFont.truetype("DejaVuSans.ttf", 20)
-        font_text = ImageFont.truetype("DejaVuSans.ttf", 22)
-        font_bold = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
+        font_center_used = ImageFont.truetype("DejaVuSans-Bold.ttf", 46)
+        font_center_total = ImageFont.truetype("DejaVuSans.ttf", 24)
+        font_label = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
     except:
-        font_title = font_center = font_sub = font_text = font_bold = ImageFont.load_default()
+        font_title = font_center_used = font_center_total = font_label = ImageFont.load_default()
 
-    # Top Header Title
-    title_str = f"Traffic Report : {user_name[:22]}"
-    draw.text((width // 2, 45), title_str, fill="#FFFFFF", font=font_title, anchor="mm")
+    # Top Traffic Title
+    draw.text((width // 2, 40), f"Traffic : {user_name[:20]}", fill="#FFFFFF", font=font_title, anchor="mm")
 
-    # Donut Chart Parameters
-    cx, cy = width // 2, 225
-    r_outer = 135
-    thickness = 32
+    # Donut Circle Parameters
+    cx, cy = width // 2, 275
+    r_outer = 175
+    thickness = 40
 
     total_val = float(total_gb) if float(total_gb) > 0 else 1.0
     used_val = float(used_gb)
     used_angle = min(360.0, max(0.0, (used_val / total_val) * 360.0))
 
-    bbox_outer = [cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer]
+    bbox = [cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer]
 
-    # Full Circle in Green (🟢 Remaining)
-    draw.arc(bbox_outer, start=0, end=360, fill="#30D158", width=thickness)
+    # Full Circle (🟢 Remaining - Green)
+    draw.arc(bbox, start=0, end=360, fill="#30D158", width=thickness)
 
-    # Partial Arc in Red (🔴 Used)
+    # Partial Arc (🔴 Used - Red)
     if used_angle > 0:
-        draw.arc(bbox_outer, start=-90, end=-90 + used_angle, fill="#FF3B30", width=thickness)
+        draw.arc(bbox, start=-90, end=-90 + used_angle, fill="#FF3B30", width=thickness)
 
     # Center Text
-    draw.text((cx, cy - 12), f"{used_gb} GB", fill="#FF3B30", font=font_center, anchor="mm")
-    draw.text((cx, cy + 28), f"of {total_gb} GB", fill="#8E8E93", font=font_sub, anchor="mm")
+    draw.text((cx, cy - 15), f"{used_gb} GB", fill="#FF3B30", font=font_center_used, anchor="mm")
+    draw.text((cx, cy + 35), f"of {total_gb} GB", fill="#8E8E93", font=font_center_total, anchor="mm")
 
-    # Indicators (🔴 Used / 🟢 Remaining)
-    draw.rectangle([140, 390, 162, 412], fill="#FF3B30")
-    draw.text((172, 401), "Used (GB)", fill="#FFFFFF", font=font_text, anchor="lm")
+    # Bottom Legend Indicators
+    draw.rectangle([110, 500, 138, 528], fill="#FF3B30")
+    draw.text((150, 514), "Used (GB)", fill="#FFFFFF", font=font_label, anchor="lm")
 
-    draw.rectangle([390, 390, 412, 412], fill="#30D158")
-    draw.text((422, 401), "Remaining (GB)", fill="#FFFFFF", font=font_text, anchor="lm")
-
-    # Divider Line
-    draw.line([(50, 440), (650, 440)], fill="#2C3848", width=2)
-
-    # Info Details List
-    srv_name = "Singapore Server 1 🇸🇬" if str(server_num) == "1" else "Singapore Server 2 🇸🇬"
-    
-    info_rows = [
-        ("📡 Server", f": {srv_name}", "#58A6FF"),
-        ("📦 Total Quota", f": {total_gb} GB", "#FFFFFF"),
-        ("📉 Used Data", f": {used_gb} GB", "#FF3B30"),
-        ("🔋 Remaining", f": {rem_gb} GB", "#30D158"),
-        ("⏰ Expired Date", f": {end_date}", "#FFD60A")
-    ]
-    if order_id != "N/A":
-        info_rows.insert(1, ("🧾 Order ID", f": {order_id}", "#00D2FF"))
-
-    y_cur = 475
-    for label, val, val_color in info_rows:
-        draw.text((65, y_cur), label, fill="#8B949E", font=font_text, anchor="lm")
-        draw.text((290, y_cur), val, fill=val_color, font=font_bold, anchor="lm")
-        y_cur += 48
+    draw.rectangle([330, 500, 358, 528], fill="#30D158")
+    draw.text((370, 514), "Remaining (GB)", fill="#FFFFFF", font=font_label, anchor="lm")
 
     buf = io.BytesIO()
     img.save(buf, format='PNG')
     buf.seek(0)
     return buf
 
-# 🔍 OCR Space Helper Functions for Slip Trx ID Reading
+# 🔍 OCR Space Helper Functions
 def parse_slip_ocr(file_path):
     try:
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
@@ -1987,7 +1963,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ 🧰 Data Usage Check (Native Pillow Image Card Generating)
+    # ⚡️ 🧰 Data Usage Check (အဝိုင်းသီးသန့် Donut Chart Image + Clean Caption Text)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
@@ -2047,23 +2023,22 @@ def handle_all_messages(message):
                 rem_gb_val = max(0.0, round(1000.0 - float(usage_gb), 2))
             
             order_id_disp = get_order_id_for_key(full_name)
+            ord_line = f"🧾 <b>Order ID :</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
 
-            # 🖼️ Native Pillow ဖြင့် Image Card Generate ပြုလုပ်ခြင်း
+            # 🖼️ အဝိုင်းသီးသန့် Donut Chart Generate လုပ်ခြင်း
             card_img_buf = generate_traffic_card_image(
                 user_name=display_name,
                 used_gb=usage_gb,
-                total_gb=plan_gb_val,
-                rem_gb=rem_gb_val,
-                end_date=end_date,
-                server_num=server_num,
-                order_id=order_id_disp
+                total_gb=plan_gb_val
             )
             
+            srv_text = "Singapore Server 1 🇸🇬" if str(server_num) == "1" else "Singapore Server 2 🇸🇬"
             caption_text = (
                 f"👤 <b>Customer :</b> {display_name}\n"
-                f"📡 <b>Server :</b> Singapore Server {server_num} 🇸🇬\n"
-                f"🧰 <b>Used Data :</b> <code>{usage_gb} GB</code>\n"
-                f"🔋 <b>Remaining :</b> <code>{rem_gb_val} GB</code>\n"
+                f"{ord_line}"
+                f"📡 <b>Server :</b> {srv_text}\n"
+                f"📕 <b>Used Data :</b> <code>{usage_gb} GB</code>\n"
+                f"📗 <b>Remaining :</b> <code>{rem_gb_val} GB</code>\n"
                 f"⏰ <b>Expiry Date :</b> {end_date}"
             )
             
