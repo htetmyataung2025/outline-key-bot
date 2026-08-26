@@ -498,7 +498,7 @@ def clean_ss_url(url_str):
 
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_buy = KeyboardButton("💳 Plan များ ကြည့်ရန်")
+    btn_buy = KeyboardButton("🛍️ Plan များ ကြည့်ရန်")
     btn_check = KeyboardButton("🧰 Data Usage စစ်ရန်")
     btn_replace = KeyboardButton("♻️ Key လဲရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
@@ -1277,7 +1277,7 @@ def handle_approve_callback(call):
                 f"{action_title}\n\n"
                 f"{ord_line}"
                 f"👤 <b>ဝယ်ယူသူ:</b> {user_name}\n"
-                f"💳 <b>Plan:</b> {plan_info['name']} ({disp_gb}) - {months_count} လစာ\n"
+                f"🛍️ <b>Plan:</b> {plan_info['name']} ({disp_gb}) - {months_count} လစာ\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                 f"<code>{vpn_key}</code>\n\n"
@@ -1344,7 +1344,7 @@ def handle_photo_messages(message):
         bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nအောင်မြင်စွာ ရောက်ရှိသွားသော User အရေအတွက်: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
         return
 
-    # 💳 Payment Screenshot Handler
+    # 🛍️ Payment Screenshot Handler
     clear_all_states(chat_id)
 
     user_first = message.from_user.first_name if message.from_user.first_name else ""
@@ -1355,7 +1355,7 @@ def handle_photo_messages(message):
     user_plans = load_user_plans()
     
     if str(chat_id) not in user_plans:
-        bot.reply_to(message, "⚠️ ခွင့်လွှတ်ပါခင်ဗျာ၊ ကျေးဇူးပြု၍ '💳 Plan များ ကြည့်ရန်' ခလုတ်ကို အရင်နှိပ်ပြီး ဝယ်ယူလိုသော Plan ကို ရွေးချယ်ပေးပါဦးခင်ဗျာ။")
+        bot.reply_to(message, "⚠️ ခွင့်လွှတ်ပါခင်ဗျာ၊ ကျေးဇူးပြု၍ '🛍️ Plan များ ကြည့်ရန်' ခလုတ်ကို အရင်နှိပ်ပြီး ဝယ်ယူလိုသော Plan ကို ရွေးချယ်ပေးပါဦးခင်ဗျာ။")
         return
 
     plan_info = user_plans.get(str(chat_id))
@@ -1631,7 +1631,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nအောင်မြင်စွာ ရောက်ရှိသွားသော User အရေအတွက်: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
         return
 
-    if input_value in ["💳 Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "💳 Plan ကြည့်ရန်"]:
+    if input_value in ["🛍️ Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်", "🛍️ Plan ကြည့်ရန်"]:
         clear_all_states(chat_id)
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
@@ -2025,7 +2025,7 @@ def handle_all_messages(message):
                     f"👤 အသုံးပြုသူ : {display_name}\n"
                     f"{ord_line}"
                     f"📡 Server : {server_disp}\n"
-                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                    f"🛍️ ဝယ်ယူထားသော Plan : {plan_gb}\n"
                     f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
                     f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}\n"
                     f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
@@ -2035,7 +2035,7 @@ def handle_all_messages(message):
                     f"👤 အသုံးပြုသူ : {display_name}\n"
                     f"{ord_line}"
                     f"📡 Server : {server_disp}\n"
-                    f"💳 ဝယ်ယူထားသော Plan : {plan_gb}\n"
+                    f"🛍️ ဝယ်ယူထားသော Plan : {plan_gb}\n"
                     f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
                     f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}"
                 )
@@ -2161,7 +2161,7 @@ def cron_check():
                                 f"⚠️ <b>သတိပေးချက်:</b>\n\n"
                                 f"{ord_txt}"
                                 f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် <b>{user_warning}</b>\n\n"
-                                f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '💳 Plan များ ကြည့်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
+                                f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '🛍️ Plan များ ကြည့်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
                             )
                             bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
                             notified_count += 1
