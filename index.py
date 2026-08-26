@@ -678,7 +678,7 @@ def get_monthly_revenue_report():
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Total This Month Paid Keys:</b> <b>{total_keys} ခု</b>\n"
         f"💎 <b>ဒီလ စုစုပေါင်း ဝင်ငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
-        f"<i>* မှတ်ချက်: မည်သည့် Discount စျေးနှုန်းမဆို ငွေလွှဲခဲ့သည့် အမှန်တကယ် ပမာဏအတိုင်း အတိအကျ ပေါင်းစပ်ထားပါသည်ခင်ဗျာ။</i>"
+    
     )
     return report
 
