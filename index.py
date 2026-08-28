@@ -1008,70 +1008,6 @@ def generate_random_redeem_code():
     chars = string.ascii_lowercase + string.digits
     return ''.join(random.choices(chars, k=10))
 
-# ==========================================
-# ♻️ Emergency Auto Refund System (ဒီနားမှာ ထည့်ထားပါသည်)
-# ==========================================
-REFUND_CUSTOMERS = [
-    {"name": "Emergency", "chat_id": 1463071310, "gb": 808, "exp": "04.09.2026"},
-    {"name": "Berry ParPar", "chat_id": 5476548700, "gb": 814, "exp": "08.09.2026"},
-    {"name": "Arkar Min", "chat_id": 5384895730, "gb": 850, "exp": "10.09.2026"},
-    {"name": "Kyaw Min Thein", "chat_id": 1938389300, "gb": 907, "exp": "17.09.2026"},
-    {"name": "Aung", "chat_id": 816920774, "gb": 61, "exp": "04.09.2026"},
-    {"name": "Ko Zaw", "chat_id": 5018205720, "gb": 128, "exp": "08.09.2026"},
-    {"name": "Skk Mobile", "chat_id": 5283345142, "gb": 989, "exp": "07.09.2026"},
-    {"name": "UCM W", "chat_id": 1632297389, "gb": 12, "exp": "04.09.2026"},
-    {"name": "Wai Phyo Aung", "chat_id": 5043301478, "gb": 20, "exp": "16.09.2026"},
-    {"name": "HtetZinOo", "chat_id": 7573769471, "gb": 145, "exp": "26.09.2026"},
-    {"name": "Sasukeran", "chat_id": 7675099377, "gb": 29, "exp": "30.08.2026"},
-    {"name": "Hunter", "chat_id": 8056145252, "gb": 147, "exp": "10.09.2026"},
-]
-
-@bot.message_handler(commands=['refund_all'])
-def handle_refund_all(message):
-    if str(message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
-        return
-
-    bot.reply_to(message, f"⏳ Customer စုစုပေါင်း ({len(REFUND_CUSTOMERS)}) ယောက်အတွက် Key များ စတင်ထုတ်ပေးနေပါသည်...")
-    
-    success_count = 0
-    target_server = "2"  # Server 1 ပေါ်တွင် Key မွေးမည်
-
-    for cus in REFUND_CUSTOMERS:
-        try:
-            target_chat_id = cus["chat_id"]
-            user_name = cus["name"]
-            rem_gb = cus["gb"]
-            exp_date = cus["exp"]
-
-            # Key အသစ် ထုတ်ယူခြင်း
-            new_key, new_key_name, expire_date = create_outline_key(
-                target_server,
-                user_name,
-                custom_gb=rem_gb,
-                target_chat_id=target_chat_id,
-                custom_expire_date=exp_date
-            )
-
-            if new_key:
-                msg = (
-                    f"📢 <b>Server ပြောင်းလဲခြင်းနှင့် Key အသစ် အစားထိုးပေးပို့ခြင်း</b>\n\n"
-                    f"မင်္ဂလာပါခင်ဗျာ၊ ယခင်အသုံးပြုနေသော Server အား Maintenance ပြုလုပ်နေပါသဖြင့် လူကြီးမင်းအတွက် ပိုမိုမြန်ဆန်သော <b>Server {target_server} 🇸🇬</b> သို့ အခမဲ့ အစားထိုး ပြောင်းလဲပေးလိုက်ပါသည်ခင်ဗျာ။\n\n"
-                    f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
-                    f"🧰 <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n"
-                    f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {exp_date}\n\n"
-                    f"🔑 <b>VPN Key အသစ်:</b>\n\n"
-                    f"<code>{new_key}</code>\n\n"
-                    f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်၍ Copy ကူးပြီး</b> VPN App ထဲသို့ ပြောင်းလဲထည့်သွင်း အသုံးပြုနိုင်ပါပြီခင်ဗျာ။ အဆင်မပြေမှုအတွက် အနူးအညွတ် တောင်းပန်အပ်ပါသည်။ 🙏"
-                )
-                bot.send_message(target_chat_id, msg, parse_mode="HTML")
-                success_count += 1
-        except Exception as e:
-            print(f"Refund error for {cus['name']}:", e)
-
-    bot.send_message(message.chat.id, f"✅ <b>Refund ပြီးပါပြီ!</b>\n\nအောင်မြင်စွာ Key ပို့ပြီးသူ: <b>{success_count} / {len(REFUND_CUSTOMERS)}</b> ယောက်")
-
-# ==========================================
-
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_gb_"))
 def handle_admin_gb_select(call):
     bot.answer_callback_query(call.id)
@@ -1430,7 +1366,7 @@ def handle_photo_messages(message):
         f"💰 <b>ငွေလွှဲပြေစာအသစ်</b>\n"
         f"🧾 Order ID: <code>{order_id}</code>\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
-        f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
+        f"🛍️ ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
         f"💵 ကျသင့်ငွေပမာဏ: {price_str}\n"
         f"📅 ပေးပို့သည့်ရက်စွဲ: {current_date}\n"
         f"🆔 User Chat ID: {chat_id}"
