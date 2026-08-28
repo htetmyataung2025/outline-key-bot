@@ -1034,7 +1034,7 @@ def handle_refund_all(message):
     bot.reply_to(message, f"⏳ Customer စုစုပေါင်း ({len(REFUND_CUSTOMERS)}) ယောက်အတွက် Key များ စတင်ထုတ်ပေးနေပါသည်...")
     
     success_count = 0
-    target_server = "1"  # Server 1 ပေါ်တွင် Key မွေးမည်
+    target_server = "2"  # Server 1 ပေါ်တွင် Key မွေးမည်
 
     for cus in REFUND_CUSTOMERS:
         try:
