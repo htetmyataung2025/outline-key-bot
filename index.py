@@ -22,7 +22,7 @@ REQUIRED_CHANNEL = "@hefeature"
 
 # 🌐 API Server ၁၊ ၂ နှင့် ၃ လင့်ခ်များ
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
-OUTLINE_API_URL_2 = "https://104.207.77.147:5714/UrZDutqOIvK931jb3x7hLA"
+OUTLINE_API_URL_2 = "https://104.207.92.135:8443/o8a5SK1XlVXdrgXUX5Z24Q"
 OUTLINE_API_URL_3 = "https://2002.hma.qzz.io:11095/5PaTMbE8oReJZieXLtKFcw"
 
 # 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
