@@ -20,10 +20,9 @@ TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 # 📢 Force Join Channel Configuration
 REQUIRED_CHANNEL = "@hefeature"
 
-# 🌐 API Server ၁၊ ၂ နှင့် ၃ လင့်ခ်များ
+# 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.92.135:8443/o8a5SK1XlVXdrgXUX5Z24Q"
-OUTLINE_API_URL_3 = "https://2002.hma.qzz.io:11095/5PaTMbE8oReJZieXLtKFcw"
 
 # 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
@@ -403,7 +402,7 @@ def save_used_redeemer(chat_id):
         redis_set("used_redeemers", used_list)
 
 def has_active_giveaway_key(chat_id):
-    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)
             if res.status_code == 200:
@@ -597,11 +596,9 @@ def get_monthly_revenue_report():
 
     s1_keys, s1_rev, s1_today_keys, s1_today_rev = 0, 0, 0, 0
     s2_keys, s2_rev, s2_today_keys, s2_today_rev = 0, 0, 0, 0
-    s3_keys, s3_rev, s3_today_keys, s3_today_rev = 0, 0, 0, 0
 
     s1_plans = {}
     s2_plans = {}
-    s3_plans = {}
     today_plans = {}
 
     for item in sales_history:
@@ -633,18 +630,11 @@ def get_monthly_revenue_report():
                 if is_today:
                     s2_today_keys += 1
                     s2_today_rev += price
-            elif srv == "3":
-                s3_keys += 1
-                s3_rev += price
-                s3_plans[p_key_str] = s3_plans.get(p_key_str, 0) + 1
-                if is_today:
-                    s3_today_keys += 1
-                    s3_today_rev += price
 
-    total_keys = s1_keys + s2_keys + s3_keys
-    total_rev = s1_rev + s2_rev + s3_rev
-    today_keys = s1_today_keys + s2_today_keys + s3_today_keys
-    today_rev = s1_today_rev + s2_today_rev + s3_today_rev
+    total_keys = s1_keys + s2_keys
+    total_rev = s1_rev + s2_rev
+    today_keys = s1_today_keys + s2_today_keys
+    today_rev = s1_today_rev + s2_today_rev
 
     def format_sales_breakdown(plans_dict):
         if not plans_dict:
@@ -671,14 +661,9 @@ def get_monthly_revenue_report():
         f"🔑 Total Paid Keys: <b>{s2_keys} ခု</b>\n"
         f"{format_sales_breakdown(s2_plans)}\n"
         f"💵 Server 2 လစဉ်ဝင်ငွေ: <b>{s2_rev:,} Ks</b>\n\n"
-        f"📡 <b>Server 3 🇸🇬 (This Month Sales):</b>\n"
-        f"🔑 Total Paid Keys: <b>{s3_keys} ခု</b>\n"
-        f"{format_sales_breakdown(s3_plans)}\n"
-        f"💵 Server 3 လစဉ်ဝင်ငွေ: <b>{s3_rev:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Total This Month Paid Keys:</b> <b>{total_keys} ခု</b>\n"
         f"💎 <b>ဒီလ စုစုပေါင်း ဝင်ငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
-    
     )
     return report
 
@@ -705,13 +690,11 @@ def get_servers_total_usage():
 
     s1_total, s1_bytes = get_server_stats(OUTLINE_API_URL_1)
     s2_total, s2_bytes = get_server_stats(OUTLINE_API_URL_2)
-    s3_total, s3_bytes = get_server_stats(OUTLINE_API_URL_3)
 
     s1_gb = bytes_to_gb(s1_bytes)
     s2_gb = bytes_to_gb(s2_bytes)
-    s3_gb = bytes_to_gb(s3_bytes)
     
-    overall_bytes = s1_bytes + s2_bytes + s3_bytes
+    overall_bytes = s1_bytes + s2_bytes
     overall_gb = bytes_to_gb(overall_bytes)
     overall_tb = round(overall_gb / 1000, 2)
 
@@ -723,9 +706,6 @@ def get_servers_total_usage():
         f"📡 <b>Server 2 🇸🇬</b>\n"
         f"🔑 Total Keys: <b>{s2_total}</b>\n"
         f"🧰 Total Usage: <b>{s2_gb} GB</b>\n\n"
-        f"📡 <b>Server 3 🇸🇬</b>\n"
-        f"🔑 Total Keys: <b>{s3_total}</b>\n"
-        f"🧰 Total Usage: <b>{s3_gb} GB</b>\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
@@ -737,7 +717,7 @@ def search_users_by_query(query):
     found_matches = []
     key_orders_map = load_key_orders()
 
-    for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
+    for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2)]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             if res.status_code == 200:
@@ -803,7 +783,7 @@ def handle_view_key_detail(call):
     server_num = parts[1]
     key_id = parts[2]
     
-    api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
+    api_url = OUTLINE_API_URL_1 if server_num == "1" else OUTLINE_API_URL_2
     
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -878,7 +858,7 @@ def handle_admin_del_key(call):
         bot.send_message(call.message.chat.id, f"⚠️ <b>သတိပေးချက်:</b> Server {server_num} ပေါ်မှ ID ({key_id}) ရှိသော Key ကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?", parse_mode="HTML", reply_markup=markup)
 
     elif action == "confirm":
-        api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
+        api_url = OUTLINE_API_URL_1 if server_num == "1" else OUTLINE_API_URL_2
         try:
             del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
             if del_res.status_code in [200, 204]:
@@ -897,7 +877,7 @@ def get_user_next_key_number(user_name, target_chat_id=None):
     found_any = False
     clean_user = user_name.strip().lower()
 
-    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
             if res.status_code == 200:
@@ -931,7 +911,7 @@ def get_user_next_key_number(user_name, target_chat_id=None):
         return max_num, max_num + 1
 
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, order_id=None):
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     today = datetime.now()
     new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
     add_bytes = (1000 * months_count) * 1000**3
@@ -995,7 +975,7 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     else:
         key_name = f"{user_name}{id_str}{gw_str} ({next_number}) {expire_date}"
     
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
     
     try:
         res = requests.post(f"{api_url}/access-keys", verify=False, timeout=10)
@@ -1218,7 +1198,7 @@ def handle_back_to_plans(call):
         reply_markup=get_plan_keyboard()
     )
 
-# Admin Server 1 / Server 2 / Server 3 Approve Callback Handler
+# Admin Server 1 / Server 2 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
 def handle_approve_callback(call):
     lock_key = f"appr_{call.message.message_id}_{call.data}"
@@ -1234,7 +1214,7 @@ def handle_approve_callback(call):
         
     try:
         parts = call.data.split("_")
-        server_num = parts[1].replace("srv", "")
+        server_num = "1" if parts[1] == "srv1" else "2"
         target_chat_id = parts[2]
         plan_code = parts[3]
         months_count = int(parts[4]) if len(parts) > 4 else 1
@@ -1386,7 +1366,7 @@ def handle_photo_messages(message):
         f"💰 <b>ငွေလွှဲပြေစာအသစ်</b>\n"
         f"🧾 Order ID: <code>{order_id}</code>\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
-        f"📦 ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
+        f"🛍️ ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
         f"💵 ကျသင့်ငွေပမာဏ: {price_str}\n"
         f"📅 ပေးပို့သည့်ရက်စွဲ: {current_date}\n"
         f"🆔 User Chat ID: {chat_id}"
@@ -1402,17 +1382,10 @@ def handle_photo_messages(message):
             InlineKeyboardButton("📡 S2 🇸🇬 Renew", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_renew_{order_id}"),
             InlineKeyboardButton("📡 S2 🇸🇬 New", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
         )
-        approve_markup.row(
-            InlineKeyboardButton("📡 S3 🇸🇬 Renew", callback_data=f"approve_srv3_{chat_id}_{plan_code}_{months_count}_renew_{order_id}"),
-            InlineKeyboardButton("📡 S3 🇸🇬 New", callback_data=f"approve_srv3_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
-        )
     else:
         approve_markup.row(
             InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new_{order_id}"),
             InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
-        )
-        approve_markup.row(
-            InlineKeyboardButton("📡 Server 3 🇸🇬", callback_data=f"approve_srv3_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
         )
     
     admin_msg_dict = {}
@@ -1478,12 +1451,7 @@ def fetch_key_from_server(api_url, input_value):
                     break
                     
         if target_key:
-            if api_url == OUTLINE_API_URL_1:
-                server_num = "1"
-            elif api_url == OUTLINE_API_URL_2:
-                server_num = "2"
-            else:
-                server_num = "3"
+            server_num = "1" if api_url == OUTLINE_API_URL_1 else "2"
             return target_key, bytes_transferred, server_num
     except:
         pass
@@ -1535,7 +1503,7 @@ def handle_admin_replace_callback(call):
         bot.answer_callback_query(call.id, "❌ Key အစားထိုးခြင်းကို ငြင်းပယ်လိုက်ပါပြီ။", show_alert=False)
         return
 
-    new_server_num = parts[1].replace("srv", "")
+    new_server_num = "1" if parts[1] == "srv1" else "2"
     old_server_num = parts[2]
     old_key_id = parts[3]
     target_chat_id = parts[4]
@@ -1543,7 +1511,7 @@ def handle_admin_replace_callback(call):
     exp_date = parts[6]
 
     request_key = f"{target_chat_id}_{old_key_id}"
-    api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else (OUTLINE_API_URL_2 if old_server_num == "2" else OUTLINE_API_URL_3)
+    api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else OUTLINE_API_URL_2
     
     try:
         requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=8)
@@ -1764,8 +1732,6 @@ def handle_all_messages(message):
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
         if not target_key:
             target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
-        if not target_key:
-            target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
 
         if target_key:
             full_name = target_key.get("name", "HMA User")
@@ -1801,11 +1767,16 @@ def handle_all_messages(message):
             )
 
             markup = InlineKeyboardMarkup()
-            markup.row(
-                InlineKeyboardButton("📡 S1 သို့", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
-                InlineKeyboardButton("📡 S2 သို့", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
-                InlineKeyboardButton("📡 S3 သို့", callback_data=f"replace_srv3_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
-            )
+            if server_num == "1":
+                markup.row(
+                    InlineKeyboardButton("📡 S1 Renew (S1 ပဲထားမည်)", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
+                    InlineKeyboardButton("📡 S2 သို့ ပြောင်းမည် (S1 -> S2)", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
+                )
+            else:
+                markup.row(
+                    InlineKeyboardButton("📡 S2 Renew (S2 ပဲထားမည်)", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
+                    InlineKeyboardButton("📡 S1 သို့ ပြောင်းမည် (S2 -> S1)", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
+                )
             markup.row(InlineKeyboardButton("❌ Reject (ငြင်းပယ်မည်)", callback_data=f"replace_reject_{chat_id}_{key_id}"))
 
             request_key = f"{chat_id}_{key_id}"
@@ -1862,8 +1833,6 @@ def handle_all_messages(message):
             vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
             if not vpn_key:
                 vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
-            if not vpn_key:
-                vpn_key, key_name, expire_date = create_outline_key("3", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
 
             if vpn_key:
                 success_msg = (
@@ -1903,7 +1872,7 @@ def handle_all_messages(message):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
-        bot.send_message(chat_id, "📡 Server 1, 2 & 3 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
+        bot.send_message(chat_id, "📡 Server 1 & Server 2 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
         report_text = get_servers_total_usage()
         bot.send_message(chat_id, report_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
@@ -1950,12 +1919,10 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ Data Usage Check (Server 1, 2, 3 အားလုံးစစ်ဆေးခြင်း)
+    # ⚡️ Data Usage Check (Server 1 & 2 စစ်ဆေးခြင်း)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
-    if not target_key:
-        target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
 
     if target_key:
         try:
@@ -2061,7 +2028,7 @@ def cron_check():
     notified_count = 0
     deleted_count = 0
 
-    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
