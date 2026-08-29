@@ -20,14 +20,15 @@ TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 # 📢 Force Join Channel Configuration
 REQUIRED_CHANNEL = "@hefeature"
 
-# 🌐 API Server ၁ နှင့် ၂ လင့်ခ်များ
+# 🌐 API Server ၁၊ ၂ နှင့် ၃ လင့်ခ်များ (Server 3 အစမ်းလင့်ခ် ထည့်ထားသည်)
 OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.92.135:8443/o8a5SK1XlVXdrgXUX5Z24Q"
+OUTLINE_API_URL_3 = "https://server3.dummy.hma:8443/dummyKey"
 
 # 🔑 Admin Telegram Chat IDs (Admin ၂ ယောက်လုံး ပါဝင်သည်)
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 
-# 🔍 OCR Space API Key Configuration (Trx ID ဖတ်ရန်အတွက်)
+# 🔍 OCR Space API Key Configuration
 OCR_API_KEY = "K87641025188957"
 MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
 
@@ -75,9 +76,9 @@ BROADCAST_STATE_FILE = "/tmp/admin_broadcast_state.json"
 ALL_USERS_FILE = "/tmp/all_users.json"
 ORDERS_FILE = "/tmp/orders_data.json"
 KEY_ORDERS_FILE = "/tmp/key_orders.json"
+USER_HISTORY_FILE = "/tmp/user_purchases.json"
 PROCESSED_CALLBACKS = set()
 
-# Lock Check Function
 def is_callback_processed(call_id):
     if call_id in PROCESSED_CALLBACKS:
         return True
@@ -86,7 +87,108 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 🔍 OCR Space Helper Functions for Slip Trx ID Reading
+# 📇 Customer Purchase History Storage Helpers
+def load_all_user_history():
+    data = redis_get("user_purchases_data")
+    if data is not None:
+        return data
+    if os.path.exists(USER_HISTORY_FILE):
+        try:
+            with open(USER_HISTORY_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_user_purchase_record(chat_id, order_id, plan_name, disp_gb, months_count, price_str, server_num, expire_date, vpn_key):
+    history_data = load_all_user_history()
+    uid = str(chat_id)
+    if uid not in history_data:
+        history_data[uid] = []
+        
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    record = {
+        "timestamp": now.strftime("%d/%m/%Y (%I:%M %p)"),
+        "order_id": order_id if order_id else "N/A",
+        "plan_name": plan_name,
+        "disp_gb": disp_gb,
+        "months": months_count,
+        "price_str": price_str,
+        "server": str(server_num),
+        "expire_date": expire_date,
+        "vpn_key": vpn_key
+    }
+    history_data[uid].append(record)
+    redis_set("user_purchases_data", history_data)
+    try:
+        with open(USER_HISTORY_FILE, 'w') as f:
+            json.dump(history_data, f)
+    except:
+        pass
+
+# 🔄 Customer အဟောင်းများ၏ စာရင်းဟောင်း (sales_history) နှင့်ပါ ပေါင်းစပ်ဆွဲထုတ်ပေးသော စနစ်
+def get_user_combined_purchase_records(chat_id):
+    history_data = load_all_user_history()
+    records = list(history_data.get(str(chat_id), []))
+    
+    # Existing Order IDs tracking
+    known_orders = set(r.get("order_id") for r in records if r.get("order_id") and r.get("order_id") != "N/A")
+
+    # Fetching from Sales History for legacy users
+    sales = load_sales_history()
+    user_sales = [s for s in sales if str(s.get("chat_id")) == str(chat_id)]
+
+    # Fetch live server keys to find actual key links for legacy records
+    server_keys_cache = {}
+    for srv_idx, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
+        try:
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)
+            if res.status_code == 200:
+                server_keys_cache[srv_idx] = res.json().get("accessKeys", [])
+        except:
+            server_keys_cache[srv_idx] = []
+
+    for s in user_sales:
+        s_ord = s.get("order_id", "N/A")
+        if s_ord != "N/A" and s_ord in known_orders:
+            continue
+            
+        srv_num = str(s.get("server", "1"))
+        matched_key_link = "N/A"
+        exp_date_found = "မသိရှိပါ"
+        
+        # Searching Key on server matching chat_id
+        for k in server_keys_cache.get(srv_num, []):
+            k_name = k.get("name", "")
+            if f"({chat_id})" in k_name:
+                raw_url = k.get("accessUrl", "")
+                matched_key_link = f"{raw_url}#{k_name}"
+                date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', k_name)
+                if date_match:
+                    exp_date_found = date_match.group(0)
+                break
+
+        p_info = PLANS.get(s.get("plan_code"), {})
+        disp_gb = f"{int(p_info.get('data', '25 GB').split()[0]) * s.get('months', 1)} GB" if p_info else "N/A"
+
+        legacy_rec = {
+            "timestamp": s.get("timestamp", s.get("date", "N/A")),
+            "order_id": s_ord,
+            "plan_name": s.get("plan_name", "VPN Plan"),
+            "disp_gb": disp_gb,
+            "months": s.get("months", 1),
+            "price_str": f"{s.get('price', 0):,} Ks",
+            "server": srv_num,
+            "expire_date": exp_date_found,
+            "vpn_key": matched_key_link
+        }
+        records.append(legacy_rec)
+        if s_ord != "N/A":
+            known_orders.add(s_ord)
+            
+    return records
+
+# 🔍 OCR Space Helper Functions
 def parse_slip_ocr(file_path):
     try:
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
@@ -127,13 +229,11 @@ def extract_transaction_last6(ocr_text):
         
     normalized_text = clean_ocr_text_thoroughly(ocr_text)
     
-    # 🚫 ကိုယ့်လက်ခံဖုန်းနံပါတ်များအား အရင်ဆုံး ဖယ်ထုတ်ရှင်းလင်းခြင်း
     for ph in MY_PAYMENT_PHONES:
         normalized_text = normalized_text.replace(ph, "")
 
     lines = normalized_text.splitlines()
 
-    # ၁။ Transaction ID / လုပ်ဆောင်ချက်အိုင်ဒီ ပါသော စာကြောင်းထဲမှ ဂဏန်းရှာခြင်း
     for i, line in enumerate(lines):
         clean_l = line.replace(" ", "").replace("-", "")
         if any(k in clean_l.lower() for k in ["transaction", "trx", "လုပ်ဆောင်ချက်", "လုပ်ဆောင်မှု", "အိုင်ဒီ", "အမှတ်"]):
@@ -146,12 +246,10 @@ def extract_transaction_last6(ocr_text):
                 if next_digits:
                     return next_digits[0][-6:]
 
-    # ၂။ KPay 20-digit Transaction No ရှာခြင်း
     kpay_match = re.search(r'\b(010\d{13,20})\b', normalized_text.replace(" ", ""))
     if kpay_match:
         return kpay_match.group(1)[-6:]
 
-    # ၃။ WavePay 8-10 digit Transaction ID ရှာခြင်း
     all_numbers = re.findall(r'\b\d{8,15}\b', normalized_text.replace("-", " "))
     for num in all_numbers:
         if not num.startswith("09") and not num.startswith("9699"):
@@ -159,7 +257,6 @@ def extract_transaction_last6(ocr_text):
 
     return None
 
-# 🆔 Order ID Generator (ပြေစာထဲမှ Trx ID နောက်ဆုံး ၆ လုံးဖြင့် Order ID သတ်မှတ်ခြင်း)
 def generate_order_id_from_slip(file_path=None):
     if file_path:
         ocr_text = parse_slip_ocr(file_path)
@@ -193,7 +290,6 @@ def save_order(order_id, order_data):
     except:
         pass
 
-# 🔑 Key to Order ID Mapping
 def load_key_orders():
     data = redis_get("key_orders")
     if data is not None:
@@ -224,7 +320,6 @@ def get_order_id_for_key(key_name):
     clean_k = key_name.strip().lower()
     return data.get(clean_k, "N/A")
 
-# 📢 Bot သုံးဖူးသော User အားလုံး၏ Chat ID ကို မှတ်သားသည့် စနစ်
 def save_user_id(chat_id):
     users = redis_get("all_users") or []
     if str(chat_id) not in [str(u) for u in users]:
@@ -237,7 +332,6 @@ def load_all_users():
         return data
     return []
 
-# 📢 Broadcast State
 def set_broadcast_state(chat_id, is_waiting=True):
     states = redis_get("admin_broadcast_state") or {}
     states[str(chat_id)] = is_waiting
@@ -305,7 +399,7 @@ def load_sales_history():
 
 def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int, order_id=None):
     sales = load_sales_history()
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)  # MMT Timezone
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
     sale_data = {
         "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
         "date": now.strftime("%Y-%m-%d"),
@@ -402,7 +496,7 @@ def save_used_redeemer(chat_id):
         redis_set("used_redeemers", used_list)
 
 def has_active_giveaway_key(chat_id):
-    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)
             if res.status_code == 200:
@@ -498,6 +592,7 @@ def clean_ss_url(url_str):
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("🛍️ Plan များ ကြည့်ရန်")
+    btn_history = KeyboardButton("📇 ဝယ်ယူမှုမှတ်တမ်း")
     btn_check = KeyboardButton("🧰 Data Usage စစ်ရန်")
     btn_replace = KeyboardButton("♻️ Key လဲရန်")
     btn_free = KeyboardButton("🎁 Public Free Key")
@@ -505,10 +600,10 @@ def get_main_menu_keyboard(chat_id=None):
     btn_admin = KeyboardButton("👨‍💻 Admin သို့ ဆက်သွယ်ရန်")
     btn_refresh = KeyboardButton("🤖 Bot Refresh")
     
-    markup.add(btn_buy, btn_check)
-    markup.add(btn_replace, btn_refresh)
+    markup.add(btn_buy, btn_history)
+    markup.add(btn_check, btn_replace)
     markup.add(btn_free, btn_redeem)
-    markup.add(btn_admin)
+    markup.add(btn_admin, btn_refresh)
     
     if chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
@@ -539,50 +634,59 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
-def get_admin_gb_keyboard():
+def get_admin_server_keyboard():
     markup = InlineKeyboardMarkup()
     markup.row(
-        InlineKeyboardButton("⚡️ 25 GB", callback_data="adm_gb_25"),
-        InlineKeyboardButton("⚡️ 50 GB", callback_data="adm_gb_50")
+        InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data="adm_srv_1"),
+        InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data="adm_srv_2")
     )
     markup.row(
-        InlineKeyboardButton("⚡️ 75 GB", callback_data="adm_gb_75"),
-        InlineKeyboardButton("⚡️ 100 GB", callback_data="adm_gb_100")
-    )
-    markup.row(
-        InlineKeyboardButton("⚡️ 150 GB", callback_data="adm_gb_150"),
-        InlineKeyboardButton("⚡️ 200 GB", callback_data="adm_gb_200")
+        InlineKeyboardButton("📡 Server 3 🇸🇬", callback_data="adm_srv_3")
     )
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
-def get_admin_days_keyboard(gb):
+def get_admin_gb_keyboard(srv):
     markup = InlineKeyboardMarkup()
     markup.row(
-        InlineKeyboardButton("📅 3 ရက်", callback_data=f"adm_dur_{gb}_3"),
-        InlineKeyboardButton("📅 5 ရက်", callback_data=f"adm_dur_{gb}_5")
+        InlineKeyboardButton("⚡️ 25 GB", callback_data=f"adm_gb_{srv}_25"),
+        InlineKeyboardButton("⚡️ 50 GB", callback_data=f"adm_gb_{srv}_50")
     )
     markup.row(
-        InlineKeyboardButton("📅 7 ရက်", callback_data=f"adm_dur_{gb}_7"),
-        InlineKeyboardButton("📅 10 ရက်", callback_data=f"adm_dur_{gb}_10")
+        InlineKeyboardButton("⚡️ 75 GB", callback_data=f"adm_gb_{srv}_75"),
+        InlineKeyboardButton("⚡️ 100 GB", callback_data=f"adm_gb_{srv}_100")
     )
     markup.row(
-        InlineKeyboardButton("📅 30 ရက် (1 လ)", callback_data=f"adm_dur_{gb}_30")
+        InlineKeyboardButton("⚡️ 150 GB", callback_data=f"adm_gb_{srv}_150"),
+        InlineKeyboardButton("⚡️ 200 GB", callback_data=f"adm_gb_{srv}_200")
     )
-    markup.row(InlineKeyboardButton("🔙 GB ပြန်ရွေးရန်", callback_data="back_to_gen_rd"))
+    markup.row(InlineKeyboardButton("🔙 Server ပြန်ရွေးရန်", callback_data="back_to_gen_rd"))
     return markup
 
-def get_admin_count_keyboard(gb, days):
+def get_admin_days_keyboard(srv, gb):
     markup = InlineKeyboardMarkup()
     markup.row(
-        InlineKeyboardButton("1 ခု", callback_data=f"adm_cnt_{gb}_{days}_1"),
-        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{gb}_{days}_3")
+        InlineKeyboardButton("📅 1 ရက်", callback_data=f"adm_dur_{srv}_{gb}_1"),
+        InlineKeyboardButton("📅 3 ရက်", callback_data=f"adm_dur_{srv}_{gb}_3")
     )
     markup.row(
-        InlineKeyboardButton("5 ခု", callback_data=f"adm_cnt_{gb}_{days}_5"),
-        InlineKeyboardButton("10 ခု", callback_data=f"adm_cnt_{gb}_{days}_10")
+        InlineKeyboardButton("📅 5 ရက်", callback_data=f"adm_dur_{srv}_{gb}_5"),
+        InlineKeyboardButton("📅 7 ရက်", callback_data=f"adm_dur_{srv}_{gb}_7")
     )
-    markup.row(InlineKeyboardButton("🔙 ရက်ပေါင်း ပြန်ရွေးရန်", callback_data=f"adm_gb_{gb}"))
+    markup.row(InlineKeyboardButton("🔙 GB ပြန်ရွေးရန်", callback_data=f"adm_srv_{srv}"))
+    return markup
+
+def get_admin_count_keyboard(srv, gb, days):
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("1 ခု", callback_data=f"adm_cnt_{srv}_{gb}_{days}_1"),
+        InlineKeyboardButton("3 ခု", callback_data=f"adm_cnt_{srv}_{gb}_{days}_3")
+    )
+    markup.row(
+        InlineKeyboardButton("5 ခု", callback_data=f"adm_cnt_{srv}_{gb}_{days}_5"),
+        InlineKeyboardButton("10 ခု", callback_data=f"adm_cnt_{srv}_{gb}_{days}_10")
+    )
+    markup.row(InlineKeyboardButton("🔙 ရက်ပေါင်း ပြန်ရွေးရန်", callback_data=f"adm_gb_{srv}_{gb}"))
     return markup
 
 def get_monthly_revenue_report():
@@ -596,9 +700,11 @@ def get_monthly_revenue_report():
 
     s1_keys, s1_rev, s1_today_keys, s1_today_rev = 0, 0, 0, 0
     s2_keys, s2_rev, s2_today_keys, s2_today_rev = 0, 0, 0, 0
+    s3_keys, s3_rev, s3_today_keys, s3_today_rev = 0, 0, 0, 0
 
     s1_plans = {}
     s2_plans = {}
+    s3_plans = {}
     today_plans = {}
 
     for item in sales_history:
@@ -630,11 +736,18 @@ def get_monthly_revenue_report():
                 if is_today:
                     s2_today_keys += 1
                     s2_today_rev += price
+            elif srv == "3":
+                s3_keys += 1
+                s3_rev += price
+                s3_plans[p_key_str] = s3_plans.get(p_key_str, 0) + 1
+                if is_today:
+                    s3_today_keys += 1
+                    s3_today_rev += price
 
-    total_keys = s1_keys + s2_keys
-    total_rev = s1_rev + s2_rev
-    today_keys = s1_today_keys + s2_today_keys
-    today_rev = s1_today_rev + s2_today_rev
+    total_keys = s1_keys + s2_keys + s3_keys
+    total_rev = s1_rev + s2_rev + s3_rev
+    today_keys = s1_today_keys + s2_today_keys + s3_today_keys
+    today_rev = s1_today_rev + s2_today_rev + s3_today_rev
 
     def format_sales_breakdown(plans_dict):
         if not plans_dict:
@@ -661,6 +774,10 @@ def get_monthly_revenue_report():
         f"🔑 Total Paid Keys: <b>{s2_keys} ခု</b>\n"
         f"{format_sales_breakdown(s2_plans)}\n"
         f"💵 Server 2 လစဉ်ဝင်ငွေ: <b>{s2_rev:,} Ks</b>\n\n"
+        f"📡 <b>Server 3 🇸🇬 (This Month Sales):</b>\n"
+        f"🔑 Total Paid Keys: <b>{s3_keys} ခု</b>\n"
+        f"{format_sales_breakdown(s3_plans)}\n"
+        f"💵 Server 3 လစဉ်ဝင်ငွေ: <b>{s3_rev:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Total This Month Paid Keys:</b> <b>{total_keys} ခု</b>\n"
         f"💎 <b>ဒီလ စုစုပေါင်း ဝင်ငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
@@ -690,11 +807,13 @@ def get_servers_total_usage():
 
     s1_total, s1_bytes = get_server_stats(OUTLINE_API_URL_1)
     s2_total, s2_bytes = get_server_stats(OUTLINE_API_URL_2)
+    s3_total, s3_bytes = get_server_stats(OUTLINE_API_URL_3)
 
     s1_gb = bytes_to_gb(s1_bytes)
     s2_gb = bytes_to_gb(s2_bytes)
+    s3_gb = bytes_to_gb(s3_bytes)
     
-    overall_bytes = s1_bytes + s2_bytes
+    overall_bytes = s1_bytes + s2_bytes + s3_bytes
     overall_gb = bytes_to_gb(overall_bytes)
     overall_tb = round(overall_gb / 1000, 2)
 
@@ -706,6 +825,9 @@ def get_servers_total_usage():
         f"📡 <b>Server 2 🇸🇬</b>\n"
         f"🔑 Total Keys: <b>{s2_total}</b>\n"
         f"🧰 Total Usage: <b>{s2_gb} GB</b>\n\n"
+        f"📡 <b>Server 3 🇸🇬</b>\n"
+        f"🔑 Total Keys: <b>{s3_total}</b>\n"
+        f"🧰 Total Usage: <b>{s3_gb} GB</b>\n\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
@@ -717,7 +839,7 @@ def search_users_by_query(query):
     found_matches = []
     key_orders_map = load_key_orders()
 
-    for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2)]:
+    for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             if res.status_code == 200:
@@ -766,11 +888,11 @@ def handle_back_to_gen_rd(call):
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     bot.edit_message_text(
-        "🎟️ <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးပြု၍ ဖန်တီးလိုသော <b>GB ပမာဏ</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
+        "🎟️ <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးဇူးပြု၍ မည်သည့် <b>Server</b> အတွက် Code ထုတ်ယူမည်ကို အရင်ဆုံး ရွေးချယ်ပေးပါခင်ဗျာ:",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="HTML",
-        reply_markup=get_admin_gb_keyboard()
+        reply_markup=get_admin_server_keyboard()
     )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
@@ -783,7 +905,7 @@ def handle_view_key_detail(call):
     server_num = parts[1]
     key_id = parts[2]
     
-    api_url = OUTLINE_API_URL_1 if server_num == "1" else OUTLINE_API_URL_2
+    api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
     
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -858,7 +980,7 @@ def handle_admin_del_key(call):
         bot.send_message(call.message.chat.id, f"⚠️ <b>သတိပေးချက်:</b> Server {server_num} ပေါ်မှ ID ({key_id}) ရှိသော Key ကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?", parse_mode="HTML", reply_markup=markup)
 
     elif action == "confirm":
-        api_url = OUTLINE_API_URL_1 if server_num == "1" else OUTLINE_API_URL_2
+        api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
         try:
             del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
             if del_res.status_code in [200, 204]:
@@ -871,13 +993,12 @@ def handle_admin_del_key(call):
     elif action == "cancel":
         bot.edit_message_text("❌ Key ဖျက်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီခင်ဗျာ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
 
-# 💡 လက်ရှိရှိပြီးသား Key များထဲမှ အကြီးဆုံး ဂဏန်း (Number) ကို ရှာပေးမည့် စနစ်
 def get_user_next_key_number(user_name, target_chat_id=None):
     max_num = 0
     found_any = False
     clean_user = user_name.strip().lower()
 
-    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
             if res.status_code == 200:
@@ -911,7 +1032,7 @@ def get_user_next_key_number(user_name, target_chat_id=None):
         return max_num, max_num + 1
 
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, order_id=None):
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     today = datetime.now()
     new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
     add_bytes = (1000 * months_count) * 1000**3
@@ -975,7 +1096,7 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     else:
         key_name = f"{user_name}{id_str}{gw_str} ({next_number}) {expire_date}"
     
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else OUTLINE_API_URL_2
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     
     try:
         res = requests.post(f"{api_url}/access-keys", verify=False, timeout=10)
@@ -1008,19 +1129,37 @@ def generate_random_redeem_code():
     chars = string.ascii_lowercase + string.digits
     return ''.join(random.choices(chars, k=10))
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_srv_"))
+def handle_admin_srv_select(call):
+    bot.answer_callback_query(call.id)
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    
+    srv = call.data.replace("adm_srv_", "")
+    bot.edit_message_text(
+        f"🎟️ <b>Server {srv} 🇸🇬 အတွက် Giveaway GB ပမာဏ ရွေးချယ်ပေးပါ:</b>",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        parse_mode="HTML",
+        reply_markup=get_admin_gb_keyboard(srv)
+    )
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_gb_"))
 def handle_admin_gb_select(call):
     bot.answer_callback_query(call.id)
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
-    gb = call.data.replace("adm_gb_", "")
+    parts = call.data.split("_")
+    srv = parts[2]
+    gb = parts[3]
+    
     bot.edit_message_text(
-        f"🎟️ <b>{gb} GB</b> အတွက် သက်တမ်း (ရက်) ရွေးချယ်ပေးပါခင်ဗျာ:",
+        f"🎟️ <b>Server {srv} 🇸🇬 | {gb} GB</b> အတွက် သက်တမ်း (ရက်) ရွေးချယ်ပေးပါခင်ဗျာ:",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="HTML",
-        reply_markup=get_admin_days_keyboard(gb)
+        reply_markup=get_admin_days_keyboard(srv, gb)
     )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_dur_"))
@@ -1030,15 +1169,16 @@ def handle_admin_days_select(call):
         return
     
     parts = call.data.split("_")
-    gb = parts[2]
-    days = parts[3]
+    srv = parts[2]
+    gb = parts[3]
+    days = parts[4]
     
     bot.edit_message_text(
-        f"🎟️ <b>{gb} GB ({days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?",
+        f"🎟️ <b>Server {srv} 🇸🇬 | {gb} GB ({days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         parse_mode="HTML",
-        reply_markup=get_admin_count_keyboard(gb, days)
+        reply_markup=get_admin_count_keyboard(srv, gb, days)
     )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_cnt_"))
@@ -1051,22 +1191,23 @@ def handle_admin_code_generate(call):
         return
     
     parts = call.data.split("_")
-    gb_amount = int(parts[2])
-    days_amount = int(parts[3])
-    count = int(parts[4])
+    srv = parts[2]
+    gb_amount = int(parts[3])
+    days_amount = int(parts[4])
+    count = int(parts[5])
     
     codes = load_redeem_codes()
     generated_list = []
     
     for _ in range(count):
         code = generate_random_redeem_code()
-        codes[code] = {"gb": gb_amount, "days": days_amount}
+        codes[code] = {"server": srv, "gb": gb_amount, "days": days_amount}
         generated_list.append(f"<code>{code}</code>")
         
     save_redeem_codes(codes)
     
     reply_msg = (
-        f"🎉 <b>{gb_amount} GB ({days_amount} ရက်) Giveaway Code ({count} ခု) ထုတ်ပြီးပါပြီ:</b>\n\n" +
+        f"🎉 <b>Server {srv} 🇸🇬 | {gb_amount} GB ({days_amount} ရက်) Giveaway Code ({count} ခု) ထုတ်ပြီးပါပြီ:</b>\n\n" +
         "\n".join(generated_list) +
         "\n\n💡 <i>အဆိုပါ Code များကို တစ်ကြိမ်သုံးအဖြစ် အသုံးပြုနိုင်ပါပြီဗျာ။</i>"
     )
@@ -1198,7 +1339,7 @@ def handle_back_to_plans(call):
         reply_markup=get_plan_keyboard()
     )
 
-# Admin Server 1 / Server 2 Approve Callback Handler
+# Admin Server 1 / Server 2 / Server 3 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
 def handle_approve_callback(call):
     lock_key = f"appr_{call.message.message_id}_{call.data}"
@@ -1214,7 +1355,7 @@ def handle_approve_callback(call):
         
     try:
         parts = call.data.split("_")
-        server_num = "1" if parts[1] == "srv1" else "2"
+        server_num = parts[1].replace("srv", "")
         target_chat_id = parts[2]
         plan_code = parts[3]
         months_count = int(parts[4]) if len(parts) > 4 else 1
@@ -1226,6 +1367,7 @@ def handle_approve_callback(call):
         user_plans = load_user_plans()
         u_plan = user_plans.get(str(target_chat_id), {})
         price_int = u_plan.get("price_int")
+        price_str = u_plan.get("price_str", f"{price_int:,} Ks" if price_int else f"{plan_info['price']:,} Ks")
         
         if not price_int:
             price_int = plan_info["price"]
@@ -1251,6 +1393,19 @@ def handle_approve_callback(call):
         if vpn_key:
             if str(target_chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int, order_id=order_id)
+
+            # 📇 Customer ၏ ကိုယ်ပိုင်ဝယ်ယူမှုမှတ်တမ်းထဲသို့ သိမ်းဆည်းခြင်း
+            save_user_purchase_record(
+                chat_id=target_chat_id,
+                order_id=order_id,
+                plan_name=plan_info['name'],
+                disp_gb=disp_gb,
+                months_count=months_count,
+                price_str=price_str,
+                server_num=server_num,
+                expire_date=expire_date,
+                vpn_key=vpn_key
+            )
 
             ord_line = f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n" if order_id else ""
             success_message = (
@@ -1382,10 +1537,17 @@ def handle_photo_messages(message):
             InlineKeyboardButton("📡 S2 🇸🇬 Renew", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_renew_{order_id}"),
             InlineKeyboardButton("📡 S2 🇸🇬 New", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
         )
+        approve_markup.row(
+            InlineKeyboardButton("📡 S3 🇸🇬 Renew", callback_data=f"approve_srv3_{chat_id}_{plan_code}_{months_count}_renew_{order_id}"),
+            InlineKeyboardButton("📡 S3 🇸🇬 New", callback_data=f"approve_srv3_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
+        )
     else:
         approve_markup.row(
             InlineKeyboardButton("📡 Server 1 🇸🇬", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new_{order_id}"),
             InlineKeyboardButton("📡 Server 2 🇸🇬", callback_data=f"approve_srv2_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
+        )
+        approve_markup.row(
+            InlineKeyboardButton("📡 Server 3 🇸🇬", callback_data=f"approve_srv3_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
         )
     
     admin_msg_dict = {}
@@ -1451,7 +1613,12 @@ def fetch_key_from_server(api_url, input_value):
                     break
                     
         if target_key:
-            server_num = "1" if api_url == OUTLINE_API_URL_1 else "2"
+            if api_url == OUTLINE_API_URL_1:
+                server_num = "1"
+            elif api_url == OUTLINE_API_URL_2:
+                server_num = "2"
+            else:
+                server_num = "3"
             return target_key, bytes_transferred, server_num
     except:
         pass
@@ -1503,7 +1670,7 @@ def handle_admin_replace_callback(call):
         bot.answer_callback_query(call.id, "❌ Key အစားထိုးခြင်းကို ငြင်းပယ်လိုက်ပါပြီ။", show_alert=False)
         return
 
-    new_server_num = "1" if parts[1] == "srv1" else "2"
+    new_server_num = parts[1].replace("srv", "")
     old_server_num = parts[2]
     old_key_id = parts[3]
     target_chat_id = parts[4]
@@ -1511,7 +1678,7 @@ def handle_admin_replace_callback(call):
     exp_date = parts[6]
 
     request_key = f"{target_chat_id}_{old_key_id}"
-    api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else OUTLINE_API_URL_2
+    api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else (OUTLINE_API_URL_2 if old_server_num == "2" else OUTLINE_API_URL_3)
     
     try:
         requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=8)
@@ -1603,6 +1770,50 @@ def handle_all_messages(message):
         clear_all_states(chat_id)
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
+
+    # 📇 Customer Purchase History Handler (Syncing with legacy sales)
+    if input_value in ["📇 ဝယ်ယူမှုမှတ်တမ်း", "ဝယ်ယူမှုမှတ်တမ်း"]:
+        clear_all_states(chat_id)
+        records = get_user_combined_purchase_records(chat_id)
+        if not records:
+            empty_msg = (
+                "📇 <b>လူကြီးမင်း၏ ဝယ်ယူမှုမှတ်တမ်း</b>\n\n"
+                "<i>လက်ရှိတွင် ဝယ်ယူထားသော မှတ်တမ်း မရှိသေးပါခင်ဗျာ။ '🛍️ Plan များ ကြည့်ရန်' မှတစ်ဆင့် စတင်ဝယ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>"
+            )
+            bot.send_message(chat_id, empty_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+            return
+
+        history_texts = []
+        for idx, rec in enumerate(reversed(records), 1):
+            srv_name = f"Singapore Server {rec.get('server', '1')} 🇸🇬"
+            vpn_k = rec.get('vpn_key', '')
+            key_block = f"<code>{vpn_k}</code>" if vpn_k != "N/A" else "<i>(Server Maintenance ဖြစ်နေပါသဖြင့် အထက်ပါ Menu ရှိ '♻️ Key လဲရန်' ဖြင့် အသစ်လဲလှယ်နိုင်ပါသည်)</i>"
+            
+            item_txt = (
+                f"<b>#{idx} | ဝယ်ယူမှု အချက်အလက်</b>\n"
+                f"🧾 <b>Order ID:</b> <code>{rec.get('order_id', 'N/A')}</code>\n"
+                f"📅 <b>ဝယ်ယူသည့် အချိန်:</b> <code>{rec.get('timestamp', 'N/A')}</code>\n"
+                f"🛍️ <b>Plan:</b> {rec.get('plan_name', '')} ({rec.get('disp_gb', '')}) [{rec.get('months', 1)} လစာ]\n"
+                f"💵 <b>ကျသင့်ငွေ:</b> {rec.get('price_str', '')}\n"
+                f"📡 <b>Server:</b> {srv_name}\n"
+                f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{rec.get('expire_date', 'N/A')}</code>\n\n"
+                f"🔑 <b>VPN Key:</b>\n"
+                f"{key_block}"
+            )
+            history_texts.append(item_txt)
+
+        final_history_msg = (
+            f"📇 <b>လူကြီးမင်း ဝယ်ယူခဲ့သော VPN Key များ ({len(records)} ခု):</b>\n\n" +
+            "\n\n━━━━━━━━━━━━━━━━━\n\n".join(history_texts) +
+            "\n\n☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးယူနိုင်ပါသည်ခင်ဗျာ။</i>"
+        )
+        
+        if len(final_history_msg) > 4000:
+            for piece in [final_history_msg[i:i+4000] for i in range(0, len(final_history_msg), 4000)]:
+                bot.send_message(chat_id, piece, parse_mode="HTML")
+        else:
+            bot.send_message(chat_id, final_history_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        return
         
     if input_value in ["🧰 Data Usage စစ်ရန်", "Data Usage စစ်ရန်", "⚡ Data Usage စစ်ရန်"]:
         clear_all_states(chat_id)
@@ -1681,9 +1892,9 @@ def handle_all_messages(message):
         
         bot.send_message(
             chat_id, 
-            "🎟️ <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးပြု၍ ဖန်တီးလိုသော <b>GB ပမာဏ</b> ကို ရွေးချယ်ပေးပါခင်ဗျာ:", 
+            "🎟️ <b>Giveaway Redeem Code ထုတ်ရန်:</b>\n\nကျေးဇူးပြု၍ မည်သည့် <b>Server</b> အတွက် Code ထုတ်ယူမည်ကို အရင်ဆုံး ရွေးချယ်ပေးပါခင်ဗျာ:", 
             parse_mode="HTML", 
-            reply_markup=get_admin_gb_keyboard()
+            reply_markup=get_admin_server_keyboard()
         )
         return
 
@@ -1732,6 +1943,8 @@ def handle_all_messages(message):
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
         if not target_key:
             target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
+        if not target_key:
+            target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
 
         if target_key:
             full_name = target_key.get("name", "HMA User")
@@ -1767,16 +1980,11 @@ def handle_all_messages(message):
             )
 
             markup = InlineKeyboardMarkup()
-            if server_num == "1":
-                markup.row(
-                    InlineKeyboardButton("📡 S1 Renew (S1 ပဲထားမည်)", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
-                    InlineKeyboardButton("📡 S2 သို့ ပြောင်းမည် (S1 -> S2)", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
-                )
-            else:
-                markup.row(
-                    InlineKeyboardButton("📡 S2 Renew (S2 ပဲထားမည်)", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
-                    InlineKeyboardButton("📡 S1 သို့ ပြောင်းမည် (S2 -> S1)", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
-                )
+            markup.row(
+                InlineKeyboardButton("📡 S1 သို့", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
+                InlineKeyboardButton("📡 S2 သို့", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
+                InlineKeyboardButton("📡 S3 သို့", callback_data=f"replace_srv3_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
+            )
             markup.row(InlineKeyboardButton("❌ Reject (ငြင်းပယ်မည်)", callback_data=f"replace_reject_{chat_id}_{key_id}"))
 
             request_key = f"{chat_id}_{key_id}"
@@ -1817,27 +2025,35 @@ def handle_all_messages(message):
         if matched_code_key:
             code_info = codes[matched_code_key]
             if isinstance(code_info, dict):
+                target_srv = str(code_info.get("server", "1"))
                 gb_val = code_info.get("gb", 25)
-                days_val = code_info.get("days", 30)
+                days_val = code_info.get("days", 1)
             else:
+                target_srv = "1"
                 gb_val = int(code_info)
-                days_val = 30
+                days_val = 1
 
             user_name = message.from_user.first_name if message.from_user.first_name else "Giveaway Winner"
             
             del codes[matched_code_key]
             save_redeem_codes(codes)
 
-            bot.send_message(chat_id, "⏳ Redeem Code မှန်ကန်ပါသည်။ VPN Key ကို ထုတ်ပေးနေပါသည်...")
+            bot.send_message(chat_id, f"⏳ Redeem Code မှန်ကန်ပါသည်။ Server {target_srv} ပေါ်မှ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
-            vpn_key, key_name, expire_date = create_outline_key("1", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
+            vpn_key, key_name, expire_date = create_outline_key(target_srv, user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
             if not vpn_key:
-                vpn_key, key_name, expire_date = create_outline_key("2", user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
+                for alt_srv in ["1", "2", "3"]:
+                    if alt_srv != target_srv:
+                        vpn_key, key_name, expire_date = create_outline_key(alt_srv, user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
+                        if vpn_key:
+                            target_srv = alt_srv
+                            break
 
             if vpn_key:
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
                     f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
+                    f"📡 <b>Server:</b> Server {target_srv} 🇸🇬\n"
                     f"🎟️ <b>ရရှိသော Data GB:</b> {gb_val} GB\n"
                     f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                     f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
@@ -1853,7 +2069,7 @@ def handle_all_messages(message):
                     try:
                         bot.send_message(
                             aid, 
-                            f"🎟️ <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Code: <code>{matched_code_key}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
+                            f"🎟️ <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Server {target_srv} Code: <code>{matched_code_key}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
                             parse_mode="HTML"
                         )
                     except:
@@ -1872,7 +2088,7 @@ def handle_all_messages(message):
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
-        bot.send_message(chat_id, "📡 Server 1 & Server 2 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
+        bot.send_message(chat_id, "📡 Server 1, 2 & 3 🇸🇬 Data Usage များကို တွက်ချက်နေပါသည်...")
         report_text = get_servers_total_usage()
         bot.send_message(chat_id, report_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
@@ -1919,10 +2135,12 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ Data Usage Check (Server 1 & 2 စစ်ဆေးခြင်း)
+    # ⚡️ Data Usage Check (Server 1, 2, 3 အားလုံးစစ်ဆေးခြင်း)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key:
         target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
+    if not target_key:
+        target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
 
     if target_key:
         try:
@@ -2028,7 +2246,7 @@ def cron_check():
     notified_count = 0
     deleted_count = 0
 
-    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2]:
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
