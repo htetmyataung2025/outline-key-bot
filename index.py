@@ -165,11 +165,11 @@ def generate_order_id_from_slip(file_path=None):
         ocr_text = parse_slip_ocr(file_path)
         last6 = extract_transaction_last6(ocr_text)
         if last6 and len(last6) == 6:
-            return f"ORD-{last6}"
+            return f"#{last6}"
             
     chars = string.ascii_uppercase + string.digits
     rand_part = ''.join(random.choices(chars, k=6))
-    return f"ORD-{rand_part}"
+    return f"#{rand_part}"
 
 def load_orders():
     data = redis_get("orders_data")
