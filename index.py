@@ -1704,9 +1704,9 @@ def handle_admin_replace_callback(call):
         if new_key:
             success_msg = (
                 f"🎉 <b>လူကြီးမင်း၏ VPN Key ကို အဆင်ပြေစွာ အသစ် လဲလှယ်ပေးလိုက်ပါပြီခင်ဗျာ!</b>\n\n"
-                f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
-                f"📡 <b>Server အသစ်:</b> Server {new_server_num} 🇸🇬\n"
-                f"🧰 <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n"
+                f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n\n"
+                f"📡 <b>Server အသစ်:</b> Server {new_server_num} 🇸🇬\n\n"
+                f"🧰 <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>VPN Key အသစ်:</b>\n\n"
                 f"<code>{new_key}</code>\n\n"
@@ -2057,9 +2057,9 @@ def handle_all_messages(message):
             if vpn_key:
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
-                    f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
-                    f"📡 <b>Server:</b> Server {target_srv} 🇸🇬\n"
-                    f"🎟️ <b>ရရှိသော Data GB:</b> {gb_val} GB\n"
+                    f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n\n"
+                    f"📡 <b>Server:</b> Server {target_srv} 🇸🇬\n\n"
+                    f"🎟️ <b>ရရှိသော Data GB:</b> {gb_val} GB\n\n"
                     f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                     f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                     f"<code>{vpn_key}</code>\n\n"
@@ -2212,21 +2212,21 @@ def handle_all_messages(message):
 
             if has_date:
                 result_text = (
-                    f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"👤 အသုံးပြုသူ : {display_name}\n\n"
                     f"{ord_line}"
-                    f"📡 Server : {server_disp}\n"
-                    f"🛍️ ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
-                    f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}\n"
+                    f"📡 Server : {server_disp}\n\n"
+                    f"🛍️ ဝယ်ယူထားသော Plan : {plan_gb}\n\n"
+                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n\n"
+                    f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}\n\n"
                     f"⏰ သက်တမ်းကုန်ဆုံးရက်: {end_date}"
                 )
             else:
                 result_text = (
-                    f"👤 အသုံးပြုသူ : {display_name}\n"
+                    f"👤 အသုံးပြုသူ : {display_name}\n\n"
                     f"{ord_line}"
-                    f"📡 Server : {server_disp}\n"
-                    f"🛍️ ဝယ်ယူထားသော Plan : {plan_gb}\n"
-                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n"
+                    f"📡 Server : {server_disp}\n\n"
+                    f"🛍️ ဝယ်ယူထားသော Plan : {plan_gb}\n\n"
+                    f"🧰 အသုံးပြုပြီးသား Data : {usage_gb} GB\n\n"
                     f"🗃️ ကျန်ရှိသော Data : {rem_gb_str}"
                 )
                 
@@ -2359,10 +2359,10 @@ def cron_check():
                             pass
 
                     admin_noti = (
-                        f"📢 <b>Notification Alert</b>\n"
+                        f"📢 <b>Notification Alert</b>\n\n"
                         f"{f'🧾 <b>Order ID:</b> <code>{order_id_tag}</code>' + chr(10) if order_id_tag != 'N/A' else ''}"
-                        f"👤 အသုံးပြုသူ: {full_name}\n"
-                        f"📌 အခြေအနေ: {reason_text}\n"
+                        f"👤 အသုံးပြုသူ: {full_name}\n\n"
+                        f"⚠️ အခြေအနေ: {reason_text}\n\n"
                         f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
                     )
                     
