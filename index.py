@@ -21,7 +21,7 @@ TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
 REQUIRED_CHANNEL = "@hefeature"
 
 # 🌐 API Server ၁၊ ၂ နှင့် ၃ လင့်ခ်များ (Server 3 အစမ်းလင့်ခ် ထည့်ထားသည်)
-OUTLINE_API_URL_1 = "https://64.120.94.164:49429/YkDBSn3KwUaICBvzDQtvxQ"
+OUTLINE_API_URL_1 = "https://h.e.feature.hma.qzz.io:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.92.135:8443/o8a5SK1XlVXdrgXUX5Z24Q"
 OUTLINE_API_URL_3 = "https://2002.hma.kdns.fr:54357/R-rKhGcPU64gZM61HhR1Tw"
 
