@@ -1315,7 +1315,7 @@ def handle_select_plan(call):
             f"━━━━━━━━━━━━━━━\n\n"
             f"🙏🏻 ငွေလွှဲပြီး 📸Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n\n"
             f"ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။\n\n"
-            f"⚠️Ultimate VIP - Unlimited Plan ဝယ်ထားသူများ⚠️\n\n"
+            f"⚠️ Ultimate VIP - Unlimited Plan သက်တမ်းတိုးရန် Note မှာ Renew Key လို့ရေးပေးပါ။\n\n"
             f"ကီးအဟောင်း သက်တမ်းတိုးမည်ဆိုပါက ငွေလွှဲပြေစာရဲ့ Note မှာ Renew Key လို့ရေးပေးပါ။\n\n"
             f"ကျန်Paln များ ကီးသက်တမ်းတိုးမရပါ။\n\n"
              f"❗️Server 1 နဲ့အဆင်မပြေလို့ Server 2 သုံးနေသူများ❗️\n\n"
@@ -1568,8 +1568,8 @@ def handle_photo_messages(message):
         save_admin_msg_map(chat_id, admin_msg_dict)
         user_reply_text = (
             f"💌 <b>ငွေလွှဲပြေစာအား လက်ခံရရှိပါသည်ခင်ဗျာ။</b>\n\n"
-            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
-            f"📌 <b>Plan:</b> {plan_info['name']} ({plan_info.get('data', '')})\n"
+            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+            f"🛍️ <b>Plan:</b> {plan_info['name']} ({plan_info.get('data', '')})\n\n"
             f"💵 <b>ပမာဏ:</b> {price_str}\n\n"
             f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် VPN Key ကို ချက်ချင်း ပို့ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
         )
