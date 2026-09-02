@@ -1,4 +1,4 @@
-import os
+ရော့ ဒီထဲကိုထည့်ပေး import os
 import requests
 import random
 import string
@@ -131,11 +131,14 @@ def get_user_combined_purchase_records(chat_id):
     history_data = load_all_user_history()
     records = list(history_data.get(str(chat_id), []))
     
+    # Existing Order IDs tracking
     known_orders = set(r.get("order_id") for r in records if r.get("order_id") and r.get("order_id") != "N/A")
 
+    # Fetching from Sales History for legacy users
     sales = load_sales_history()
     user_sales = [s for s in sales if str(s.get("chat_id")) == str(chat_id)]
 
+    # Fetch live server keys to find actual key links for legacy records
     server_keys_cache = {}
     for srv_idx, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
         try:
@@ -154,6 +157,7 @@ def get_user_combined_purchase_records(chat_id):
         matched_key_link = "N/A"
         exp_date_found = "မသိရှိပါ"
         
+        # Searching Key on server matching chat_id
         for k in server_keys_cache.get(srv_num, []):
             k_name = k.get("name", "")
             if f"({chat_id})" in k_name:
@@ -786,8 +790,8 @@ def get_servers_total_usage():
         total_bytes = 0
 
         try:
-            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=12)
-            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=12)
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
 
             if keys_resp.status_code == 200:
                 keys_data = keys_resp.json().get("accessKeys", [])
@@ -891,7 +895,6 @@ def handle_back_to_gen_rd(call):
         reply_markup=get_admin_server_keyboard()
     )
 
-# 🛠️ Read Timeout မဖြစ်အောင် Timeout 15s တိုးမြှင့်ထားပြီး Metrics Error ဖြစ်လျှင်တောင် Key အချက်အလက်များကို ဆက်ပြပေးမည့် Fixed Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
 def handle_view_key_detail(call):
     bot.answer_callback_query(call.id)
@@ -903,21 +906,14 @@ def handle_view_key_detail(call):
     key_id = parts[2]
     
     api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
-    api_url = api_url.rstrip('/')
     
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
-        
-        bytes_transferred = {}
-        try:
-            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=15)
-            if metrics_resp.status_code == 200:
-                bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
-        except:
-            bytes_transferred = {}
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
         
         if keys_resp.status_code == 200:
             keys_data = keys_resp.json().get("accessKeys", [])
+            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
             
             target_key = None
             for k in keys_data:
@@ -1403,6 +1399,7 @@ def handle_approve_callback(call):
             if str(target_chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
                 save_sale_transaction(server_num, target_chat_id, plan_code, plan_info['name'], months_count, price_int, order_id=order_id)
 
+            # 📇 Customer ၏ ကိုယ်ပိုင်ဝယ်ယူမှုမှတ်တမ်းထဲသို့ သိမ်းဆည်းခြင်း
             save_user_purchase_record(
                 chat_id=target_chat_id,
                 order_id=order_id,
@@ -1507,6 +1504,7 @@ def handle_photo_messages(message):
     price_str = plan_info.get('price_str', f"{plan_info.get('price_int', 1000):,} Ks")
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
 
+    # 🧾 ပြေစာပေါ်မှ Trx ID စစ်စစ်၏ နောက်ဆုံး ၆ လုံးအား Order ID အဖြစ် ဆွဲထုတ်ခြင်း
     photo_file = bot.get_file(message.photo[-1].file_id)
     order_id = generate_order_id_from_slip(photo_file.file_path)
 
@@ -1579,79 +1577,56 @@ def handle_photo_messages(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Admin ထံ ပို့၍မရပါ - Bot အား အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
-# ⚡️ Fetch Key From Server (Timeout 10s နှင့် Metrics Fallback ပါဝင်သည်)
 def fetch_key_from_server(api_url, input_value):
-    if not api_url or "dummyKey" in api_url:
-        return None, None, None
-        
-    api_url = api_url.rstrip('/')
-    
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=10)
-        
-        bytes_transferred = {}
-        try:
-            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=10)
-            if metrics_resp.status_code == 200:
-                bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
-        except:
-            bytes_transferred = {}
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
         
         if keys_resp.status_code != 200:
             return None, None, None
             
         keys_data = keys_resp.json().get("accessKeys", [])
+        bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
         
         target_key = None
-        input_raw = input_value.strip()
 
-        if re.search(r'^\d+$', input_raw):
+        if "#" in input_value:
+            try:
+                raw_name = input_value.split("#")[1]
+                clean_name = "".join(re.findall(r'[a-zA-Z0-9_\s]', raw_name)).replace("_", " ").strip().lower()
+                if clean_name:
+                    for key in keys_data:
+                        if clean_name in key.get("name", "").lower():
+                            target_key = key
+                            break
+            except:
+                pass
+
+        if not target_key and input_value.startswith("ss://"):
+            input_clean = clean_ss_url(input_value)
             for key in keys_data:
-                if str(key.get("id")) == input_raw:
+                server_clean = clean_ss_url(key.get("accessUrl", ""))
+                if input_clean and (input_clean in server_clean or server_clean in input_clean):
                     target_key = key
                     break
 
-        if not target_key and "#" in input_raw:
-            raw_hash_name = input_raw.split("#")[-1].strip().lower()
+        if not target_key and re.search(r'^\d+$', input_value):
+            match_id = re.search(r'^\d+$', input_value).group(0)
             for key in keys_data:
-                k_name = key.get("name", "").strip().lower()
-                if raw_hash_name and (raw_hash_name in k_name or k_name in raw_hash_name):
+                if str(key.get("id")) == str(match_id):
                     target_key = key
                     break
-
-        if not target_key and input_raw.startswith("ss://"):
-            clean_input = input_raw.replace("ss://", "").split("?")[0].split("#")[0].strip()
-            for key in keys_data:
-                server_url = key.get("accessUrl", "").replace("ss://", "").split("?")[0].split("#")[0].strip()
-                if clean_input and (clean_input in server_url or server_url in clean_input):
-                    target_key = key
-                    break
-                try:
-                    input_secret = clean_input.split("@")[0]
-                    server_secret = server_url.split("@")[0]
-                    if input_secret == server_secret:
-                        target_key = key
-                        break
-                except:
-                    pass
-
-        if not target_key:
-            for key in keys_data:
-                k_name = key.get("name", "").strip().lower()
-                if input_raw.lower() in k_name:
-                    target_key = key
-                    break
-
+                    
         if target_key:
-            if api_url == OUTLINE_API_URL_1.rstrip('/'):
+            if api_url == OUTLINE_API_URL_1:
                 server_num = "1"
-            elif api_url == OUTLINE_API_URL_2.rstrip('/'):
+            elif api_url == OUTLINE_API_URL_2:
                 server_num = "2"
             else:
                 server_num = "3"
             return target_key, bytes_transferred, server_num
-    except Exception as e:
-        print(f"Fetch Key Error on {api_url}:", e)
+    except:
+        pass
     return None, None, None
 
 # 🔄 Admin Key Replacement Approval Callback Handler
@@ -1801,7 +1776,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "🧸  လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
 
-    # 📇 Customer Purchase History Handler
+    # 📇 Customer Purchase History Handler (Syncing with legacy sales)
     if input_value in ["📇 ဝယ်ယူမှုမှတ်တမ်း", "ဝယ်ယူမှုမှတ်တမ်း"]:
         clear_all_states(chat_id)
         records = get_user_combined_purchase_records(chat_id)
@@ -1827,7 +1802,7 @@ def handle_all_messages(message):
                 f"💵 <b>ကျသင့်ငွေ:</b> {rec.get('price_str', '')}\n\n"
                 f"📡 <b>Server:</b> {srv_name}\n\n"
                 f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{rec.get('expire_date', 'N/A')}</code>\n\n"
-                f"🔑 <b>VPN Key:</b>\n\n"
+                f"🔑 <b>VPN Key:</b>\n"
                 f"{key_block}"
             )
             history_texts.append(item_txt)
@@ -2223,6 +2198,7 @@ def handle_all_messages(message):
             usage_bytes = bytes_transferred.get(str(key_id), 0)
             usage_gb = bytes_to_gb(usage_bytes)
             
+            # 🗃️ ကျန်ရှိသော Data တွက်ချက်ခြင်း
             if limit_bytes:
                 rem_gb_val = max(0, round(plan_gb_val - usage_gb, 2))
                 rem_gb_str = f"{rem_gb_val} GB"
@@ -2277,14 +2253,14 @@ def cron_check():
 
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
-            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=12)
-            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=12)
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
             
             if keys_resp.status_code != 200:
                 continue
                 
             keys_data = keys_resp.json().get("accessKeys", [])
-            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
+            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
 
             for key in keys_data:
                 full_name = key.get("name", "")
