@@ -1,4 +1,4 @@
-ရော့ ဒီထဲကိုထည့်ပေး import os
+import os
 import requests
 import random
 import string
