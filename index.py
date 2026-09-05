@@ -1320,10 +1320,7 @@ def handle_select_plan(call):
             f"🙏🏻 ငွေလွှဲပြီး 📸Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n\n"
             f"ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။\n\n"
             f"⚠️ Ultimate VIP - Unlimited Plan သက်တမ်းတိုးရန် Note မှာ Renew Key လို့ရေးပေးပါ။\n\n"
-            f"ကီးအဟောင်း သက်တမ်းတိုးမည်ဆိုပါက ငွေလွှဲပြေစာရဲ့ Note မှာ Renew Key လို့ရေးပေးပါ။\n\n"
-            f"ကျန်Paln များ ကီးသက်တမ်းတိုးမရပါ။\n\n"
-            f"❗️Server 1 နဲ့အဆင်မပြေလို့ Server 2 သုံးနေသူများ❗️\n\n"
-            f"ကီးအသစ်ဝယ်မည်ဆိုပါက ငွေလွှဲပြေစာရဲ့ Note မှာ Server 2 လို့ရေးပေးပါ။\n\n"
+            f"ကျန် Plan များ ကီးသက်တမ်းတိုးမရပါ။\n\n"
         )
 
         bot.edit_message_text(
@@ -1424,7 +1421,7 @@ def handle_approve_callback(call):
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                 f"<code>{vpn_key}</code>\n\n"
-                f"☝️ အပေါ်က Key  ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+                f"☝️ အပေါ်က Key  ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
             )
             bot.send_message(target_chat_id, success_message, parse_mode="HTML")
             
@@ -2068,7 +2065,7 @@ def handle_all_messages(message):
             del codes[matched_code_key]
             save_redeem_codes(codes)
 
-            bot.send_message(chat_id, f"⏳ Redeem Code မှန်ကန်ပါသည်။ Server {target_srv} ပေါ်မှ VPN Key ကို ထုတ်ပေးနေပါသည်...")
+            bot.send_message(chat_id, f"🎟️ Redeem Code မှန်ကန်ပါသည်။ Server {target_srv} ပေါ်မှ VPN Key ကို ထုတ်ပေးနေပါသည်...")
             
             vpn_key, key_name, expire_date = create_outline_key(target_srv, user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
             if not vpn_key:
@@ -2153,7 +2150,7 @@ def handle_all_messages(message):
                     f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
                     f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Key ကို အောက်တွင် ရယူနိုင်ပါပြီ။</b>\n\n"
                     f"<code>{input_value}</code>\n\n"
-                    f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ ကြိုက်နှစ်သက်ရာ VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
+                    f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
                 bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
