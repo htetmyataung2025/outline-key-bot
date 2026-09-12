@@ -175,7 +175,6 @@ def sync_legacy_redis_data_to_registry():
     registry = load_persistent_keys()
     changed = False
     
-    # ၁။ sales_history ထဲမှ customer အဟောင်းများ sync လုပ်ခြင်း
     sales = load_sales_history()
     for idx, s in enumerate(sales, 1):
         s_cid = str(s.get("chat_id", ""))
@@ -183,7 +182,6 @@ def sync_legacy_redis_data_to_registry():
         s_ord = s.get("order_id", "N/A")
         p_name = s.get("plan_name", "VPN Plan")
         
-        # စာရင်းမရှိသေးပါက Registry ထဲသို့ အသစ်ပေါင်းထည့်ခြင်း
         uid = f"{s_srv}_sale_{s_ord if s_ord != 'N/A' else idx}"
         if uid not in registry:
             registry[uid] = {
@@ -198,12 +196,10 @@ def sync_legacy_redis_data_to_registry():
             }
             changed = True
 
-    # ၂။ orders_data ထဲမှ customer အဟောင်းများ sync လုပ်ခြင်း
     orders = load_orders()
     for o_id, o_data in orders.items():
         o_cid = str(o_data.get("chat_id", ""))
         u_name = o_data.get("user_name", "Customer")
-        p_name = o_data.get("plan_name", "VPN Plan")
         uid = f"1_ord_{o_id}"
         if uid not in registry:
             registry[uid] = {
@@ -952,6 +948,60 @@ def get_servers_total_usage():
     )
     return report
 
+# 👥 Customer ဦးရေ အကျဉ်းချုပ် စာရင်းတွက်ပေးမည့် Function
+def get_customer_summary_stats():
+    s1_users = set()
+    s2_users = set()
+    s3_users = set()
+    total_unique_users = set()
+
+    # ၁။ Live Servers ထံမှ Key စာရင်းများ စစ်ဆေးခြင်း
+    for srv_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
+        try:
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
+            if res.status_code == 200:
+                keys = res.json().get("accessKeys", [])
+                for k in keys:
+                    k_name = k.get("name", "").strip()
+                    cid_match = re.search(r'\((\d+)\)', k_name)
+                    identifier = cid_match.group(1) if cid_match else k_name.lower()
+                    if identifier:
+                        if srv_num == "1": s1_users.add(identifier)
+                        elif srv_num == "2": s2_users.add(identifier)
+                        elif srv_num == "3": s3_users.add(identifier)
+                        total_unique_users.add(identifier)
+        except:
+            pass
+
+    # ၂။ Redis Persistent Registry ထဲမှ မှတ်တမ်းဟောင်းများပါ ထပ်မံပေါင်းစပ်ခြင်း
+    try:
+        sync_legacy_redis_data_to_registry()
+    except:
+        pass
+
+    persistent_registry = load_persistent_keys()
+    for k_data in persistent_registry.values():
+        cid = k_data.get("chat_id")
+        k_name = k_data.get("name", "").strip()
+        srv = str(k_data.get("server", "1"))
+        identifier = cid if cid else k_name.lower()
+        if identifier:
+            if srv == "1": s1_users.add(identifier)
+            elif srv == "2": s2_users.add(identifier)
+            elif srv == "3": s3_users.add(identifier)
+            total_unique_users.add(identifier)
+
+    summary_text = (
+        f"👥 <b>လက်ရှိ Customer စာရင်း အကျဉ်းချုပ်</b>\n\n"
+        f"📡 Server 1 🇸🇬 : <b>{len(s1_users)}</b> ယောက်\n"
+        f"📡 Server 2 🇸🇬 : <b>{len(s2_users)}</b> ယောက်\n"
+        f"📡 Server 3 🇸🇬 : <b>{len(s3_users)}</b> ယောက်\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"🌟 <b>စုစုပေါင်း Customer ဦးရေ:</b> <b>{len(total_unique_users)}</b> ယောက်\n\n"
+        f"👇 ရှာဖွေလိုသော <b>Cus နာမည်အစ စာလုံး (ဥပမာ - H, T, A) သို့မဟုတ် Chat ID / Order ID</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:"
+    )
+    return summary_text
+
 # 🔍 Server Error ဖြစ်ခဲ့လျှင်တောင် Redis ထဲမှ Customer စာရင်းဟောင်းများနှင့်ပါ ပေါင်းစပ်ပြီး ၁၀၀% အမြဲ ရှာဖွေပေးနိုင်သော စနစ်
 def search_users_by_query(query):
     query_clean = query.strip().lower()
@@ -960,7 +1010,6 @@ def search_users_by_query(query):
     seen_identifiers = set()
     key_orders_map = load_key_orders()
 
-    # Redis Legacy Data များကို Registry ထဲသို့ ချက်ချင်း Sync ပြုလုပ်ခြင်း
     try:
         sync_legacy_redis_data_to_registry()
     except:
@@ -991,7 +1040,7 @@ def search_users_by_query(query):
         except:
             pass
 
-    # ၂။ ဆာဗာ Down နေချိန်/Timeout ဖြစ်ချိန်တွင် Redis Persistent Registry (Customer အဟောင်းများပါဝင်သည်) မှ အလိုအလျောက် ပေါင်းစပ်ရှာဖွေပေးခြင်း
+    # ၂။ ဆာဗာ Down နေချိန်/Timeout ဖြစ်ချိန်တွင် Redis Persistent Registry မှ အလိုအလျောက် ပေါင်းစပ်ရှာဖွေပေးခြင်း
     persistent_registry = load_persistent_keys()
     for uid, k_data in persistent_registry.items():
         if uid in seen_identifiers:
@@ -1837,7 +1886,6 @@ def fetch_key_from_server(api_url, input_value):
     except Exception as e:
         print(f"Fetch Key Error on {api_url}:", e)
         
-    # ဆာဗာ Down နေပါက Redis Persistent Registry မှ ဖတ်ပေးခြင်း
     persistent_registry = load_persistent_keys()
     input_raw = input_value.strip().lower()
     for uid, k_data in persistent_registry.items():
@@ -2103,16 +2151,20 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
+    # 👥 Customer ရှာဖွေသည့် နေရာ (စာရင်းအကျဉ်းချုပ် အရင်ပြပေးသော စနစ်)
     if input_value == "🔍 Cus ရှာရန်":
         clear_all_states(chat_id)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
             bot.reply_to(message, "❌ ခွင့်လွှတ်ပါ၊ ဒီ ခလုတ်သည် Admin သီးသန့် အသုံးပြုနိုင်သော ခလုတ်ဖြစ်ပါသည်။")
             return
         
+        bot.send_message(chat_id, "⏳ Customer စာရင်းများကို တွက်ချက်နေပါသည်...")
+        summary_msg = get_customer_summary_stats()
         set_search_state(chat_id, True)
+        
         bot.send_message(
             chat_id, 
-            "🔍 <b>Customer ရှာဖွေရန်:</b>\n\n👇 ရှာဖွေလိုသော <b>Cus နာမည်အစ စာလုံး (ဥပမာ - H, T, A) သို့မဟုတ် Order ID</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:", 
+            summary_msg, 
             parse_mode="HTML",
             reply_markup=get_back_inline_keyboard()
         )
