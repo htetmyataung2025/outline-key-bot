@@ -707,7 +707,7 @@ PLANS = {
     "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000, "manual": False, "months": 1},
     "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000, "manual": False, "months": 1},
     "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000, "manual": False, "months": 1},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited (500 GB / လစဉ်)", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "(500 GB / လစဉ်)", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
     "custom_1m": {"name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited (5 Device)", "bytes": 0, "price": 20000, "manual": True, "months": 1},
     "custom_3m": {"name": "၃ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited (5 Device)", "bytes": 0, "price": 60000, "manual": True, "months": 3},
 }
@@ -762,9 +762,9 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🔥 Premium (100 GB) - 4,000 Ks", callback_data="selectplan_premium"))
     markup.row(InlineKeyboardButton("👑 VIP (150 GB) - 5,000 Ks", callback_data="selectplan_vip"))
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="selectplan_pro"))
-    markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (500 GB/လစဉ်) - 10,000 Ks", callback_data="selectplan_ultimate"))
-    markup.row(InlineKeyboardButton("⚡️ ၁ လ စိတ်ကြိုက်သုံး (5 Device) - 20,000 Ks", callback_data="selectplan_custom_1m"))
-    markup.row(InlineKeyboardButton("🔥 ၃ လ စိတ်ကြိုက်သုံး (5 Device) - 60,000 Ks", callback_data="selectplan_custom_3m"))
+    markup.row(InlineKeyboardButton("🌌 Ultimate VIP - (500 GB/လစဉ်) - 10,000 Ks", callback_data="selectplan_ultimate"))
+    markup.row(InlineKeyboardButton("🪁 ၁လ စိတ်ကြိုက်သုံး (5 Device) - 20,000 Ks", callback_data="selectplan_custom_1m"))
+    markup.row(InlineKeyboardButton("🪅 ၃လ စိတ်ကြိုက်သုံး (5 Device) - 60,000 Ks", callback_data="selectplan_custom_3m"))
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
