@@ -708,8 +708,8 @@ PLANS = {
     "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000, "manual": False, "months": 1},
     "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000, "manual": False, "months": 1},
     "ultimate": {"name": "Ultimate VIP Plan", "data": "(500 GB / လစဉ်)", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
-    "custom_1m": {"name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited (5 Device)", "bytes": 0, "price": 20000, "manual": True, "months": 1},
-    "custom_3m": {"name": "၃ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited (5 Device)", "bytes": 0, "price": 60000, "manual": True, "months": 3},
+    "custom_1m": {"name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited Data (5 Device)", "bytes": 0, "price": 20000, "manual": True, "months": 1},
+    "custom_3m": {"name": "၃ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited Data (5 Device)", "bytes": 0, "price": 60000, "manual": True, "months": 3},
 }
 
 def bytes_to_gb(bytes_value):
@@ -1617,7 +1617,7 @@ def handle_ask_send_key_callback(call):
         "target_chat_id": target_chat_id,
         "order_id": order_id,
         "plan_name": o_data.get("plan_name", "စိတ်ကြိုက်သုံး Plan"),
-        "disp_gb": o_data.get("disp_gb", "Unlimited (5 Device)"),
+        "disp_gb": o_data.get("disp_gb", "Unlimited Data (5 Device)"),
         "months": o_data.get("months", 1),
         "price_str": o_data.get("price_str", "20,000 Ks"),
         "price_int": o_data.get("price_int", 20000),
@@ -2095,7 +2095,7 @@ def handle_all_messages(message):
             target_user_id = manual_state.get("target_chat_id")
             order_id = manual_state.get("order_id")
             plan_name = manual_state.get("plan_name", "စိတ်ကြိုက်သုံး Plan")
-            disp_gb = manual_state.get("disp_gb", "Unlimited (5 Device)")
+            disp_gb = manual_state.get("disp_gb", "Unlimited Data (5 Device)")
             months_count = manual_state.get("months", 1)
             price_str = manual_state.get("price_str", "20,000 Ks")
             price_int = manual_state.get("price_int", 20000)
