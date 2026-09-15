@@ -88,7 +88,7 @@ def is_callback_processed(call_id):
         PROCESSED_CALLBACKS.clear()
     return False
 
-# 💾 Persistent Key Storage System (ဆာဗာ Down ချိန်တွင်ပါ အမြဲဖတ်နိုင်သော စနစ်)
+# 💾 Persistent Key Storage System
 def load_persistent_keys():
     data = redis_get("persistent_keys_registry")
     if data is not None:
@@ -170,7 +170,6 @@ def sync_keys_to_persistent_registry(server_num, keys_data):
         except:
             pass
 
-# 🔄 Redis ထဲရှိ Customer အဟောင်းစာရင်းများ (sales_history & orders_data) အား Registry ထဲသို့ Auto-Sync ပြုလုပ်ခြင်း
 def sync_legacy_redis_data_to_registry():
     registry = load_persistent_keys()
     changed = False
@@ -286,7 +285,7 @@ def get_user_combined_purchase_records(chat_id):
                 break
 
         p_info = PLANS.get(s.get("plan_code"), {})
-        disp_gb = f"{int(p_info.get('data', '25 GB').split()[0]) * s.get('months', 1)} GB" if p_info else "N/A"
+        disp_gb = p_info.get("data", "N/A")
 
         legacy_rec = {
             "timestamp": s.get("timestamp", s.get("date", "N/A")),
@@ -455,6 +454,20 @@ def set_broadcast_state(chat_id, is_waiting=True):
 def get_broadcast_state(chat_id):
     states = redis_get("admin_broadcast_state") or {}
     return states.get(str(chat_id), False)
+
+# 🔑 Admin Manual Dispatch State Management
+def set_manual_dispatch_state(admin_id, order_info_dict=None):
+    states = redis_get("admin_manual_dispatch_state") or {}
+    if order_info_dict:
+        states[str(admin_id)] = order_info_dict
+    else:
+        if str(admin_id) in states:
+            del states[str(admin_id)]
+    redis_set("admin_manual_dispatch_state", states)
+
+def get_manual_dispatch_state(admin_id):
+    states = redis_get("admin_manual_dispatch_state") or {}
+    return states.get(str(admin_id))
 
 def load_user_plans():
     data = redis_get("user_plans")
@@ -656,6 +669,7 @@ def clear_all_states(chat_id):
     set_redeem_state(chat_id, False)
     set_replacement_state(chat_id, False)
     set_broadcast_state(chat_id, False)
+    set_manual_dispatch_state(chat_id, None)
 
 def is_user_subscribed(user_id):
     if str(user_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -685,14 +699,17 @@ def send_force_join_message(chat_id):
     )
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
 
+# 🌟 Plan Configuration (500 GB သို့ ပြောင်းလဲထားပြီး Plan အသစ် ၂ မျိုး ထည့်သွင်းထားသည်)
 PLANS = {
-    "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": 1000},
-    "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": 2000},
-    "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": 3000},
-    "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000},
-    "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000},
-    "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited (1000 GB / လစဉ်)", "bytes": 1000 * 1000**3, "price": 10000},
+    "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": 1000, "manual": False, "months": 1},
+    "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": 2000, "manual": False, "months": 1},
+    "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": 3000, "manual": False, "months": 1},
+    "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000, "manual": False, "months": 1},
+    "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000, "manual": False, "months": 1},
+    "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000, "manual": False, "months": 1},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited (500 GB / လစဉ်)", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
+    "custom_1m": {"name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited (5 Device)", "bytes": 0, "price": 20000, "manual": True, "months": 1},
+    "custom_3m": {"name": "၃ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited (5 Device)", "bytes": 0, "price": 60000, "manual": True, "months": 3},
 }
 
 def bytes_to_gb(bytes_value):
@@ -745,7 +762,9 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🔥 Premium (100 GB) - 4,000 Ks", callback_data="selectplan_premium"))
     markup.row(InlineKeyboardButton("👑 VIP (150 GB) - 5,000 Ks", callback_data="selectplan_vip"))
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="selectplan_pro"))
-    markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (1000 GB/လစဉ်)", callback_data="selectplan_ultimate"))
+    markup.row(InlineKeyboardButton("🌌 Ultimate VIP - Unlimited (500 GB/လစဉ်) - 10,000 Ks", callback_data="selectplan_ultimate"))
+    markup.row(InlineKeyboardButton("⚡️ ၁ လ စိတ်ကြိုက်သုံး (5 Device) - 20,000 Ks", callback_data="selectplan_custom_1m"))
+    markup.row(InlineKeyboardButton("🔥 ၃ လ စိတ်ကြိုက်သုံး (5 Device) - 60,000 Ks", callback_data="selectplan_custom_3m"))
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
@@ -948,14 +967,12 @@ def get_servers_total_usage():
     )
     return report
 
-# 👥 Customer ဦးရေ အကျဉ်းချုပ် စာရင်းတွက်ပေးမည့် Function
 def get_customer_summary_stats():
     s1_users = set()
     s2_users = set()
     s3_users = set()
     total_unique_users = set()
 
-    # ၁။ Live Servers ထံမှ Key စာရင်းများ စစ်ဆေးခြင်း
     for srv_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
@@ -973,7 +990,6 @@ def get_customer_summary_stats():
         except:
             pass
 
-    # ၂။ Redis Persistent Registry ထဲမှ မှတ်တမ်းဟောင်းများပါ ထပ်မံပေါင်းစပ်ခြင်း
     try:
         sync_legacy_redis_data_to_registry()
     except:
@@ -1002,7 +1018,6 @@ def get_customer_summary_stats():
     )
     return summary_text
 
-# 🔍 Server Error ဖြစ်ခဲ့လျှင်တောင် Redis ထဲမှ Customer စာရင်းဟောင်းများနှင့်ပါ ပေါင်းစပ်ပြီး ၁၀၀% အမြဲ ရှာဖွေပေးနိုင်သော စနစ်
 def search_users_by_query(query):
     query_clean = query.strip().lower()
     markup = InlineKeyboardMarkup()
@@ -1015,7 +1030,6 @@ def search_users_by_query(query):
     except:
         pass
 
-    # ၁။ Live Servers များကို အရင်စစ်ဆေးခြင်း
     for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
@@ -1040,7 +1054,6 @@ def search_users_by_query(query):
         except:
             pass
 
-    # ၂။ ဆာဗာ Down နေချိန်/Timeout ဖြစ်ချိန်တွင် Redis Persistent Registry မှ အလိုအလျောက် ပေါင်းစပ်ရှာဖွေပေးခြင်း
     persistent_registry = load_persistent_keys()
     for uid, k_data in persistent_registry.items():
         if uid in seen_identifiers:
@@ -1069,7 +1082,6 @@ def search_users_by_query(query):
 
     return found_matches, markup
 
-# 🔙 Back to Main Menu Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
 def handle_back_to_main_callback(call):
     chat_id = call.message.chat.id
@@ -1085,7 +1097,6 @@ def handle_back_to_main_callback(call):
     )
     bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
 
-# 🔙 Admin Back to Gen RD Code Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_gen_rd")
 def handle_back_to_gen_rd(call):
     bot.answer_callback_query(call.id)
@@ -1099,7 +1110,6 @@ def handle_back_to_gen_rd(call):
         reply_markup=get_admin_server_keyboard()
     )
 
-# 🛠️ ဆာဗာ Down နေလျှင်ပင် အချက်အလက်များ လုံးဝ မပြတ်တောက်ဘဲ ပြသပေးမည့် Detail Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
 def handle_view_key_detail(call):
     bot.answer_callback_query(call.id)
@@ -1278,7 +1288,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     today = datetime.now()
     new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
-    add_bytes = (1000 * months_count) * 1000**3
+    add_bytes = (500 * months_count) * 1000**3  # 500 GB သို့ ပြင်ဆင်ပြီး
     
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -1354,9 +1364,9 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
             if custom_gb:
                 limit_bytes = int(custom_gb * 1000**3)
             elif plan_info:
-                limit_bytes = plan_info.get("bytes") * months_count
+                limit_bytes = plan_info.get("bytes", 0) * months_count
 
-            if limit_bytes:
+            if limit_bytes and limit_bytes > 0:
                 requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
             
             if order_id:
@@ -1528,14 +1538,16 @@ def handle_select_plan(call):
     if plan:
         amount = plan["price"]
         data_disp = plan["data"]
+        months = plan.get("months", 1)
 
         plan_data = {
             "code": plan_code,
             "name": plan["name"],
             "data": data_disp,
-            "months": 1,
+            "months": months,
             "price_str": f"{amount:,} Ks",
-            "price_int": amount
+            "price_int": amount,
+            "manual": plan.get("manual", False)
         }
         save_user_plan(chat_id, plan_data)
 
@@ -1545,7 +1557,7 @@ def handle_select_plan(call):
 
         payment_text = (
             f"✅ သင်ရွေးချယ်ထားသော Plan:\n"
-            f"📌 {plan['name']} ({data_disp}) - 1 လစာ ({amount:,} Ks)\n\n"
+            f"📌 {plan['name']} ({data_disp}) - ({amount:,} Ks)\n\n"
             f"━━━━━━━━━━━━━━━\n"
             f"💰 ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:\n\n"
             f"📱 KBZ Pay - 09699970092\n"
@@ -1561,7 +1573,7 @@ def handle_select_plan(call):
             f"━━━━━━━━━━━━━━━\n\n"
             f"🙏🏻 ငွေလွှဲပြီး 📸Screenshotလေး ပို့ပေးပါခင်ဗျာ🥰\n\n"
             f"ပြေစာစစ်ဆေးပြီးသည်နှင့် VPN Key ကို အမြန်ဆုံး ပို့ပေးပါမည်။\n\n"
-            f"⚠️ Ultimate VIP - Unlimited Plan သက်တမ်းတိုးရန် Note မှာ Renew Key လို့ရေးပေးပါ။\n\n"
+            f"⚠️ Ultimate VIP Plan သက်တမ်းတိုးရန် Note မှာ Renew Key လို့ရေးပေးပါ။\n\n"
             f"ကျန် Plan များ ကီးသက်တမ်းတိုးမရပါ။\n\n"
         )
 
@@ -1586,6 +1598,42 @@ def handle_back_to_plans(call):
         message_id=call.message.message_id,
         reply_markup=get_plan_keyboard()
     )
+
+# 🔑 Admin Manual Key Send Trigger Callback
+@bot.callback_query_handler(func=lambda call: call.data.startswith("ask_send_key_"))
+def handle_ask_send_key_callback(call):
+    bot.answer_callback_query(call.id)
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    
+    parts = call.data.split("_")
+    target_chat_id = parts[3]
+    order_id = parts[4]
+    
+    orders = load_orders()
+    o_data = orders.get(order_id, {})
+    
+    order_info = {
+        "target_chat_id": target_chat_id,
+        "order_id": order_id,
+        "plan_name": o_data.get("plan_name", "စိတ်ကြိုက်သုံး Plan"),
+        "disp_gb": o_data.get("disp_gb", "Unlimited (5 Device)"),
+        "months": o_data.get("months", 1),
+        "price_str": o_data.get("price_str", "20,000 Ks"),
+        "price_int": o_data.get("price_int", 20000),
+        "plan_code": o_data.get("plan_code", "custom_1m")
+    }
+    
+    set_manual_dispatch_state(call.message.chat.id, order_info)
+    
+    prompt_txt = (
+        f"🔑 <b>Customer ထံ ပို့ပေးမည့် VPN Key ကို ဒီ Chat ထဲသို့ ပို့ပေးပါ:</b>\n\n"
+        f"🧾 Order ID: <code>{order_id}</code>\n"
+        f"👤 Chat ID: <code>{target_chat_id}</code>\n"
+        f"🛍️ Plan: <b>{order_info['plan_name']}</b>\n\n"
+        f"👇 အောက်တွင် မိမိထုတ်ထားသော VPN Key Link (သို့မဟုတ် စာသား) အား Paste ချ၍ ပေးပို့ပေးပါခင်ဗျာ (Bot မှ Customer ထံ အလိုအလျောက် ပို့ပေးပါမည်) -"
+    )
+    bot.send_message(call.message.chat.id, prompt_txt, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
 # Admin Server 1 / Server 2 / Server 3 Approve Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_srv"))
@@ -1631,12 +1679,12 @@ def handle_approve_callback(call):
 
         if plan_code == "ultimate" and action_type == "renew":
             vpn_key, key_name, expire_date, is_renew = renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=months_count, order_id=order_id)
-            action_title = "🎉 <b>Unlimited Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
-            disp_gb = f"{1000 * months_count} GB"
+            action_title = "🎉 <b>Ultimate VIP Plan သက်တမ်း အောင်မြင်စွာ တိုးမြှင့်ပြီးပါပြီခင်ဗျာ။</b>"
+            disp_gb = f"{500 * months_count} GB"
         else:
             vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan_info, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False, order_id=order_id)
             action_title = "🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>"
-            disp_gb = f"{1000 * months_count} GB" if plan_code == "ultimate" else f"{int(plan_info['data'].split()[0]) * months_count} GB"
+            disp_gb = f"{500 * months_count} GB" if plan_code == "ultimate" else f"{int(plan_info['data'].split()[0]) * months_count} GB"
         
         if vpn_key:
             if str(target_chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1663,7 +1711,7 @@ def handle_approve_callback(call):
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                 f"<code>{vpn_key}</code>\n\n"
-                f"☝️ အပေါ်က Key  ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+                f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
             )
             bot.send_message(target_chat_id, success_message, parse_mode="HTML")
             
@@ -1744,7 +1792,9 @@ def handle_photo_messages(message):
     plan_code = plan_info.get('code', 'starter')
     months_count = plan_info.get('months', 1)
     price_str = plan_info.get('price_str', f"{plan_info.get('price_int', 1000):,} Ks")
+    price_int = plan_info.get('price_int', 1000)
     current_date = datetime.fromtimestamp(message.date).strftime("%d/%m/%Y")
+    is_manual_plan = plan_info.get('manual', False) or plan_code in ["custom_1m", "custom_3m"]
 
     photo_file = bot.get_file(message.photo[-1].file_id)
     order_id = generate_order_id_from_slip(photo_file.file_path)
@@ -1756,9 +1806,12 @@ def handle_photo_messages(message):
         "username": username,
         "plan_code": plan_code,
         "plan_name": plan_info['name'],
+        "disp_gb": plan_info.get('data', ''),
         "months": months_count,
         "price_str": price_str,
+        "price_int": price_int,
         "date": current_date,
+        "manual": is_manual_plan,
         "timestamp": (datetime.utcnow() + timedelta(hours=6, minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
     }
     save_order(order_id, order_record)
@@ -1767,14 +1820,21 @@ def handle_photo_messages(message):
         f"💰 <b>ငွေလွှဲပြေစာအသစ်</b>\n"
         f"🧾 Order ID: <code>{order_id}</code>\n"
         f"👤 ဝယ်ယူသူနာမည်: {user_name} ({username})\n"
-        f"🛍️ ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')}) [{months_count} လစာ]\n"
+        f"🛍️ ရွေးချယ်ထားသော Plan: {plan_info['name']} ({plan_info.get('data', '')})\n"
         f"💵 ကျသင့်ငွေပမာဏ: {price_str}\n"
         f"📅 ပေးပို့သည့်ရက်စွဲ: {current_date}\n"
-        f"🆔 User Chat ID: {chat_id}"
+        f"🆔 User Chat ID: <code>{chat_id}</code>\n"
     )
     
     approve_markup = InlineKeyboardMarkup()
-    if plan_code == "ultimate":
+    
+    # ⚡️ စိတ်ကြိုက်သုံး Plan (Custom 5 Device) များအတွက် Manual Key ပို့ခလုတ်
+    if is_manual_plan:
+        admin_alert_text += "\n💡 <i>ဤ Plan သည် စိတ်ကြိုက်သုံး Plan ဖြစ်သဖြင့် Bot မှ Auto မထုတ်ပေးပါ။ မိမိထုတ်ထားသော Key အား Reply ပြန်ပို့ပေးပါ သို့မဟုတ် အောက်ပါခလုတ်ကို နှိပ်ပါ။</i>"
+        approve_markup.row(
+            InlineKeyboardButton("🔑 Send Key to Customer", callback_data=f"ask_send_key_{chat_id}_{order_id}")
+        )
+    elif plan_code == "ultimate":
         approve_markup.row(
             InlineKeyboardButton("📡 S1 🇸🇬 Renew", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_renew_{order_id}"),
             InlineKeyboardButton("📡 S1 🇸🇬 New", callback_data=f"approve_srv1_{chat_id}_{plan_code}_{months_count}_new_{order_id}")
@@ -1818,7 +1878,7 @@ def handle_photo_messages(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Admin ထံ ပို့၍မရပါ - Bot အား အကောင့်မှ Start နှိပ်ထားရန် လိုအပ်ပါသည်။")
 
-# ⚡️ Fetch Key From Server (ဆာဗာ Down သော်လည်း Persistent Registry မှ အလိုအလျောက် ပြန်ဖတ်ပေးသော Fallback)
+# ⚡️ Fetch Key From Server
 def fetch_key_from_server(api_url, input_value):
     if not api_url or "dummyKey" in api_url:
         return None, None, None
@@ -2027,6 +2087,55 @@ def handle_all_messages(message):
         send_force_join_message(chat_id)
         return
 
+    # 🔑 Admin Manual Dispatch State Handler (ခလုတ်နှိပ်၍ Key ပို့ခြင်း)
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        manual_state = get_manual_dispatch_state(chat_id)
+        if manual_state:
+            set_manual_dispatch_state(chat_id, None)
+            target_user_id = manual_state.get("target_chat_id")
+            order_id = manual_state.get("order_id")
+            plan_name = manual_state.get("plan_name", "စိတ်ကြိုက်သုံး Plan")
+            disp_gb = manual_state.get("disp_gb", "Unlimited (5 Device)")
+            months_count = manual_state.get("months", 1)
+            price_str = manual_state.get("price_str", "20,000 Ks")
+            price_int = manual_state.get("price_int", 20000)
+            plan_code = manual_state.get("plan_code", "custom_1m")
+
+            today = datetime.now()
+            expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+
+            save_sale_transaction("VIP", target_user_id, plan_code, plan_name, months_count, price_int, order_id=order_id)
+            save_user_purchase_record(
+                chat_id=target_user_id,
+                order_id=order_id,
+                plan_name=plan_name,
+                disp_gb=disp_gb,
+                months_count=months_count,
+                price_str=price_str,
+                server_num="VIP",
+                expire_date=expire_date,
+                vpn_key=input_value
+            )
+
+            # Persistent registry ထဲသို့ပါ သိမ်းဆည်းပေးခြင်း
+            save_persistent_key("VIP", f"custom_{order_id}", f"{plan_name} ({target_user_id}) {expire_date}", input_value, None, order_id, target_user_id)
+
+            success_message = (
+                f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
+                f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
+                f"🛍️ <b>Plan:</b> {plan_name} ({disp_gb})\n"
+                f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
+                f"<code>{input_value}</code>\n\n"
+                f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+            )
+            try:
+                bot.send_message(target_user_id, success_message, parse_mode="HTML")
+                bot.reply_to(message, f"✅ <b>Order ID: {order_id} အတွက် Customer ထံသို့ Key အား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။</b>", parse_mode="HTML")
+            except Exception as e:
+                bot.reply_to(message, f"❌ Customer ထံ ပို့မရပါ - {str(e)}")
+            return
+
     # 📢 Admin Broadcast Text Handler
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
@@ -2067,7 +2176,7 @@ def handle_all_messages(message):
 
         history_texts = []
         for idx, rec in enumerate(reversed(records), 1):
-            srv_name = f"Singapore Server {rec.get('server', '1')} 🇸🇬"
+            srv_name = f"Singapore Server {rec.get('server', '1')} 🇸🇬" if rec.get('server') != "VIP" else "VIP Server 🇸🇬"
             vpn_k = rec.get('vpn_key', '')
             key_block = f"<code>{vpn_k}</code>" if vpn_k != "N/A" else "<i>(Server Maintenance ဖြစ်နေပါသဖြင့် အထက်ပါ Menu ရှိ '♻️ Key လဲရန်' ဖြင့် အသစ်လဲလှယ်နိုင်ပါသည်)</i>"
             
@@ -2151,7 +2260,6 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
-    # 👥 Customer ရှာဖွေသည့် နေရာ (စာရင်းအကျဉ်းချုပ် အရင်ပြပေးသော စနစ်)
     if input_value == "🔍 Cus ရှာရန်":
         clear_all_states(chat_id)
         if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -2244,7 +2352,7 @@ def handle_all_messages(message):
             limit_bytes = target_key.get("dataLimit", {}).get("bytes", 0)
             usage_bytes = bytes_transferred.get(key_id, 0)
             
-            total_gb = bytes_to_gb(limit_bytes) if limit_bytes else 1000
+            total_gb = bytes_to_gb(limit_bytes) if limit_bytes else 500
             used_gb = bytes_to_gb(usage_bytes)
             rem_gb = max(0, round(total_gb - used_gb, 2))
 
@@ -2396,17 +2504,49 @@ def handle_all_messages(message):
         bot.send_message(chat_id, refresh_text, parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
         return
 
+    # 🔑 Reply ဖြင့် Key ပို့သည့် Flow
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and message.reply_to_message:
-        reply_caption = message.reply_to_message.caption
-        if reply_caption and "User Chat ID:" in reply_caption:
+        reply_caption = message.reply_to_message.caption or message.reply_to_message.text or ""
+        if "User Chat ID:" in reply_caption:
             try:
-                target_user_id = re.search(r'User Chat ID:\s*(\d+)', reply_caption).group(1)
+                target_user_id = re.search(r'User Chat ID:\s*(?:<code>)?(\d+)(?:</code>)?', reply_caption).group(1)
+                order_id_match = re.search(r'Order ID:\s*(?:<code>)?(#?[A-Za-z0-9]+)(?:</code>)?', reply_caption)
+                order_id = order_id_match.group(1) if order_id_match else "N/A"
                 
+                orders = load_orders()
+                o_data = orders.get(order_id, {})
+                plan_name = o_data.get("plan_name", "VPN Plan")
+                disp_gb = o_data.get("disp_gb", "Unlimited")
+                months_count = o_data.get("months", 1)
+                price_str = o_data.get("price_str", "0 Ks")
+                price_int = o_data.get("price_int", 0)
+                plan_code = o_data.get("plan_code", "custom")
+
+                today = datetime.now()
+                expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+
+                save_sale_transaction("VIP", target_user_id, plan_code, plan_name, months_count, price_int, order_id=order_id)
+                save_user_purchase_record(
+                    chat_id=target_user_id,
+                    order_id=order_id,
+                    plan_name=plan_name,
+                    disp_gb=disp_gb,
+                    months_count=months_count,
+                    price_str=price_str,
+                    server_num="VIP",
+                    expire_date=expire_date,
+                    vpn_key=input_value
+                )
+                save_persistent_key("VIP", f"custom_{order_id}", f"{plan_name} ({target_user_id}) {expire_date}", input_value, None, order_id, target_user_id)
+
                 success_message = (
                     f"🎉 <b>ငွေလွှဲမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီခင်ဗျာ။</b>\n\n"
+                    f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
+                    f"🛍️ <b>Plan:</b> {plan_name} ({disp_gb})\n"
+                    f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                     f"🔑 <b>လူကြီးမင်း ဝယ်ယူထားသော VPN Key ကို အောက်တွင် ရယူနိုင်ပါပြီ။</b>\n\n"
                     f"<code>{input_value}</code>\n\n"
-                    f"☝️အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
+                    f"☝️ အပေါ်က ကီးကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
                 )
                 bot.send_message(target_user_id, success_message, parse_mode="HTML")
                 bot.reply_to(message, "✅ Customer ထံသို့ VPN Keyအား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
@@ -2465,7 +2605,7 @@ def handle_all_messages(message):
                 has_date = False
 
             limit_bytes = target_key.get("dataLimit", {}).get("bytes")
-            plan_gb_val = bytes_to_gb(limit_bytes) if limit_bytes else 1000
+            plan_gb_val = bytes_to_gb(limit_bytes) if limit_bytes else 500
             plan_gb = f"{plan_gb_val} GB" if limit_bytes else "Unlimited"
             
             if bytes_transferred:
