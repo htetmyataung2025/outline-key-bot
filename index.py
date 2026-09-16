@@ -1560,7 +1560,6 @@ def handle_topup_amount_select(call):
     chat_id = call.message.chat.id
     raw_val = call.data.replace("topup_amt_", "")
     
-    # ✍️ စိတ်ကြိုက်ပမာဏ ရိုက်ထည့်မည့် Flow
     if raw_val == "custom":
         set_custom_topup_state(chat_id, True)
         set_topup_state(chat_id, None)
@@ -1616,10 +1615,10 @@ def handle_approve_topup(call):
 
     user_noti = (
         f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
-        f"🧾 Top-Up ID: <code>{topup_id}</code>\n"
-        f"💵 ဖြည့်သွင်းငွေ: <b>+{amount:,} MMK</b>\n"
+        f"🧾 Top-Up ID: <code>{topup_id}</code>\n\n"
+        f"💵 ဖြည့်သွင်းငွေ: <b>+{amount:,} MMK</b>\n\n"
         f"💳 လက်ရှိ Wallet လက်ကျန်ငွေ: <b>{new_balance:,} MMK</b>\n\n"
-        f"🛍️ '🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး စိတ်ကြိုက် ချက်ချင်း ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
+        f"'🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး စိတ်ကြိုက် ချက်ချင်း ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
     )
     try:
         bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
@@ -1632,6 +1631,7 @@ def handle_approve_topup(call):
     except:
         pass
 
+# Customer Plan ရွေးပြီးနောက် Review ပြသခြင်း (Ultimate VIP ကို Server 1 သာ ကီးထုတ်ခွင့်ပေးခြင်း)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
     bot.answer_callback_query(call.id)
@@ -1651,6 +1651,8 @@ def handle_select_plan(call):
         if balance >= amount:
             if plan.get("manual"):
                 markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
+            elif plan_code == "ultimate":
+                markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
             else:
                 markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
                 markup.row(InlineKeyboardButton("📡 Server 2 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_2"))
@@ -1665,8 +1667,8 @@ def handle_select_plan(call):
         balance_status = f"✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if balance >= amount else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
         text = (
             f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
-            f"📌 <b>Plan:</b> {plan['name']}\n"
-            f"⚡ <b>Data:</b> {plan['data']}\n"
+            f"📮 <b>Plan:</b> {plan['name']}\n\n"
+            f"🗃️ <b>Data:</b> {plan['data']}\n\n"
             f"💵 <b>ကျသင့်ငွေ:</b> {amount:,} MMK\n\n"
             f"━━━━━━━━━━━━━━━\n"
             f"💳 <b>လူကြီးမင်း၏ လက်ကျန်ငွေ:</b> <b>{balance:,} MMK</b>\n"
@@ -1775,10 +1777,10 @@ def handle_buy_with_wallet(call):
 
     success_text = (
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
-        f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
-        f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n"
-        f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n"
-        f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n"
+        f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+        f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
+        f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
+        f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
         f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{new_bal:,} MMK</code>\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
         f"<code>{vpn_key}</code>\n\n"
@@ -1900,10 +1902,10 @@ def handle_photo_messages(message):
     topup_id = generate_order_id_from_slip(photo_file.file_path)
 
     admin_alert_text = (
-        f"💰 <b>ငွေဖြည့်ပြေစာအသစ် (Top-Up Request)</b>\n"
-        f"🧾 Top-Up ID: <code>{topup_id}</code>\n"
-        f"👤 အသုံးပြုသူ: {user_name} ({username})\n"
-        f"💵 ဖြည့်သွင်းငွေပမာဏ: <b>{topup_amt:,} MMK</b>\n"
+        f"💰 <b>ငွေဖြည့်ပြေစာအသစ် (Top-Up Request)</b>\n\n"
+        f"🧾 Top-Up ID: <code>{topup_id}</code>\n\n"
+        f"👤 အသုံးပြုသူ: {user_name} ({username})\n\n"
+        f"💵 ဖြည့်သွင်းငွေပမာဏ: <b>{topup_amt:,} MMK</b>\n\n"
         f"🆔 User Chat ID: <code>{chat_id}</code>\n\n"
         f"<i>စစ်ဆေးပြီးပါက အောက်ပါ Approve ခလုတ်ကို နှိပ်၍ ငွေထည့်သွင်းပေးပါခင်ဗျာ။</i>"
     )
@@ -1919,7 +1921,7 @@ def handle_photo_messages(message):
 
     user_reply = (
         f"💌 <b>ငွေလွှဲပြေစာအား လက်ခံရရှိပါသည်ခင်ဗျာ။</b>\n\n"
-        f"🧾 <b>Top-Up ID:</b> <code>{topup_id}</code>\n"
+        f"🧾 <b>Top-Up ID:</b> <code>{topup_id}</code>\n\n"
         f"💵 <b>ငွေပမာဏ:</b> {topup_amt:,} MMK\n\n"
         f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
     )
@@ -2555,7 +2557,7 @@ def handle_all_messages(message):
 
             result_text = (
                 f"👤 အသုံးပြုသူ : {display_name}\n\n"
-                f"{ord_line}"
+                f"{ord_line}\n\n"
                 f"📡 Server : {server_disp}\n\n"
                 f"🛍️ ဝယ်ယူထားသော Plan : {plan_gb}\n\n"
                 f"🧰 အသုံးပြုပြီးသား Data : {usage_gb_str}\n\n"
