@@ -767,21 +767,21 @@ def clean_ss_url(url_str):
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
-# 📱 ပင်မ Menu Keyboard အသစ်
+# 📱 ပင်မ Menu Keyboard (Plan များဝယ်ရန် / ငွေဖြည့်ရန် / လက်ကျန်ငွေ / Data ပမာဏစစ်ရန်)
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_buy = KeyboardButton("🛍️ Plan များ ဝယ်ယူရန်")
-    btn_topup = KeyboardButton("💰 ငွေဖြည့်ရန် (Top-Up)")
-    btn_wallet = KeyboardButton("💳 လက်ကျန်ငွေ / Wallet")
+    btn_buy = KeyboardButton("🛍️ Plan များဝယ်ရန်")
+    btn_topup = KeyboardButton("💰 ငွေဖြည့်ရန်")
+    btn_wallet = KeyboardButton("💳 လက်ကျန်ငွေ")
+    btn_check = KeyboardButton("🧰 Data ပမာဏစစ်ရန်")
     btn_history = KeyboardButton("📇 ဝယ်ယူမှုမှတ်တမ်း")
-    btn_check = KeyboardButton("🧰 Data လက်ကျန်စစ်ရန်")
     btn_replace = KeyboardButton("♻️ Key လဲရန်")
     btn_admin = KeyboardButton("👨‍💻 Admin ဆက်သွယ်ရန်")
     btn_refresh = KeyboardButton("🤖 Bot Refresh")
     
     markup.add(btn_buy, btn_topup)
-    markup.add(btn_wallet, btn_history)
-    markup.add(btn_check, btn_replace)
+    markup.add(btn_wallet, btn_check)
+    markup.add(btn_history, btn_replace)
     markup.add(btn_admin, btn_refresh)
     
     if chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1446,19 +1446,28 @@ def handle_topup_amount_select(call):
     set_topup_state(chat_id, amt)
     
     payment_text = (
-        f"💰 <b>Wallet ငွေဖြည့်ရန်: {amt:,} MMK</b>\n\n"
+        f"✅ <b>Wallet ထဲသို့ ငွေဖြည့်သွင်းရန်</b>\n"
+        f"💵 ဖြည့်သွင်းမည့် ပမာဏ: <b>{amt:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━\n"
-        f"📱 KBZ Pay - <code>09699970092</code> (Htet Myat Aung)\n"
-        f"📱 Wave Pay - <code>09699970092</code> (Htet Myat Aung)\n"
-        f"📱 AYA / CB / Uab Pay - <code>09699970092</code>\n"
+        f"💰 <b>ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:</b>\n\n"
+        f"📱 <b>KBZ Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"📱 <b>Wave Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"📱 <b>AYA Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"📱 <b>Uab Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"📱 <b>CB Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
         f"━━━━━━━━━━━━━━━\n\n"
-        f"👉 အထက်ပါ အကောင့်သို့ <b>{amt:,} Ks</b> အတိအကျ လွှဲပေးပါခင်ဗျာ။\n\n"
-        f"🙏🏻 ငွေလွှဲပြီးပါက 📸 <b>ငွေလွှဲပြေစာ (Screenshot)</b> အား ဤ Chat ထဲသို့ ပေးပို့ပေးပါခင်ဗျာ။\n"
-        f"<i>(Admin မှ အတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်သွင်းပေးပါမည်)</i>"
+        f"👉 အထက်ပါ အကောင့်တစ်ခုခုသို့ <b>{amt:,} Ks</b> တိတိကျကျ လွှဲပေးပါခင်ဗျာ။\n\n"
+        f"🙏🏻 ငွေလွှဲပြီး 📸 <b>Screenshot (ပြေစာ)</b> လေး ပို့ပေးပါခင်ဗျာ🥰\n\n"
+        f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်သွင်းပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
     )
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
-    markup.add(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+    markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
+    markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     bot.edit_message_text(payment_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "btn_open_topup")
@@ -1495,7 +1504,7 @@ def handle_approve_topup(call):
         f"🧾 Top-Up ID: <code>{topup_id}</code>\n"
         f"💵 ဖြည့်သွင်းငွေ: <b>+{amount:,} MMK</b>\n"
         f"💳 လက်ရှိ Wallet လက်ကျန်ငွေ: <b>{new_balance:,} MMK</b>\n\n"
-        f"🛍️ '🛍️ Plan များ ဝယ်ယူရန်' Menu မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး စိတ်ကြိုက် ချက်ချင်း ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
+        f"🛍️ '🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး စိတ်ကြိုက် ချက်ချင်း ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
     )
     try:
         bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
@@ -1508,7 +1517,6 @@ def handle_approve_topup(call):
     except:
         pass
 
-# Customer Plan ရွေးပြီးနောက် Purchase Review
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
     bot.answer_callback_query(call.id)
@@ -1526,7 +1534,6 @@ def handle_select_plan(call):
         
         markup = InlineKeyboardMarkup()
         if balance >= amount:
-            # ငွေလုံလောက်ပါက Wallet ဖြင့် ချက်ချင်းဝယ်ရန် ခလုတ်များ ပြသခြင်း
             if plan.get("manual"):
                 markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
             else:
@@ -1554,7 +1561,6 @@ def handle_select_plan(call):
         )
         bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
 
-# Wallet မှ ငွေဖြတ်ပြီး Key Auto မွေးပေးသော Handler (Instant Buy)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
 def handle_buy_with_wallet(call):
     chat_id = call.message.chat.id
@@ -1579,7 +1585,6 @@ def handle_buy_with_wallet(call):
         bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။ ကျေးဇူးပြု၍ ငွေအရင်ဖြည့်ပေးပါ။", show_alert=True)
         return
 
-    # Auto Order ID ထုတ်ယူခြင်း (ကျပန်း ၆ လုံး)
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal = update_user_balance(chat_id, -amount)
     
@@ -1588,11 +1593,9 @@ def handle_buy_with_wallet(call):
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
-    # စိတ်ကြိုက်သုံး 5 Device Plan (Manual Flow)
     if plan.get("manual"):
         save_sale_transaction("VIP", chat_id, plan_code, plan["name"], plan.get("months", 1), amount, order_id=order_id)
         
-        # Admin ထံ Alert ပေးပို့ခြင်း
         admin_alert = (
             f"⚡ <b>စိတ်ကြိုက်သုံး 5 Device Plan အော်ဒါအသစ် (ငွေပေးချေပြီး)</b>\n\n"
             f"🧾 Order ID: <code>{order_id}</code>\n"
@@ -1622,7 +1625,6 @@ def handle_buy_with_wallet(call):
         bot.edit_message_text(user_msg, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
-    # ပုံမှန် Plan များအတွက် Auto Outline Key မွေးထုတ်ပေးခြင်း
     bot.answer_callback_query(call.id, "⏳ VPN Key ထုတ်ပေးနေပါသည်...")
     
     vpn_key = None
@@ -1636,12 +1638,10 @@ def handle_buy_with_wallet(call):
         vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan, target_chat_id=chat_id, months_count=1, is_giveaway=False, order_id=order_id)
 
     if not vpn_key:
-        # Key မွေးမရပါက ပိုက်ဆံ ပြန်အမ်းပေးခြင်း
         update_user_balance(chat_id, amount)
         bot.send_message(chat_id, "❌ ဆာဗာလိုင်းမရသဖြင့် Key မွေးမရပါ။ ကျသင့်ငွေအား Wallet ထဲသို့ ပြန်လည် ထည့်သွင်းပေးထားပါသည်။", reply_markup=get_back_inline_keyboard())
         return
 
-    # အရောင်းနှင့် ဝယ်ယူမှုမှတ်တမ်း သိမ်းဆည်းခြင်း
     save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
     save_user_purchase_record(
         chat_id=chat_id,
@@ -1671,7 +1671,6 @@ def handle_buy_with_wallet(call):
     )
     bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
-    # Admin Alert
     for aid in ADMIN_CHAT_IDS:
         try:
             bot.send_message(
@@ -1726,6 +1725,23 @@ def handle_ask_send_key_callback(call):
     )
     bot.send_message(call.message.chat.id, prompt_txt, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
+# 🎟️ Redeem Code Trigger Callback (Wallet Menu မှတစ်ဆင့် ဖွင့်ခြင်း)
+@bot.callback_query_handler(func=lambda call: call.data == "btn_open_redeem")
+def handle_btn_open_redeem(call):
+    bot.answer_callback_query(call.id)
+    chat_id = call.message.chat.id
+    
+    if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        return
+
+    set_redeem_state(chat_id, True)
+    redeem_guide = (
+        "🎟️ <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
+    )
+    bot.send_message(chat_id, redeem_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+
 # 📸 Photo Message Handler (Slip & Broadcast Support)
 @bot.message_handler(content_types=['photo'])
 def handle_photo_messages(message):
@@ -1744,7 +1760,7 @@ def handle_photo_messages(message):
         photo_id = message.photo[-1].file_id
         caption_text = message.caption or ""
 
-        bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ ပို့ပေးနေပါသည်...")
+        bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
         for uid in all_users:
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
             try:
@@ -1752,7 +1768,7 @@ def handle_photo_messages(message):
                 success_count += 1
             except:
                 pass
-        bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nအောင်မြင်စွာ ရောက်ရှိသူ: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
+        bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nရောက်ရှိသူ: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
         return
 
     # Top-Up Slip Handler
@@ -1793,7 +1809,7 @@ def handle_photo_messages(message):
     )
     bot.reply_to(message, user_reply, parse_mode="HTML")
 
-# ⚡️ Fetch Key From Server (ဆာဗာ Down သော်လည်း Persistent Registry မှ အလိုအလျောက် ပြန်ဖတ်ပေးသော Fallback)
+# ⚡️ Fetch Key From Server
 def fetch_key_from_server(api_url, input_value):
     if not api_url or "dummyKey" in api_url:
         return None, None, None
@@ -1839,6 +1855,14 @@ def fetch_key_from_server(api_url, input_value):
                     if clean_input and (clean_input in server_url or server_url in clean_input):
                         target_key = key
                         break
+                    try:
+                        input_secret = clean_input.split("@")[0]
+                        server_secret = server_url.split("@")[0]
+                        if input_secret == server_secret:
+                            target_key = key
+                            break
+                    except:
+                        pass
 
             if not target_key:
                 for key in keys_data:
@@ -1918,9 +1942,9 @@ def handle_admin_replace_callback(call):
         if new_key:
             success_msg = (
                 f"🎉 <b>လူကြီးမင်း၏ VPN Key ကို အဆင်ပြေစွာ အသစ် လဲလှယ်ပေးလိုက်ပါပြီခင်ဗျာ!</b>\n\n"
-                f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n"
-                f"📡 <b>Server အသစ်:</b> Server {new_server_num} 🇸🇬\n"
-                f"🧰 <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n"
+                f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n\n"
+                f"📡 <b>Server အသစ်:</b> Server {new_server_num} 🇸🇬\n\n"
+                f"🧰 <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>VPN Key အသစ်:</b>\n\n"
                 f"<code>{new_key}</code>\n\n"
@@ -1934,6 +1958,28 @@ def handle_admin_replace_callback(call):
 
 # ----------------- MAIN MESSAGE DISPATCHER -----------------
 
+@bot.message_handler(commands=['redeem'])
+def handle_redeem_command(message):
+    chat_id = message.chat.id
+    save_user_id(chat_id)
+    clear_all_states(chat_id)
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        return
+
+    set_redeem_state(chat_id, True)
+    bot.send_message(
+        chat_id,
+        "🎟️ <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:",
+        parse_mode="HTML",
+        reply_markup=get_back_inline_keyboard()
+    )
+
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     input_value = message.text.strip()
@@ -1944,7 +1990,7 @@ def handle_all_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # 🔑 Admin Manual Dispatch State Handler (ခလုတ်နှိပ်၍ Key ပို့ခြင်း)
+    # 🔑 Admin Manual Dispatch State Handler
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
         manual_state = get_manual_dispatch_state(chat_id)
         if manual_state:
@@ -1992,7 +2038,7 @@ def handle_all_messages(message):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
         success_count = 0
-        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ ပို့ပေးနေပါသည်...")
+        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
         for uid in all_users:
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
             try:
@@ -2003,14 +2049,14 @@ def handle_all_messages(message):
         bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nရောက်ရှိသူ: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
         return
 
-    # 🛍️ Plan များ ဝယ်ယူရန်
-    if input_value in ["🛍️ Plan များ ဝယ်ယူရန်", "Plan များ ဝယ်ယူရန်", "🛍️ Plan များ ကြည့်ရန်"]:
+    # 🛍️ Plan များဝယ်ရန်
+    if input_value in ["🛍️ Plan များဝယ်ရန်", "Plan များဝယ်ရန်", "🛍️ Plan များ ကြည့်ရန်", "Plan များ ကြည့်ရန်"]:
         clear_all_states(chat_id)
         bot.send_message(chat_id, "🧸 လူကြီးမင်း ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
         return
 
-    # 💰 ငွေဖြည့်ရန် (Top-Up)
-    if input_value in ["💰 ငွေဖြည့်ရန် (Top-Up)", "ငွေဖြည့်ရန် (Top-Up)", "ငွေဖြည့်ရန်"]:
+    # 💰 ငွေဖြည့်ရန်
+    if input_value in ["💰 ငွေဖြည့်ရန်", "ငွေဖြည့်ရန်", "💰 ငွေဖြည့်ရန် (Top-Up)"]:
         clear_all_states(chat_id)
         bot.send_message(
             chat_id,
@@ -2021,8 +2067,8 @@ def handle_all_messages(message):
         )
         return
 
-    # 💳 လက်ကျန်ငွေ / Wallet
-    if input_value in ["💳 လက်ကျန်ငွေ / Wallet", "လက်ကျန်ငွေ / Wallet", "လက်ကျန်ငွေ"]:
+    # 💳 လက်ကျန်ငွေ (Redeem Code ခလုတ် အပါအဝင်)
+    if input_value in ["💳 လက်ကျန်ငွေ", "လက်ကျန်ငွေ", "💳 လက်ကျန်ငွေ / Wallet"]:
         clear_all_states(chat_id)
         balance = get_user_balance(chat_id)
         wallet_text = (
@@ -2031,12 +2077,25 @@ def handle_all_messages(message):
             f"🆔 <b>Chat ID:</b> <code>{chat_id}</code>\n"
             f"💵 <b>လက်ရှိ လက်ကျန်ငွေ:</b> <b>{balance:,} MMK</b>\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💡 <i>လက်ကျန်ငွေ လုံလောက်ပါက '🛍️ Plan များ ဝယ်ယူရန်' မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး Auto တန်းထုတ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>"
+            f"💡 <i>လက်ကျန်ငွေ လုံလောက်ပါက '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး Auto တန်းထုတ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>"
         )
         markup = InlineKeyboardMarkup()
-        markup.row(InlineKeyboardButton("💰 ငွေဖြည့်ရန် (Top-Up)", callback_data="btn_open_topup"))
+        markup.row(
+            InlineKeyboardButton("💰 ငွေဖြည့်ရန်", callback_data="btn_open_topup"),
+            InlineKeyboardButton("🎟️ Redeem Code သုံးမည်", callback_data="btn_open_redeem")
+        )
         markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
         bot.send_message(chat_id, wallet_text, parse_mode="HTML", reply_markup=markup)
+        return
+
+    # 🧰 Data ပမာဏစစ်ရန်
+    if input_value in ["🧰 Data ပမာဏစစ်ရန်", "Data ပမာဏစစ်ရန်", "🧰 Data လက်ကျန်စစ်ရန်", "🧰 Data Usage စစ်ရန်"]:
+        clear_all_states(chat_id)
+        check_guide = (
+            "👇 <b>လက်ကျန် Data စစ်ဆေးရန်:</b>\n\n"
+            "ဝယ်ယူထားသော VPN Key Link (<code>ss://...</code>) အား ဤ Chat ထဲသို့ Paste ချ၍ ပေးပို့စစ်ဆေးနိုင်ပါသည်ခင်ဗျာ။"
+        )
+        bot.send_message(chat_id, check_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
     # 📇 ဝယ်ယူမှုမှတ်တမ်း
@@ -2046,7 +2105,7 @@ def handle_all_messages(message):
         if not records:
             empty_msg = (
                 "📇 <b>လူကြီးမင်း၏ ဝယ်ယူမှုမှတ်တမ်း</b>\n\n"
-                "<i>လက်ရှိတွင် ဝယ်ယူထားသော မှတ်တမ်း မရှိသေးပါခင်ဗျာ။ '🛍️ Plan များ ဝယ်ယူရန်' မှတစ်ဆင့် စတင်ဝယ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>"
+                "<i>လက်ရှိတွင် ဝယ်ယူထားသော မှတ်တမ်း မရှိသေးပါခင်ဗျာ။ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် စတင်ဝယ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>"
             )
             bot.send_message(chat_id, empty_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
             return
@@ -2064,7 +2123,7 @@ def handle_all_messages(message):
                 f"🛍️ <b>Plan:</b> {rec.get('plan_name', '')} ({rec.get('disp_gb', '')})\n"
                 f"📡 <b>Server:</b> {srv_name}\n"
                 f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{rec.get('expire_date', 'N/A')}</code>\n\n"
-                f"🔑 <b>VPN Key:</b>\n"
+                f"🔑 <b>VPN Key:</b>\n\n"
                 f"{key_block}"
             )
             history_texts.append(item_txt)
@@ -2080,16 +2139,6 @@ def handle_all_messages(message):
                 bot.send_message(chat_id, piece, parse_mode="HTML")
         else:
             bot.send_message(chat_id, final_history_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-        return
-        
-    # 🧰 Data လက်ကျန်စစ်ရန်
-    if input_value in ["🧰 Data လက်ကျန်စစ်ရန်", "Data လက်ကျန်စစ်ရန်", "🧰 Data Usage စစ်ရန်"]:
-        clear_all_states(chat_id)
-        check_guide = (
-            "👇 <b>လက်ကျန် Data စစ်ဆေးရန်:</b>\n\n"
-            "ဝယ်ယူထားသော VPN Key Link (<code>ss://...</code>) အား ဤ Chat ထဲသို့ Paste ချ၍ ပေးပို့စစ်ဆေးနိုင်ပါသည်ခင်ဗျာ။"
-        )
-        bot.send_message(chat_id, check_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
     # ♻️ Key လဲရန်
@@ -2112,6 +2161,82 @@ def handle_all_messages(message):
         admin_link_markup.add(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
+
+    # 🎟️ Redeem Code ပြန်လည် ထည့်သွင်းသုံးစွဲမှု Handler
+    if get_redeem_state(chat_id):
+        set_redeem_state(chat_id, False)
+        
+        if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+            bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+            return
+
+        codes = load_redeem_codes()
+        code_input = input_value.strip().lower()
+        
+        matched_code_key = None
+        for c_k in codes.keys():
+            if c_k.strip().lower() == code_input:
+                matched_code_key = c_k
+                break
+
+        if matched_code_key:
+            code_info = codes[matched_code_key]
+            if isinstance(code_info, dict):
+                target_srv = str(code_info.get("server", "1"))
+                gb_val = code_info.get("gb", 25)
+                days_val = code_info.get("days", 1)
+            else:
+                target_srv = "1"
+                gb_val = int(code_info)
+                days_val = 1
+
+            user_name = message.from_user.first_name if message.from_user.first_name else "Giveaway Winner"
+            del codes[matched_code_key]
+            save_redeem_codes(codes)
+
+            bot.send_message(chat_id, f"🎟️ Redeem Code မှန်ကန်ပါသည်။ Server {target_srv} ပေါ်မှ VPN Key ကို ထုတ်ပေးနေပါသည်...")
+            
+            vpn_key, key_name, expire_date = create_outline_key(target_srv, user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
+            if not vpn_key:
+                for alt_srv in ["1", "2", "3"]:
+                    if alt_srv != target_srv:
+                        vpn_key, key_name, expire_date = create_outline_key(alt_srv, user_name, custom_gb=gb_val, target_chat_id=chat_id, custom_days=days_val, is_giveaway=True)
+                        if vpn_key:
+                            target_srv = alt_srv
+                            break
+
+            if vpn_key:
+                success_msg = (
+                    f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
+                    f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n\n"
+                    f"📡 <b>Server:</b> Server {target_srv} 🇸🇬\n\n"
+                    f"🎟️ <b>ရရှိသော Data GB:</b> {gb_val} GB\n\n"
+                    f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                    f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
+                    f"<code>{vpn_key}</code>\n\n"
+                    f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
+                )
+                bot.send_message(chat_id, success_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+                
+                clean_name = user_name.strip().lower()
+                save_key_mapping(clean_name, chat_id)
+
+                for aid in ADMIN_CHAT_IDS:
+                    try:
+                        bot.send_message(
+                            aid, 
+                            f"🎟️ <b>Redeem Code Alert:</b>\n\nCustomer: {user_name} (ID: {chat_id}) သည် Server {target_srv} Code: <code>{matched_code_key}</code> ကို အသုံးပြု၍ {gb_val} GB Key ({days_val} ရက်) ရယူသွားပါပြီခင်ဗျာ။",
+                            parse_mode="HTML"
+                        )
+                    except:
+                        pass
+                return
+            else:
+                bot.send_message(chat_id, "❌ Key မွေးရာတွင် အမှားအယွင်း ရှိနေပါသည်။ Admin ထံ ဆက်သွယ်ပေးပါခင်ဗျာ။", reply_markup=get_back_inline_keyboard())
+                return
+        else:
+            bot.send_message(chat_id, "❌ <b>ထည့်သွင်းထားသော Redeem Code မှားယွင်းနေပါသည် (သို့မဟုတ်) အသုံးပြုပြီးသား ဖြစ်နေပါသည်ခင်ဗျာ။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+            return
 
     # 🔍 Cus ရှာရန် (Admin)
     if input_value == "🔍 Cus ရှာရန်":
@@ -2270,7 +2395,7 @@ def handle_all_messages(message):
     if input_value.startswith('/'):
         return
 
-    # ⚡️ Data လက်ကျန်စစ်ဆေးခြင်း (User Paste Key)
+    # ⚡️ Data ပမာဏစစ်ဆေးခြင်း (User Paste Key)
     target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
     if not target_key: target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
     if not target_key: target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
@@ -2398,7 +2523,7 @@ def cron_check():
                     reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
                     if target_chat_id:
                         try:
-                            user_noti = f"⚠️ <b>သတိပေးချက်:</b>\n\nလူကြီးမင်း၏ VPN Key ({full_name}) သည် <b>{reason_text}</b>။ '🛍️ Plan များ ဝယ်ယူရန်' မှတစ်ဆင့် ပြန်လည်ဝယ်ယူနိုင်ပါပြီခင်ဗျာ။"
+                            user_noti = f"⚠️ <b>သတိပေးချက်:</b>\n\nလူကြီးမင်း၏ VPN Key ({full_name}) သည် <b>{reason_text}</b>။ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် ပြန်လည်ဝယ်ယူနိုင်ပါပြီခင်ဗျာ။"
                             bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
                             notified_count += 1
                         except: pass
