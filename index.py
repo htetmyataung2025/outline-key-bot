@@ -80,6 +80,7 @@ USER_HISTORY_FILE = "/tmp/user_purchases.json"
 PERSISTENT_KEYS_FILE = "/tmp/persistent_keys.json"
 WALLET_FILE = "/tmp/user_wallets.json"
 TOPUP_STATE_FILE = "/tmp/user_topup_state.json"
+CUSTOM_TOPUP_STATE_FILE = "/tmp/user_custom_topup.json"
 PROCESSED_CALLBACKS = set()
 
 def is_callback_processed(call_id):
@@ -133,6 +134,15 @@ def set_topup_state(chat_id, amount):
 def get_topup_state(chat_id):
     states = redis_get("user_topup_state") or {}
     return states.get(str(chat_id))
+
+def set_custom_topup_state(chat_id, is_waiting=True):
+    states = redis_get("user_custom_topup") or {}
+    states[str(chat_id)] = is_waiting
+    redis_set("user_custom_topup", states)
+
+def get_custom_topup_state(chat_id):
+    states = redis_get("user_custom_topup") or {}
+    return states.get(str(chat_id), False)
 
 # 💾 Persistent Key Storage System
 def load_persistent_keys():
@@ -716,6 +726,7 @@ def clear_all_states(chat_id):
     set_broadcast_state(chat_id, False)
     set_manual_dispatch_state(chat_id, None)
     set_topup_state(chat_id, None)
+    set_custom_topup_state(chat_id, False)
 
 def is_user_subscribed(user_id):
     if str(user_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -753,9 +764,9 @@ PLANS = {
     "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000, "manual": False, "months": 1},
     "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000, "manual": False, "months": 1},
     "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000, "manual": False, "months": 1},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "Unlimited (500 GB / လစဉ်)", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
-    "custom_1m": {"name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited (5 Device)", "bytes": 0, "price": 20000, "manual": True, "months": 1},
-    "custom_3m": {"name": "၃ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited (5 Device)", "bytes": 0, "price": 60000, "manual": True, "months": 3},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "500 GB", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
+    "custom_1m": {"name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited Data", "bytes": 0, "price": 20000, "manual": True, "months": 1},
+    "custom_3m": {"name": "၃ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited Data", "bytes": 0, "price": 60000, "manual": True, "months": 3},
 }
 
 def bytes_to_gb(bytes_value):
@@ -815,6 +826,7 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
+# 💰 Custom Amount ခလုတ်ပါဝင်သော Top-Up Keyboard
 def get_topup_amounts_keyboard():
     markup = InlineKeyboardMarkup()
     markup.row(
@@ -828,6 +840,9 @@ def get_topup_amounts_keyboard():
     markup.row(
         InlineKeyboardButton("💵 10,000 Ks", callback_data="topup_amt_10000"),
         InlineKeyboardButton("💵 20,000 Ks", callback_data="topup_amt_20000")
+    )
+    markup.row(
+        InlineKeyboardButton("✍️ စိတ်ကြိုက်ပမာဏ ရိုက်ထည့်မည်", callback_data="topup_amt_custom")
     )
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
@@ -1436,16 +1451,89 @@ def generate_random_redeem_code():
     chars = string.ascii_lowercase + string.digits
     return ''.join(random.choices(chars, k=10))
 
+# ----------------- FORCE JOIN CHANNEL CALLBACK HANDLER -----------------
+@bot.callback_query_handler(func=lambda call: call.data == "verify_subscription")
+def handle_verify_subscription(call):
+    chat_id = call.message.chat.id
+    if is_user_subscribed(chat_id):
+        save_user_id(chat_id)
+        bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        welcome_text = (
+            "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        )
+        bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
+    else:
+        bot.answer_callback_query(call.id, "❌ Channel ထဲသို့ မဝင်ရောက်ရသေးပါခင်ဗျာ။ အရင်ဆုံး Join ပေးပါ။", show_alert=True)
+
+# ----------------- COMMAND HANDLERS -----------------
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    chat_id = message.chat.id
+    save_user_id(chat_id)
+    clear_all_states(chat_id)
+
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    welcome_text = (
+        "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+    )
+    
+    try:
+        bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
+            type="web_app",
+            text="Main Website",
+            web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io"))
+        )
+    except:
+        pass
+        
+    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
+
+@bot.message_handler(commands=['buy'])
+def send_plans(message):
+    chat_id = message.chat.id
+    save_user_id(chat_id)
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    clear_all_states(chat_id)
+    bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
+
+@bot.message_handler(commands=['redeem'])
+def handle_redeem_command(message):
+    chat_id = message.chat.id
+    save_user_id(chat_id)
+    clear_all_states(chat_id)
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        return
+
+    set_redeem_state(chat_id, True)
+    bot.send_message(
+        chat_id,
+        "🎟️ <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:",
+        parse_mode="HTML",
+        reply_markup=get_back_inline_keyboard()
+    )
+
 # ----------------- WALLET & DIRECT PURCHASE HANDLERS -----------------
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("topup_amt_"))
-def handle_topup_amount_select(call):
-    bot.answer_callback_query(call.id)
-    chat_id = call.message.chat.id
-    amt = int(call.data.replace("topup_amt_", ""))
-    set_topup_state(chat_id, amt)
-    
-    payment_text = (
+def get_payment_instruction_text(amt):
+    return (
         f"✅ <b>Wallet ထဲသို့ ငွေဖြည့်သွင်းရန်</b>\n"
         f"💵 ဖြည့်သွင်းမည့် ပမာဏ: <b>{amt:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━\n"
@@ -1465,6 +1553,32 @@ def handle_topup_amount_select(call):
         f"🙏🏻 ငွေလွှဲပြီး 📸 <b>Screenshot (ပြေစာ)</b> လေး ပို့ပေးပါခင်ဗျာ🥰\n\n"
         f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်သွင်းပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
     )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("topup_amt_"))
+def handle_topup_amount_select(call):
+    bot.answer_callback_query(call.id)
+    chat_id = call.message.chat.id
+    raw_val = call.data.replace("topup_amt_", "")
+    
+    # ✍️ စိတ်ကြိုက်ပမာဏ ရိုက်ထည့်မည့် Flow
+    if raw_val == "custom":
+        set_custom_topup_state(chat_id, True)
+        set_topup_state(chat_id, None)
+        custom_prompt = (
+            "✍️ <b>စိတ်ကြိုက်ငွေပမာဏ ရိုက်ထည့်ရန်:</b>\n\n"
+            "👇 ဖြည့်သွင်းလိုသော ငွေပမာဏကို ဂဏန်းသီးသန့် (ဥပမာ- <code>15000</code> သို့မဟုတ် <code>50000</code>) ရိုက်ပို့ပေးပါခင်ဗျာ:"
+        )
+        markup = InlineKeyboardMarkup()
+        markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
+        markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+        bot.edit_message_text(custom_prompt, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
+        return
+
+    amt = int(raw_val)
+    set_topup_state(chat_id, amt)
+    set_custom_topup_state(chat_id, False)
+    
+    payment_text = get_payment_instruction_text(amt)
     markup = InlineKeyboardMarkup()
     markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
@@ -1473,6 +1587,7 @@ def handle_topup_amount_select(call):
 @bot.callback_query_handler(func=lambda call: call.data == "btn_open_topup")
 def handle_btn_open_topup(call):
     bot.answer_callback_query(call.id)
+    set_custom_topup_state(call.message.chat.id, False)
     bot.edit_message_text(
         "💰 <b>Wallet ထဲသို့ ဖြည့်သွင်းလိုသော ငွေပမာဏကို ရွေးချယ်ပေးပါ:</b>",
         chat_id=call.message.chat.id,
@@ -1712,7 +1827,7 @@ def handle_ask_send_key_callback(call):
         "target_chat_id": target_chat_id,
         "order_id": order_id,
         "plan_name": "စိတ်ကြိုက်သုံး Plan (5 Device)",
-        "disp_gb": "Unlimited (5 Device)",
+        "disp_gb": "Unlimited Data (5 Device)",
         "months": 1
     }
     set_manual_dispatch_state(call.message.chat.id, order_info)
@@ -1742,7 +1857,7 @@ def handle_btn_open_redeem(call):
     )
     bot.send_message(chat_id, redeem_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
-# 📸 Photo Message Handler (Slip & Broadcast Support)
+# 📸 Photo Message Handler (Top-Up Slip & Broadcast Support)
 @bot.message_handler(content_types=['photo'])
 def handle_photo_messages(message):
     chat_id = message.chat.id
@@ -1779,6 +1894,7 @@ def handle_photo_messages(message):
     
     topup_amt = get_topup_state(chat_id) or 1000
     set_topup_state(chat_id, None)
+    set_custom_topup_state(chat_id, False)
 
     photo_file = bot.get_file(message.photo[-1].file_id)
     topup_id = generate_order_id_from_slip(photo_file.file_path)
@@ -1956,45 +2072,6 @@ def handle_admin_replace_callback(call):
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
-# ----------------- COMMAND HANDLERS -----------------
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    chat_id = message.chat.id
-    save_user_id(chat_id)
-    clear_all_states(chat_id)
-
-    if not is_user_subscribed(chat_id):
-        send_force_join_message(chat_id)
-        return
-
-    welcome_text = (
-        "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
-    )
-    
-    try:
-        bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
-            type="web_app",
-            text="Main Website",
-            web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io"))
-        )
-    except:
-        pass
-        
-    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
-
-@bot.message_handler(commands=['buy'])
-def send_plans(message):
-    chat_id = message.chat.id
-    save_user_id(chat_id)
-    if not is_user_subscribed(chat_id):
-        send_force_join_message(chat_id)
-        return
-
-    clear_all_states(chat_id)
-    bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
-
 # ----------------- MAIN MESSAGE DISPATCHER -----------------
 
 @bot.message_handler(func=lambda message: True)
@@ -2007,6 +2084,26 @@ def handle_all_messages(message):
         send_force_join_message(chat_id)
         return
 
+    # ✍️ စိတ်ကြိုက်ငွေပမာဏ ကီးဘုတ်မှ ရိုက်ထည့်ခြင်း Handler
+    if get_custom_topup_state(chat_id):
+        clean_amt_str = re.sub(r'[^\d]', '', input_value)
+        if clean_amt_str and clean_amt_str.isdigit():
+            amt = int(clean_amt_str)
+            if amt < 500:
+                bot.reply_to(message, "⚠️ အနည်းဆုံး ဖြည့်သွင်းငွေမှာ <b>500 Ks</b> ဖြစ်ပါသည်ခင်ဗျာ။ ကျေးဇူးပြု၍ ပြန်လည်ရိုက်ထည့်ပေးပါ:", parse_mode="HTML")
+                return
+            set_custom_topup_state(chat_id, False)
+            set_topup_state(chat_id, amt)
+            payment_text = get_payment_instruction_text(amt)
+            markup = InlineKeyboardMarkup()
+            markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
+            markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+            bot.send_message(chat_id, payment_text, parse_mode="HTML", reply_markup=markup)
+            return
+        else:
+            bot.reply_to(message, "❌ ဂဏန်းသီးသန့် (ဥပမာ- <code>15000</code>) သာ ရိုက်ထည့်ပေးပါခင်ဗျာ:", parse_mode="HTML")
+            return
+
     # 🔑 Admin Manual Dispatch State Handler
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
         manual_state = get_manual_dispatch_state(chat_id)
@@ -2015,7 +2112,7 @@ def handle_all_messages(message):
             target_user_id = manual_state.get("target_chat_id")
             order_id = manual_state.get("order_id")
             plan_name = manual_state.get("plan_name", "စိတ်ကြိုက်သုံး Plan (5 Device)")
-            disp_gb = manual_state.get("disp_gb", "Unlimited (5 Device)")
+            disp_gb = manual_state.get("disp_gb", "Unlimited Data (5 Device)")
             months_count = manual_state.get("months", 1)
 
             today = datetime.now()
@@ -2055,7 +2152,7 @@ def handle_all_messages(message):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
         success_count = 0
-        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ ပို့ပေးနေပါသည်...")
+        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
         for uid in all_users:
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
             try:
@@ -2179,7 +2276,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
-    # 🎟️ Redeem Code ပြန်လည် ထည့်သွင်းသုံးစွဲမှု Handler
+    # 🎟️ Redeem Code Handler
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)
         
@@ -2384,7 +2481,7 @@ def handle_all_messages(message):
                     chat_id=target_user_id,
                     order_id=order_id,
                     plan_name="စိတ်ကြိုက်သုံး Plan (5 Device)",
-                    disp_gb="Unlimited (5 Device)",
+                    disp_gb="Unlimited Data (5 Device)",
                     months_count=1,
                     price_str="-",
                     server_num="VIP",
