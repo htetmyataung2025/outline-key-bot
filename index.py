@@ -35,7 +35,7 @@ MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
-# 🌐 Vercel Upstash Redis REST API Setup (Permanently Data သိမ်းရန်)
+# 🌐 Vercel Upstash Redis REST API Setup
 KV_URL = os.environ.get("KV_REST_API_URL")
 KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
 
@@ -767,7 +767,7 @@ def clean_ss_url(url_str):
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
-# 📱 ပင်မ Menu Keyboard (Plan များဝယ်ရန် / ငွေဖြည့်ရန် / လက်ကျန်ငွေ / Data ပမာဏစစ်ရန်)
+# 📱 ပင်မ Menu Keyboard
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("🛍️ Plan များဝယ်ရန်")
@@ -780,8 +780,8 @@ def get_main_menu_keyboard(chat_id=None):
     btn_refresh = KeyboardButton("🤖 Bot Refresh")
     
     markup.add(btn_buy, btn_topup)
-    markup.add(btn_wallet, btn_history)
-    markup.add(btn_check, btn_replace)
+    markup.add(btn_wallet, btn_check)
+    markup.add(btn_history, btn_replace)
     markup.add(btn_admin, btn_refresh)
     
     if chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1738,7 +1738,7 @@ def handle_btn_open_redeem(call):
     set_redeem_state(chat_id, True)
     redeem_guide = (
         "🎟️ <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
-        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ။"
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:"
     )
     bot.send_message(chat_id, redeem_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
@@ -1760,7 +1760,7 @@ def handle_photo_messages(message):
         photo_id = message.photo[-1].file_id
         caption_text = message.caption or ""
 
-        bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
+        bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ ပို့ပေးနေပါသည်...")
         for uid in all_users:
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
             try:
@@ -1956,29 +1956,46 @@ def handle_admin_replace_callback(call):
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
-# ----------------- MAIN MESSAGE DISPATCHER -----------------
+# ----------------- COMMAND HANDLERS -----------------
 
-@bot.message_handler(commands=['redeem'])
-def handle_redeem_command(message):
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
     chat_id = message.chat.id
     save_user_id(chat_id)
     clear_all_states(chat_id)
+
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
         return
 
-    if has_active_giveaway_key(chat_id) and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
-        bot.send_message(chat_id, "⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနေဆဲ Giveaway Key ရှိနေပါသေးသည်။ အဆိုပါ Key သက်တမ်းကုန်ဆုံးမှသာ Redeem Code အသစ် ပြန်လည် ထုတ်ယူနိုင်ပါမည်ခင်ဗျာ။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    welcome_text = (
+        "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+    )
+    
+    try:
+        bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
+            type="web_app",
+            text="Main Website",
+            web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io"))
+        )
+    except:
+        pass
+        
+    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
+
+@bot.message_handler(commands=['buy'])
+def send_plans(message):
+    chat_id = message.chat.id
+    save_user_id(chat_id)
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
         return
 
-    set_redeem_state(chat_id, True)
-    bot.send_message(
-        chat_id,
-        "🎟️ <b>Giveaway Redeem Code အသုံးပြုရန်:</b>\n\n"
-        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:",
-        parse_mode="HTML",
-        reply_markup=get_back_inline_keyboard()
-    )
+    clear_all_states(chat_id)
+    bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
+
+# ----------------- MAIN MESSAGE DISPATCHER -----------------
 
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
@@ -2038,7 +2055,7 @@ def handle_all_messages(message):
         set_broadcast_state(chat_id, False)
         all_users = load_all_users()
         success_count = 0
-        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
+        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ ပို့ပေးနေပါသည်...")
         for uid in all_users:
             if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
             try:
@@ -2067,7 +2084,7 @@ def handle_all_messages(message):
         )
         return
 
-    # 💳 လက်ကျန်ငွေ (Redeem Code ခလုတ် အပါအဝင်)
+    # 💳 လက်ကျန်ငွေ
     if input_value in ["💳 လက်ကျန်ငွေ", "လက်ကျန်ငွေ", "💳 လက်ကျန်ငွေ / Wallet"]:
         clear_all_states(chat_id)
         balance = get_user_balance(chat_id)
@@ -2118,10 +2135,10 @@ def handle_all_messages(message):
             
             item_txt = (
                 f"<b>#{idx} | ဝယ်ယူမှု အချက်အလက်</b>\n\n"
-                f"🧾 <b>Order ID:</b> <code>{rec.get('order_id', 'N/A')}</code>\n"
-                f"📅 <b>အချိန်:</b> <code>{rec.get('timestamp', 'N/A')}</code>\n"
-                f"🛍️ <b>Plan:</b> {rec.get('plan_name', '')} ({rec.get('disp_gb', '')})\n"
-                f"📡 <b>Server:</b> {srv_name}\n"
+                f"🧾 <b>Order ID:</b> <code>{rec.get('order_id', 'N/A')}</code>\n\n"
+                f"📅 <b>အချိန်:</b> <code>{rec.get('timestamp', 'N/A')}</code>\n\n"
+                f"🛍️ <b>Plan:</b> {rec.get('plan_name', '')} ({rec.get('disp_gb', '')})\n\n"
+                f"📡 <b>Server:</b> {srv_name}\n\n"
                 f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{rec.get('expire_date', 'N/A')}</code>\n\n"
                 f"🔑 <b>VPN Key:</b>\n\n"
                 f"{key_block}"
@@ -2212,7 +2229,7 @@ def handle_all_messages(message):
                     f"📡 <b>Server:</b> Server {target_srv} 🇸🇬\n\n"
                     f"🎟️ <b>ရရှိသော Data GB:</b> {gb_val} GB\n\n"
                     f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
-                    f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
+                    f"🔑 <b>လူကြီးမင်း၏ VPN Key</b>\n\n"
                     f"<code>{vpn_key}</code>\n\n"
                     f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
                 )
