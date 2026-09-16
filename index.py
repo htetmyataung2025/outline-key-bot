@@ -780,8 +780,8 @@ def get_main_menu_keyboard(chat_id=None):
     btn_refresh = KeyboardButton("🤖 Bot Refresh")
     
     markup.add(btn_buy, btn_topup)
-    markup.add(btn_wallet, btn_check)
-    markup.add(btn_history, btn_replace)
+    markup.add(btn_wallet, btn_history)
+    markup.add(btn_check, btn_replace)
     markup.add(btn_admin, btn_refresh)
     
     if chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
