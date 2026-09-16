@@ -707,7 +707,7 @@ PLANS = {
     "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000, "manual": False, "months": 1},
     "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000, "manual": False, "months": 1},
     "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000, "manual": False, "months": 1},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "(500 GB / လစဉ်)", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "500 GB", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
     "custom_1m": {"name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited Data (5 Device)", "bytes": 0, "price": 20000, "manual": True, "months": 1},
     "custom_3m": {"name": "၃ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited Data (5 Device)", "bytes": 0, "price": 60000, "manual": True, "months": 3},
 }
