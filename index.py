@@ -2228,7 +2228,7 @@ def handle_all_messages(message):
 
     if input_value in ["🎁 Public Free Key", "Public Free Key"]:
         clear_all_states(chat_id)
-        free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpmck9iNk9hcHQ3TXNnaWZNbE14a0JX@h.e.feature.hma.qzz.io:443/?outline=1##🚀🌩️ HMA | Thunder Strike ⚡️"
+        free_key = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpJQzc5Tlc3SFZHcE9jQnBnbGlKYnlG@vip.h-e-feature.store:443/?outline=1#🚀🌩️ HMA | Thunder Strike ⚡️"
         free_text = (
             f"🎁 <b>H & E FEATURE PREMIUM VPN မှ လူအများအတွက် 1.5TB အထိ အခမဲ့သုံးစွဲနိုင်သော Premium Key ဖြစ်ပါတယ်ခင်ဗျာ။</b>\n\n"
             f"<code>{free_key}</code>\n\n"
