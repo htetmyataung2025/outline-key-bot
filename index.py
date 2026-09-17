@@ -170,7 +170,7 @@ def update_user_balance(chat_id, amount_delta):
                 json.dump(wallets, f)
         except:
             pass
-        return get_user_balance(chat_id)
+        return get_user_balance(chat_id), None
 
     needed_deduct = abs(amount_delta)
     expiring_data = load_expiring_credits()
@@ -188,6 +188,8 @@ def update_user_balance(chat_id, amount_delta):
             
     sorted_grants.sort(key=lambda x: x["expire_at"])
     
+    used_bonus_days = []
+    
     for g in sorted_grants:
         if needed_deduct <= 0:
             break
@@ -195,9 +197,11 @@ def update_user_balance(chat_id, amount_delta):
         if rem <= needed_deduct:
             needed_deduct -= rem
             g["remaining"] = 0
+            used_bonus_days.append(g.get("days", 1))
         else:
             g["remaining"] -= needed_deduct
             needed_deduct = 0
+            used_bonus_days.append(g.get("days", 1))
             
     expiring_data[uid] = [g for g in sorted_grants if g.get("remaining", 0) > 0]
     save_expiring_credits(expiring_data)
@@ -213,7 +217,9 @@ def update_user_balance(chat_id, amount_delta):
         except:
             pass
             
-    return get_user_balance(chat_id)
+    # အကယ်၍ Redeem Bonus ငွေကို အသုံးပြုခဲ့ပါက အဆိုပါ Bonus ၏ ရက်စွဲအတိုင်း Key သက်တမ်း သတ်မှတ်ရန် အငယ်ဆုံးရက်ကို ယူမည်
+    min_bonus_days = min(used_bonus_days) if used_bonus_days else None
+    return get_user_balance(chat_id), min_bonus_days
 
 def add_expiring_bonus_to_wallet(chat_id, amount, validity_days):
     uid = str(chat_id)
@@ -1546,10 +1552,14 @@ def get_user_next_key_number(user_name, target_chat_id=None):
     else:
         return max_num, max_num + 1
 
-def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, order_id=None):
+def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, custom_days=None, order_id=None):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     today = datetime.now()
-    new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+    if custom_days:
+        new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
+    else:
+        new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+        
     add_bytes = (500 * months_count) * 1000**3
     
     try:
@@ -1591,7 +1601,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     except Exception as e:
         print("Unlimited Renewal Error:", e)
 
-    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, is_giveaway=False, order_id=order_id)
+    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, custom_days=custom_days, is_giveaway=False, order_id=order_id)
     return vpn_key, key_name, expire_date, False
 
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None, order_id=None):
@@ -1802,7 +1812,7 @@ def handle_approve_topup(call):
     amount = int(parts[3])
     topup_id = parts[4]
 
-    new_balance = update_user_balance(target_chat_id, amount)
+    new_balance, _ = update_user_balance(target_chat_id, amount)
     bot.answer_callback_query(call.id, f"✅ {amount:,} Ks ဖြည့်သွင်းပေးပြီးပါပြီ။")
 
     user_noti = (
@@ -1823,7 +1833,7 @@ def handle_approve_topup(call):
     except:
         pass
 
-# Customer Plan Review (Ultimate VIP ကို Server 1 ကသာ ကီးထုတ်ခွင့်ပေးခြင်း)
+# Customer Plan Review
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
     bot.answer_callback_query(call.id)
@@ -1895,13 +1905,16 @@ def handle_buy_with_wallet(call):
         return
 
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    new_bal = update_user_balance(chat_id, -amount)
+    
+    # Wallet နှုတ်ယူခြင်း (ရက်သတ်မှတ်ချက်ပါသော Redeem ငွေ ပါဝင်သုံးစွဲခြင်း ရှိ/မရှိ စစ်ဆေးခြင်း)
+    new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
     chat_info = bot.get_chat(chat_id)
     user_first = chat_info.first_name if chat_info.first_name else ""
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
+    # စိတ်ကြိုက်သုံး 5 Device Plan (Manual Flow)
     if plan.get("manual"):
         save_sale_transaction("VIP", chat_id, plan_code, plan["name"], plan.get("months", 1), amount, order_id=order_id)
         
@@ -1941,10 +1954,11 @@ def handle_buy_with_wallet(call):
     expire_date = None
     disp_gb = plan["data"]
 
+    # Key သက်တမ်းသတ်မှတ်ချက်: အကယ်၍ Redeem ငွေ ပါဝင်သုံးစွဲပါက ထိုရက်စွဲ (၁/၃/၅/၇ ရက်) အတိုင်း ထုတ်ပေးမည်
     if plan_code == "ultimate":
-        vpn_key, key_name, expire_date, _ = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=1, order_id=order_id)
+        vpn_key, key_name, expire_date, _ = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=1, custom_days=used_bonus_days, order_id=order_id)
     else:
-        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan, target_chat_id=chat_id, months_count=1, is_giveaway=False, order_id=order_id)
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan, target_chat_id=chat_id, months_count=1, custom_days=used_bonus_days, is_giveaway=False, order_id=order_id)
 
     if not vpn_key:
         update_user_balance(chat_id, amount)
@@ -1967,12 +1981,16 @@ def handle_buy_with_wallet(call):
     clean_name = user_name.strip().lower()
     save_key_mapping(clean_name, chat_id)
 
+    exp_info_text = f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}"
+    if used_bonus_days:
+        exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {used_bonus_days} ရက် သက်တမ်း)</i>"
+
     success_text = (
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
         f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
         f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
-        f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+        f"{exp_info_text}\n\n"
         f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{new_bal:,} MMK</code>\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
         f"<code>{vpn_key}</code>\n\n"
@@ -1989,7 +2007,8 @@ def handle_buy_with_wallet(call):
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
                 f"📡 Server: Server {server_num}\n"
-                f"💵 ရရှိငွေ: {amount:,} MMK (Wallet မှ ဖြတ်တောက်ပြီး)",
+                f"💵 ရရှိငွေ: {amount:,} MMK\n"
+                f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {used_bonus_days} ရက်' if used_bonus_days else '၁ လပြည့်'})",
                 parse_mode="HTML"
             )
         except:
@@ -2370,7 +2389,7 @@ def handle_all_messages(message):
         )
         return
 
-    # 💳 လက်ကျန်ငွေ (Main Balance + ရက်သတ်မှတ်ချက်ပါ Expiring Balance ပြသခြင်း)
+    # 💳 လက်ကျန်ငွေ
     if input_value in ["💳 လက်ကျန်ငွေ", "လက်ကျန်ငွေ", "💳 လက်ကျန်ငွေ / Wallet"]:
         clear_all_states(chat_id)
         main_bal, bonus_bal, total_bal = get_user_balance_breakdown(chat_id)
@@ -2381,7 +2400,7 @@ def handle_all_messages(message):
             lines = []
             for g in expiring_data:
                 if g.get("remaining", 0) > 0:
-                    lines.append(f"   • <b>+{g['remaining']:,} Ks</b> (ရက်ကုန်မည့်နေ့: <code>{g['expire_disp']}</code>)")
+                    lines.append(f"   • <b>+{g['remaining']:,} Ks</b> (သက်တမ်းကုန်မည့်ရက်: <code>{g['expire_disp']}</code>)")
             if lines:
                 bonus_detail_str = "\n⏳ <b>ရက်စွဲပါ လက်ကျန်ငွေများ:</b>\n" + "\n".join(lines) + "\n"
 
@@ -2395,7 +2414,7 @@ def handle_all_messages(message):
             f"━━━━━━━━━━━━━━━\n"
             f"💎 <b>စုစုပေါင်း သုံးနိုင်သောငွေ:</b> <b>{total_bal:,} MMK</b>\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"💡 <i>Plan ဝယ်ယူပါက ရက်စွဲပါငွေများထဲမှ အရင်ဆုံး ဦးစားပေး ဖြတ်တောက်အသုံးပြုသွားမည် ဖြစ်ပါသည်ခင်ဗျာ။</i>"
+            f"💡 <i>Plan ဝယ်ယူပါက Redeem ငွေထဲမှ အရင်ဆုံး ဦးစားပေး နှုတ်ယူမည်ဖြစ်ပြီး ထုတ်ယူမည့် Key ၏ သက်တမ်းသည်လည်း အဆိုပါ Redeem ငွေသက်တမ်းအတိုင်း ဖြစ်ပါမည်ခင်ဗျာ။</i>"
         )
         markup = InlineKeyboardMarkup()
         markup.row(
@@ -2520,7 +2539,6 @@ def handle_all_messages(message):
                     weights = [50, 30, 15, 5][:len(valid_options)]
                     awarded_amt = random.choices(valid_options, weights=weights, k=1)[0]
                 
-                # Wallet သို့ ရက်သတ်မှတ်ချက်ပါသော Bonus အဖြစ် ထည့်သွင်းခြင်း
                 new_balance, exp_disp = add_expiring_bonus_to_wallet(chat_id, awarded_amt, validity_days)
                 remaining -= awarded_amt
                 claimed_users.append(user_str_id)
@@ -2541,7 +2559,7 @@ def handle_all_messages(message):
                     f"💵 <b>ရရှိသော Wallet ငွေ:</b> <b>+{awarded_amt:,} MMK</b>\n"
                     f"⏰ <b>ငွေသက်တမ်း:</b> <b>{validity_days} ရက် (ကုန်ဆုံးရက်: {exp_disp})</b>\n\n"
                     f"💳 <b>လက်ရှိ သုံးနိုင်သော စုစုပေါင်းငွေ:</b> <b>{new_balance:,} MMK</b>\n\n"
-                    f"🛍️ '🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို {validity_days} ရက်အတွင်း အချိန်မရွေး စိတ်ကြိုက် ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
+                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူသော Key ၏ သက်တမ်းသည်လည်း {validity_days} ရက် ဖြစ်ပါမည်ခင်ဗျာ။</i>"
                 )
                 bot.send_message(chat_id, success_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
@@ -2571,7 +2589,7 @@ def handle_all_messages(message):
                     f"💵 <b>ရရှိသော Wallet ငွေ:</b> <b>+{amt_to_add:,} MMK</b>\n"
                     f"⏰ <b>ငွေသက်တမ်း:</b> <b>{validity_days} ရက် (ကုန်ဆုံးရက်: {exp_disp})</b>\n\n"
                     f"💳 <b>လက်ရှိ သုံးနိုင်သော စုစုပေါင်းငွေ:</b> <b>{new_balance:,} MMK</b>\n\n"
-                    f"🛍️ '🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို {validity_days} ရက်အတွင်း အချိန်မရွေး စိတ်ကြိုက် ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
+                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူသော Key ၏ သက်တမ်းသည်လည်း {validity_days} ရက် ဖြစ်ပါမည်ခင်ဗျာ။</i>"
                 )
                 bot.send_message(chat_id, success_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
