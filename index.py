@@ -185,47 +185,14 @@ def get_user_balance(chat_id):
     _, _, total_bal = get_user_balance_breakdown(chat_id)
     return total_bal
 
-# 💳 ပိုက်ဆံနှုတ်ယူသည့်အခါ source ('main' သို့မဟုတ် 'bonus') ကို သီးသန့်ရွေးချယ်၍ နှုတ်ခြင်း
-def update_user_balance_from_source(chat_id, amount_to_deduct, source="main"):
+def update_user_balance(chat_id, amount_delta):
     uid = str(chat_id)
-    needed = abs(amount_to_deduct)
-    used_bonus_days = None
-
-    if source == "bonus":
-        expiring_data = load_expiring_credits()
-        user_grants = expiring_data.get(uid, [])
-        now = datetime.utcnow() + timedelta(hours=6, minutes=30)
-        sorted_grants = []
-        for g in user_grants:
-            try:
-                exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
-                if exp_dt > now and g.get("remaining", 0) > 0:
-                    sorted_grants.append(g)
-            except:
-                pass
-        sorted_grants.sort(key=lambda x: x["expire_at"])
-        used_bonus_days_list = []
-        for g in sorted_grants:
-            if needed <= 0:
-                break
-            rem = g.get("remaining", 0)
-            if rem <= needed:
-                needed -= rem
-                g["remaining"] = 0
-                used_bonus_days_list.append(g.get("days", 1))
-            else:
-                g["remaining"] -= needed
-                needed = 0
-                used_bonus_days_list.append(g.get("days", 1))
-        expiring_data[uid] = [g for g in sorted_grants if g.get("remaining", 0) > 0]
-        save_expiring_credits(expiring_data)
-        min_days = min(used_bonus_days_list) if used_bonus_days_list else 1
-        return get_user_balance(chat_id), min_days
-    else:
-        wallets = load_all_wallets()
-        curr_main = int(wallets.get(uid, 0))
-        new_main = max(0, curr_main - needed)
-        wallets[uid] = new_main
+    wallets = load_all_wallets()
+    
+    if amount_delta > 0:
+        curr = int(wallets.get(uid, 0))
+        new_bal = curr + amount_delta
+        wallets[uid] = new_bal
         redis_set("user_wallets_data", wallets)
         try:
             with open(WALLET_FILE, 'w') as f:
@@ -233,6 +200,53 @@ def update_user_balance_from_source(chat_id, amount_to_deduct, source="main"):
         except:
             pass
         return get_user_balance(chat_id), None
+
+    needed_deduct = abs(amount_delta)
+    expiring_data = load_expiring_credits()
+    user_grants = expiring_data.get(uid, [])
+    
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    sorted_grants = []
+    for g in user_grants:
+        try:
+            exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
+            if exp_dt > now and g.get("remaining", 0) > 0:
+                sorted_grants.append(g)
+        except:
+            pass
+            
+    sorted_grants.sort(key=lambda x: x["expire_at"])
+    used_bonus_days = []
+    
+    for g in sorted_grants:
+        if needed_deduct <= 0:
+            break
+        rem = g.get("remaining", 0)
+        if rem <= needed_deduct:
+            needed_deduct -= rem
+            g["remaining"] = 0
+            used_bonus_days.append(g.get("days", 1))
+        else:
+            g["remaining"] -= needed_deduct
+            needed_deduct = 0
+            used_bonus_days.append(g.get("days", 1))
+            
+    expiring_data[uid] = [g for g in sorted_grants if g.get("remaining", 0) > 0]
+    save_expiring_credits(expiring_data)
+    
+    if needed_deduct > 0:
+        curr_main = int(wallets.get(uid, 0))
+        new_main = max(0, curr_main - needed_deduct)
+        wallets[uid] = new_main
+        redis_set("user_wallets_data", wallets)
+        try:
+            with open(WALLET_FILE, 'w') as f:
+                json.dump(wallets, f)
+        except:
+            pass
+            
+    min_bonus_days = min(used_bonus_days) if used_bonus_days else None
+    return get_user_balance(chat_id), min_bonus_days
 
 def add_expiring_bonus_to_wallet(chat_id, amount, validity_days):
     uid = str(chat_id)
@@ -1328,7 +1342,7 @@ def handle_back_to_main_callback(call):
         pass
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
     )
     bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
 
@@ -1818,7 +1832,7 @@ def send_welcome(message):
 
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
     
     try:
@@ -2062,7 +2076,9 @@ def handle_select_plan(call):
 
         balance_disp = "♾️ Unlimited" if is_admin else f"{balance:,} MMK"
         balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
-    
+        
+        server_notice = "\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် Server 1 မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
+
         text = (
             f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
             f"📮 <b>Plan:</b> {plan['name']}\n\n"
@@ -2655,7 +2671,7 @@ def handle_all_messages(message):
         bot.send_message(
             chat_id,
             "💰 <b>Wallet ထဲသို့ ဖြည့်သွင်းလိုသော ငွေပမာဏကို ရွေးချယ်ပေးပါ:</b>\n\n"
-            "💡 <i>ငွေကြိုတင် ဖြည့်ထားခြင်းဖြင့် Plan များကို ၂၄ နာရီလုံး Bot မှ ချက်ချင်း Auto ထုတ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>",
+            "💡 <i>ငွေကြိုတင် ဖြည့်ထားခြင်းဖြင့် Plan များကို ၂၄ နာရီလုံး Bot မှ ချက်ချင်း Instant Auto ထုတ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>",
             parse_mode="HTML",
             reply_markup=get_topup_amounts_keyboard()
         )
@@ -2691,6 +2707,7 @@ def handle_all_messages(message):
             f"━━━━━━━━━━━━━━━\n"
             f"💎 <b>စုစုပေါင်း သုံးနိုင်သောငွေ:</b> <b>{total_bal_disp}</b>\n"
             f"━━━━━━━━━━━━━━━\n\n"
+            f"💡 <i>Plan ဝယ်ယူပါက Redeem ငွေထဲမှ အရင်ဆုံး ဦးစားပေး နှုတ်ယူမည်ဖြစ်ပြီး ထုတ်ယူမည့် Key ၏ သက်တမ်းသည်လည်း အဆိုပါ Redeem ငွေသက်တမ်းအတိုင်း ဖြစ်ပါမည်ခင်ဗျာ။</i>"
         )
         markup = InlineKeyboardMarkup()
         markup.row(
