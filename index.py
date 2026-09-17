@@ -2082,7 +2082,7 @@ def handle_select_plan(call):
         text = (
             f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
             f"📮 <b>Plan:</b> {plan['name']}\n\n"
-            f"🗃️ <b>Data:</b> {plan['data']}(၁လ)\n\n"
+            f"🗃️ <b>Data:</b> {plan['data']} (၁လ)\n\n"
             f"💵 <b>ကျသင့်ငွေ:</b> {amount:,} MMK\n\n"
             f"━━━━━━━━━━━━━━━\n"
             f"💳 <b>လူကြီးမင်း၏ လက်ကျန်ငွေ:</b> <b>{balance_disp}</b>\n"
