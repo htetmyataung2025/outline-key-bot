@@ -2823,13 +2823,13 @@ def handle_all_messages(message):
                     bot.send_message(chat_id, "❌ <b>ဤ Code ၏ သတ်မှတ်ထားသော ပမာဏ ပြည့်သွားပါပြီဖြစ်၍ အသုံးပြု၍ မရတော့ပါခင်ဗျာ။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
                     return
 
-                possible_amounts = [500, 700, 1000, 1500]
+                possible_amounts = [1000, 2000, 3000]
                 valid_options = [opt for opt in possible_amounts if opt <= remaining]
 
                 if not valid_options:
                     awarded_amt = remaining
                 else:
-                    weights = [50, 30, 15, 5][:len(valid_options)]
+                    weights = [70, 20, 10][:len(valid_options)]
                     awarded_amt = random.choices(valid_options, weights=weights, k=1)[0]
                 
                 new_balance, exp_disp = add_expiring_bonus_to_wallet(chat_id, awarded_amt, validity_days)
