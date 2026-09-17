@@ -2673,7 +2673,7 @@ def handle_all_messages(message):
         bot.send_message(
             chat_id,
             "💰 <b>Wallet ထဲသို့ ဖြည့်သွင်းလိုသော ငွေပမာဏကို ရွေးချယ်ပေးပါ:</b>\n\n"
-            "💡 <i>ငွေကြိုတင် ဖြည့်ထားခြင်းဖြင့် Plan များကို ၂၄ နာရီလုံး Bot မှ ချက်ချင်း Instant Auto ထုတ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>",
+            "💡 <i>ငွေကြိုတင် ဖြည့်ထားခြင်းဖြင့် Plan များကို ၂၄ နာရီလုံး Bot မှ ချက်ချင်း Auto ထုတ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>",
             parse_mode="HTML",
             reply_markup=get_topup_amounts_keyboard()
         )
