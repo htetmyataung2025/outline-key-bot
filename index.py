@@ -185,58 +185,46 @@ def get_user_balance(chat_id):
     _, _, total_bal = get_user_balance_breakdown(chat_id)
     return total_bal
 
-def update_user_balance(chat_id, amount_delta):
+# 💳 ပိုက်ဆံနှုတ်ယူသည့်အခါ source ('main' သို့မဟုတ် 'bonus') ကို သီးသန့်ရွေးချယ်၍ နှုတ်ခြင်း
+def update_user_balance_from_source(chat_id, amount_to_deduct, source="main"):
     uid = str(chat_id)
-    wallets = load_all_wallets()
-    
-    if amount_delta > 0:
-        curr = int(wallets.get(uid, 0))
-        new_bal = curr + amount_delta
-        wallets[uid] = new_bal
-        redis_set("user_wallets_data", wallets)
-        try:
-            with open(WALLET_FILE, 'w') as f:
-                json.dump(wallets, f)
-        except:
-            pass
-        return get_user_balance(chat_id), None
+    needed = abs(amount_to_deduct)
+    used_bonus_days = None
 
-    needed_deduct = abs(amount_delta)
-    expiring_data = load_expiring_credits()
-    user_grants = expiring_data.get(uid, [])
-    
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
-    sorted_grants = []
-    for g in user_grants:
-        try:
-            exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
-            if exp_dt > now and g.get("remaining", 0) > 0:
-                sorted_grants.append(g)
-        except:
-            pass
-            
-    sorted_grants.sort(key=lambda x: x["expire_at"])
-    used_bonus_days = []
-    
-    for g in sorted_grants:
-        if needed_deduct <= 0:
-            break
-        rem = g.get("remaining", 0)
-        if rem <= needed_deduct:
-            needed_deduct -= rem
-            g["remaining"] = 0
-            used_bonus_days.append(g.get("days", 1))
-        else:
-            g["remaining"] -= needed_deduct
-            needed_deduct = 0
-            used_bonus_days.append(g.get("days", 1))
-            
-    expiring_data[uid] = [g for g in sorted_grants if g.get("remaining", 0) > 0]
-    save_expiring_credits(expiring_data)
-    
-    if needed_deduct > 0:
+    if source == "bonus":
+        expiring_data = load_expiring_credits()
+        user_grants = expiring_data.get(uid, [])
+        now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+        sorted_grants = []
+        for g in user_grants:
+            try:
+                exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
+                if exp_dt > now and g.get("remaining", 0) > 0:
+                    sorted_grants.append(g)
+            except:
+                pass
+        sorted_grants.sort(key=lambda x: x["expire_at"])
+        used_bonus_days_list = []
+        for g in sorted_grants:
+            if needed <= 0:
+                break
+            rem = g.get("remaining", 0)
+            if rem <= needed:
+                needed -= rem
+                g["remaining"] = 0
+                used_bonus_days_list.append(g.get("days", 1))
+            else:
+                g["remaining"] -= needed
+                needed = 0
+                used_bonus_days_list.append(g.get("days", 1))
+        expiring_data[uid] = [g for g in sorted_grants if g.get("remaining", 0) > 0]
+        save_expiring_credits(expiring_data)
+        min_days = min(used_bonus_days_list) if used_bonus_days_list else 1
+        return get_user_balance(chat_id), min_days
+    else:
+        wallets = load_all_wallets()
         curr_main = int(wallets.get(uid, 0))
-        new_main = max(0, curr_main - needed_deduct)
+        new_main = max(0, curr_main - needed)
         wallets[uid] = new_main
         redis_set("user_wallets_data", wallets)
         try:
@@ -244,9 +232,7 @@ def update_user_balance(chat_id, amount_delta):
                 json.dump(wallets, f)
         except:
             pass
-            
-    min_bonus_days = min(used_bonus_days) if used_bonus_days else None
-    return get_user_balance(chat_id), min_bonus_days
+        return get_user_balance(chat_id), None
 
 def add_expiring_bonus_to_wallet(chat_id, amount, validity_days):
     uid = str(chat_id)
@@ -1192,7 +1178,7 @@ def get_servers_total_usage():
     s3_total, s3_bytes = get_server_stats(OUTLINE_API_URL_3)
 
     s1_gb = bytes_to_gb(s1_bytes)
-    s2_gb = bytes_to_gb(s2_gb) if False else bytes_to_gb(s2_bytes)
+    s2_gb = bytes_to_gb(s2_bytes)
     s3_gb = bytes_to_gb(s3_bytes)
     
     overall_bytes = s1_bytes + s2_bytes + s3_bytes
@@ -1342,7 +1328,7 @@ def handle_back_to_main_callback(call):
         pass
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
     bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
 
@@ -1365,7 +1351,6 @@ def handle_back_to_gen_rd(call):
     except Exception:
         bot.send_message(call.message.chat.id, "🎟️ <b>Wallet Amount Redeem Code ထုတ်ရန်:</b>", parse_mode="HTML", reply_markup=get_admin_rd_amounts_keyboard())
 
-# 🎟️ Admin Wallet Amount Select Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdamt_"))
 def handle_admin_rd_amt_select(call):
     bot.answer_callback_query(call.id)
@@ -1401,7 +1386,6 @@ def handle_admin_rd_amt_select(call):
     except Exception:
         pass
 
-# 🎟️ Admin Mode Select Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdmode_"))
 def handle_admin_rd_mode_select(call):
     bot.answer_callback_query(call.id)
@@ -1427,7 +1411,6 @@ def handle_admin_rd_mode_select(call):
     except Exception:
         pass
 
-# 🎟️ Admin Days Select Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rddur_"))
 def handle_admin_rd_days_select(call):
     bot.answer_callback_query(call.id)
@@ -1454,7 +1437,6 @@ def handle_admin_rd_days_select(call):
     except Exception:
         pass
 
-# 🎟️ Admin Final Generate Wallet Redeem Code Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdcnt_"))
 def handle_admin_rd_generate(call):
     bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
@@ -1507,7 +1489,6 @@ def handle_admin_rd_generate(call):
     except Exception:
         bot.send_message(call.message.chat.id, reply_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
-# 💸 Admin ငွေနှုတ်သည့် အမျိုးအစား ရွေးချယ်မှု Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_deduct_type_"))
 def handle_admin_deduct_type_select(call):
     bot.answer_callback_query(call.id)
@@ -2058,7 +2039,6 @@ def handle_select_plan(call):
         balance = get_user_balance(chat_id)
         is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
         
-        # Redeem Bonus လက်ကျန်ငွေ ရှိမရှိ စစ်ဆေးခြင်း
         _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
         has_redeem_credit = (bonus_bal > 0) and not is_admin
 
@@ -2067,7 +2047,6 @@ def handle_select_plan(call):
             if plan.get("manual"):
                 markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
             elif plan_code == "ultimate" or has_redeem_credit:
-                # Redeem ငွေဖြင့်ဝယ်ယူပါက သို့မဟုတ် Ultimate Plan ဖြစ်ပါက Server 1 တစ်ခုတည်းသာ ပေးမည်
                 srv1_label = "📡 Server 1 🇸🇬 (Redeem Credit)" if has_redeem_credit else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
                 markup.row(InlineKeyboardButton(srv1_label, callback_data=f"buywallet_{plan_code}_1"))
             else:
@@ -2293,13 +2272,11 @@ def handle_btn_open_redeem(call):
             return
 
     set_redeem_state(chat_id, True)
-    bot.send_message(
-        chat_id,
+    redeem_guide = (
         "🎟️ <b>Wallet Redeem Code အသုံးပြုရန်:</b>\n\n"
-        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:",
-        parse_mode="HTML",
-        reply_markup=get_back_inline_keyboard()
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:"
     )
+    bot.send_message(chat_id, redeem_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
 # 📸 Photo Message Handler
 @bot.message_handler(content_types=['photo'])
@@ -2716,6 +2693,7 @@ def handle_all_messages(message):
             f"━━━━━━━━━━━━━━━\n"
             f"💎 <b>စုစုပေါင်း သုံးနိုင်သောငွေ:</b> <b>{total_bal_disp}</b>\n"
             f"━━━━━━━━━━━━━━━\n\n"
+            f"💡 <i>Plan ဝယ်ယူပါက Redeem ငွေထဲမှ အရင်ဆုံး ဦးစားပေး နှုတ်ယူမည်ဖြစ်ပြီး ထုတ်ယူမည့် Key ၏ သက်တမ်းသည်လည်း အဆိုပါ Redeem ငွေသက်တမ်းအတိုင်း ဖြစ်ပါမည်ခင်ဗျာ။</i>"
         )
         markup = InlineKeyboardMarkup()
         markup.row(
@@ -2879,7 +2857,7 @@ def handle_all_messages(message):
                     f"💵 <b>ရရှိသော Wallet ငွေ:</b> <b>+{awarded_amt:,} MMK</b>\n"
                     f"⏰ <b>ငွေသက်တမ်း:</b> <b>{validity_days} ရက် (ကုန်ဆုံးရက်: {exp_disp})</b>\n\n"
                     f"💳 <b>လက်ရှိ သုံးနိုင်သော စုစုပေါင်းငွေ:</b> <b>{disp_total_bal}</b>\n\n"
-                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူပါက Server 1 တွင် သက်တမ်း {validity_days} ရက် ရရှိမည် ဖြစ်ပါသည်ခင်ဗျာ။</i>"
+                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူသော Key ၏ သက်တမ်းသည်လည်း {validity_days} ရက် ဖြစ်ပါမည်ခင်ဗျာ။</i>"
                 )
                 bot.send_message(chat_id, success_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
@@ -2912,7 +2890,7 @@ def handle_all_messages(message):
                     f"💵 <b>ရရှိသော Wallet ငွေ:</b> <b>+{amt_to_add:,} MMK</b>\n"
                     f"⏰ <b>ငွေသက်တမ်း:</b> <b>{validity_days} ရက် (ကုန်ဆုံးရက်: {exp_disp})</b>\n\n"
                     f"💳 <b>လက်ရှိ သုံးနိုင်သော စုစုပေါင်းငွေ:</b> <b>{disp_total_bal}</b>\n\n"
-                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူပါက Server 1 တွင် သက်တမ်း {validity_days} ရက် ရရှိမည် ဖြစ်ပါသည်ခင်ဗျာ။</i>"
+                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူသော Key ၏ သက်တမ်းသည်လည်း {validity_days} ရက် ဖြစ်ပါမည်ခင်ဗျာ။</i>"
                 )
                 bot.send_message(chat_id, success_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
