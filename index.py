@@ -185,47 +185,14 @@ def get_user_balance(chat_id):
     _, _, total_bal = get_user_balance_breakdown(chat_id)
     return total_bal
 
-# 💳 ပိုက်ဆံနှုတ်ယူသည့်အခါ source ('main' သို့မဟုတ် 'bonus') ကို သီးသန့်ရွေးချယ်၍ နှုတ်ခြင်း
-def update_user_balance_from_source(chat_id, amount_to_deduct, source="main"):
+def update_user_balance(chat_id, amount_delta):
     uid = str(chat_id)
-    needed = abs(amount_to_deduct)
-    used_bonus_days = None
-
-    if source == "bonus":
-        expiring_data = load_expiring_credits()
-        user_grants = expiring_data.get(uid, [])
-        now = datetime.utcnow() + timedelta(hours=6, minutes=30)
-        sorted_grants = []
-        for g in user_grants:
-            try:
-                exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
-                if exp_dt > now and g.get("remaining", 0) > 0:
-                    sorted_grants.append(g)
-            except:
-                pass
-        sorted_grants.sort(key=lambda x: x["expire_at"])
-        used_bonus_days_list = []
-        for g in sorted_grants:
-            if needed <= 0:
-                break
-            rem = g.get("remaining", 0)
-            if rem <= needed:
-                needed -= rem
-                g["remaining"] = 0
-                used_bonus_days_list.append(g.get("days", 1))
-            else:
-                g["remaining"] -= needed
-                needed = 0
-                used_bonus_days_list.append(g.get("days", 1))
-        expiring_data[uid] = [g for g in sorted_grants if g.get("remaining", 0) > 0]
-        save_expiring_credits(expiring_data)
-        min_days = min(used_bonus_days_list) if used_bonus_days_list else 1
-        return get_user_balance(chat_id), min_days
-    else:
-        wallets = load_all_wallets()
-        curr_main = int(wallets.get(uid, 0))
-        new_main = max(0, curr_main - needed)
-        wallets[uid] = new_main
+    wallets = load_all_wallets()
+    
+    if amount_delta > 0:
+        curr = int(wallets.get(uid, 0))
+        new_bal = curr + amount_delta
+        wallets[uid] = new_bal
         redis_set("user_wallets_data", wallets)
         try:
             with open(WALLET_FILE, 'w') as f:
@@ -233,6 +200,53 @@ def update_user_balance_from_source(chat_id, amount_to_deduct, source="main"):
         except:
             pass
         return get_user_balance(chat_id), None
+
+    needed_deduct = abs(amount_delta)
+    expiring_data = load_expiring_credits()
+    user_grants = expiring_data.get(uid, [])
+    
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    sorted_grants = []
+    for g in user_grants:
+        try:
+            exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
+            if exp_dt > now and g.get("remaining", 0) > 0:
+                sorted_grants.append(g)
+        except:
+            pass
+            
+    sorted_grants.sort(key=lambda x: x["expire_at"])
+    used_bonus_days = []
+    
+    for g in sorted_grants:
+        if needed_deduct <= 0:
+            break
+        rem = g.get("remaining", 0)
+        if rem <= needed_deduct:
+            needed_deduct -= rem
+            g["remaining"] = 0
+            used_bonus_days.append(g.get("days", 1))
+        else:
+            g["remaining"] -= needed_deduct
+            needed_deduct = 0
+            used_bonus_days.append(g.get("days", 1))
+            
+    expiring_data[uid] = [g for g in sorted_grants if g.get("remaining", 0) > 0]
+    save_expiring_credits(expiring_data)
+    
+    if needed_deduct > 0:
+        curr_main = int(wallets.get(uid, 0))
+        new_main = max(0, curr_main - needed_deduct)
+        wallets[uid] = new_main
+        redis_set("user_wallets_data", wallets)
+        try:
+            with open(WALLET_FILE, 'w') as f:
+                json.dump(wallets, f)
+        except:
+            pass
+            
+    min_bonus_days = min(used_bonus_days) if used_bonus_days else None
+    return get_user_balance(chat_id), min_bonus_days
 
 def add_expiring_bonus_to_wallet(chat_id, amount, validity_days):
     uid = str(chat_id)
@@ -1026,7 +1040,7 @@ def get_admin_rd_mode_keyboard(amt):
         InlineKeyboardButton(f"👤 တစ်ဦးတည်းသုံး ({int(amt):,} Ks)", callback_data=f"adm_rdmode_{amt}_single")
     )
     markup.row(
-        InlineKeyboardButton("👥 လူအများခွဲသုံး (၅၀၀ ~ ၁၅၀၀ Ks စီ)", callback_data=f"adm_rdmode_{amt}_shared")
+        InlineKeyboardButton("👥 လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)", callback_data=f"adm_rdmode_{amt}_shared")
     )
     markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="back_to_gen_rd"))
     return markup
@@ -1398,7 +1412,7 @@ def handle_admin_rd_mode_select(call):
     amt = parts[2]
     mode = parts[3]
     
-    mode_text = "တစ်ဦးတည်းသုံး" if mode == "single" else "လူအများခွဲသုံး (၅၀၀ မှ ၁၅၀၀ Ks အထိ)"
+    mode_text = "တစ်ဦးတည်းသုံး" if mode == "single" else "လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)"
     prompt = f"🎟️ <b>{int(amt):,} Ks ({mode_text})</b> အတွက် ရရှိမည့် Wallet ငွေ၏ <b>သက်တမ်း (ရက်)</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
     try:
         bot.edit_message_text(
@@ -1472,7 +1486,7 @@ def handle_admin_rd_generate(call):
     save_redeem_codes(codes)
     
     if mode == "shared":
-        mode_desc = f"လူအများခွဲသုံး (၅၀၀ မှ ၁၅၀၀ Ks အထိ)"
+        mode_desc = f"လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)"
     else:
         mode_desc = f"တစ်ဦးတည်းသုံး ({amt:,} Ks အပြည့်)"
 
@@ -1799,7 +1813,7 @@ def handle_verify_subscription(call):
             pass
         welcome_text = (
             "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
         )
         bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
     else:
@@ -1818,7 +1832,7 @@ def send_welcome(message):
 
     welcome_text = (
         "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
-        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ।"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
     
     try:
@@ -2047,7 +2061,7 @@ def handle_select_plan(call):
             if plan.get("manual"):
                 markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
             elif plan_code == "ultimate" or has_redeem_credit:
-                srv1_label = "📡 Server 1 🇸🇬 (Redeem Credit)" if has_redeem_credit else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
+                srv1_label = "📡 Server 1 🇸🇬 (လှည့်ကွက်/Redeem Credit)" if has_redeem_credit else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
                 markup.row(InlineKeyboardButton(srv1_label, callback_data=f"buywallet_{plan_code}_1"))
             else:
                 markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
@@ -2076,7 +2090,10 @@ def handle_select_plan(call):
             f"━━━━━━━━━━━━━━━\n{server_notice}\n"
             f"👇 ဝယ်ယူလိုပါက အောက်ပါ ဆာဗာခလုတ်များမှ မိမိနှစ်သက်ရာကို ရွေးချယ်နှိပ်ပါခင်ဗျာ:"
         )
-        bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
+        try:
+            bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
+        except Exception:
+            bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
 def handle_buy_with_wallet(call):
@@ -2102,6 +2119,8 @@ def handle_buy_with_wallet(call):
     if not is_admin and balance < amount:
         bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။ ကျေးဇူးပြု၍ ငွေအရင်ဖြည့်ပေးပါ။", show_alert=True)
         return
+
+    bot.answer_callback_query(call.id, "⏳ VPN Key ထုတ်ပေးနေပါသည်...")
 
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
@@ -2141,10 +2160,11 @@ def handle_buy_with_wallet(call):
             f"💳 <b>လက်ကျန်ငွေ:</b> {user_disp_bal}\n\n"
             f"💡 <i>ဤ Plan သည် စိတ်ကြိုက်သုံး Plan ဖြစ်သဖြင့် Admin မှ ခေတ္တအတွင်း Key အား ပြင်ဆင်၍ ပို့ပေးပါမည်ခင်ဗျာ။ စောင့်ဆိုင်းပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။</i>"
         )
-        bot.edit_message_text(user_msg, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        try:
+            bot.edit_message_text(user_msg, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        except Exception:
+            bot.send_message(chat_id, user_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
-
-    bot.answer_callback_query(call.id, "⏳ VPN Key ထုတ်ပေးနေပါသည်...")
     
     vpn_key = None
     key_name = None
@@ -2195,7 +2215,10 @@ def handle_buy_with_wallet(call):
         f"<code>{vpn_key}</code>\n\n"
         f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
     )
-    bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    try:
+        bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    except Exception:
+        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
     for aid in ADMIN_CHAT_IDS:
         try:
@@ -2693,6 +2716,7 @@ def handle_all_messages(message):
             f"━━━━━━━━━━━━━━━\n"
             f"💎 <b>စုစုပေါင်း သုံးနိုင်သောငွေ:</b> <b>{total_bal_disp}</b>\n"
             f"━━━━━━━━━━━━━━━\n\n"
+            f"💡 <i>Plan ဝယ်ယူပါက Redeem ငွေထဲမှ အရင်ဆုံး ဦးစားပေး နှုတ်ယူမည်ဖြစ်ပြီး ထုတ်ယူမည့် Key ၏ သက်တမ်းသည်လည်း အဆိုပါ Redeem ငွေသက်တမ်းအတိုင်း ဖြစ်ပါမည်ခင်ဗျာ။</i>"
         )
         markup = InlineKeyboardMarkup()
         markup.row(
