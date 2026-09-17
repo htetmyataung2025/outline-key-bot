@@ -1772,61 +1772,6 @@ def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days
         print("Specific Unlimited Renewal Error:", e)
     return None, None, None
 
-def renew_or_ земли_unlimited_key(server_num, user_name, target_chat_id, months_count=1, custom_days=None, order_id=None):
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
-    today = datetime.now()
-    if custom_days:
-        new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
-    else:
-        new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
-        
-    add_bytes = (500 * months_count) * 1000**3
-    
-    try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
-        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
-        
-        if keys_resp.status_code == 200:
-            keys_data = keys_resp.json().get("accessKeys", [])
-            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
-            
-            target_key_id = None
-            target_key_name = None
-            
-            for k in keys_data:
-                k_name = k.get("name", "")
-                if f"({target_chat_id})" in k_name and not "[gw]" in k_name.lower():
-                    target_key_id = k.get("id")
-                    target_key_name = k_name
-                    break
-            
-            if target_key_id:
-                used_bytes = bytes_transferred.get(str(target_key_id), 0)
-                new_fup_limit = used_bytes + add_bytes
-
-                updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
-                if updated_name == target_key_name:
-                    updated_name = f"{target_key_name.split('(')[0].strip()} ({target_chat_id}) {new_expire_date}"
-                
-                requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
-                requests.put(f"{api_url}/access-keys/{target_key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=8)
-                
-                if order_id:
-                    map_key_to_order(updated_name, order_id)
-
-                raw_access_url = k.get("accessUrl", "")
-                final_key = f"{raw_access_url}#{updated_name}"
-                save_persistent_key(server_num, target_key_id, updated_name, final_key, new_fup_limit, order_id, target_chat_id)
-                return final_key, updated_name, new_expire_date, True
-    except Exception as e:
-        print("Unlimited Renewal Error:", e)
-
-    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, custom_days=custom_days, is_giveaway=False, order_id=order_id)
-    return vpn_key, key_name, expire_date, False
-
-# Fix spelling function name mapping
-renew_or_create_unlimited_key = renew_or_ земли_unlimited_key
-
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None, order_id=None):
     today = datetime.now()
     if custom_expire_date:
@@ -2117,7 +2062,7 @@ def handle_approve_topup(call):
     except:
         pass
 
-# Customer Plan Review & Choice Logic for Ultimate VIP
+# Customer Plan Review & Choice Logic for Ultimate VIP (Always show options if user has keys)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
     bot.answer_callback_query(call.id)
@@ -2137,10 +2082,10 @@ def handle_select_plan(call):
         _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
         has_redeem_credit = (bonus_bal > 0) and not is_admin
 
-        # 🌟 Ultimate VIP Plan အတွက် ကီးများစွာရှိလျှင် ရွေးချယ်ခွင့်စနစ် (Choice Flow)
+        # 🌟 Ultimate VIP Plan အတွက် ကီးရှိနေလျှင် (၁ ခုဖြစ်စေ၊ များစွာဖြစ်စေ) ရွေးချယ်ခွင့်စနစ် (Choice Flow) ပေးခြင်း
         if plan_code == "ultimate" and not has_redeem_credit:
             user_keys = get_user_ultimate_keys(chat_id, "1")
-            if len(user_keys) > 1:
+            if len(user_keys) > 0:
                 markup = InlineKeyboardMarkup()
                 for idx, uk in enumerate(user_keys, 1):
                     markup.row(InlineKeyboardButton(f"♻️ Key #{idx} ({uk['name'][:25]}) သက်တမ်းတိုးမည်", callback_data=f"renew_choice_{plan_code}_1_{uk['id']}"))
@@ -3221,7 +3166,7 @@ def handle_all_messages(message):
             markup = InlineKeyboardMarkup()
             markup.row(
                 InlineKeyboardButton("📡 S1 သို့", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
-                InlineKeyboardButton("📡 S2 သို့", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
+                InlineKeyboardButton("📡 S2 သို့", callback_data=f"replace_srv2_{server_num}_{key_id}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
                 InlineKeyboardButton("📡 S3 သို့", callback_data=f"replace_srv3_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
             )
             markup.row(InlineKeyboardButton("❌ Reject", callback_data=f"replace_reject_{chat_id}_{key_id}"))
