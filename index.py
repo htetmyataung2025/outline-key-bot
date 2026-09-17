@@ -1299,7 +1299,7 @@ def handle_admin_rd_amt_select(call):
     except Exception as e:
         pass
 
-# 🎟️ Admin Mode Select Callback (Single vs Shared)
+# 🎟️ Admin Mode Select Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdmode_"))
 def handle_admin_rd_mode_select(call):
     bot.answer_callback_query(call.id)
@@ -1741,6 +1741,7 @@ def send_plans(message):
     clear_all_states(chat_id)
     bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
 
+# 🎟️ Redeem Code Command (လူတစ်ဦးလျှင် အသုံးမပြုရသေးသော Bonus မကုန်မချင်း ၁ ကြိမ်သာ ကန့်သတ်ခြင်း)
 @bot.message_handler(commands=['redeem'])
 def handle_redeem_command(message):
     chat_id = message.chat.id
@@ -1750,11 +1751,24 @@ def handle_redeem_command(message):
         send_force_join_message(chat_id)
         return
 
+    # လက်ရှိ သုံးရန်ကျန်ရှိနေသော Redeem Bonus ရှိပါက ထပ်မံရယူခွင့် ပိတ်ထားခြင်း
+    _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
+    if bonus_bal > 0 and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        bot.send_message(
+            chat_id,
+            f"⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနိုင်သော Redeem Bonus လက်ကျန်ငွေ ({bonus_bal:,} MMK) ရှိနေဆဲ ဖြစ်ပါသဖြင့် နောက်ထပ် Code အသစ်ကို ထပ်မံ ရယူခွင့် မရှိသေးပါခင်ဗျာ။</b>\n\n"
+            f"💡 <i>အဆိုပါ Redeem ငွေ ကုန်ဆုံးသွားမှ (သို့မဟုတ် Plan ဝယ်ယူအသုံးပြုပြီးမှ) သာ နောက်ထပ် Code အသစ်ကို ရယူနိုင်ပါမည်။</i>",
+            parse_mode="HTML",
+            reply_markup=get_back_inline_keyboard()
+        )
+        return
+
     set_redeem_state(chat_id, True)
     bot.send_message(
         chat_id,
         "🎟️ <b>Wallet Redeem Code အသုံးပြုရန်:</b>\n\n"
-        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:",
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:\n\n"
+        "<i>(သတိပေးချက်: လူတစ်ဦးလျှင် တစ်ကြိမ်သာ အသုံးပြုခွင့်ရှိပါသည်)</i>",
         parse_mode="HTML",
         reply_markup=get_back_inline_keyboard()
     )
@@ -2076,15 +2090,29 @@ def handle_ask_send_key_callback(call):
     )
     bot.send_message(call.message.chat.id, prompt_txt, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
-# 🎟️ Redeem Code Trigger Callback (Wallet Menu မှတစ်ဆင့် ဖွင့်ခြင်း)
+# 🎟️ Redeem Code Trigger Callback
 @bot.callback_query_handler(func=lambda call: call.data == "btn_open_redeem")
 def handle_btn_open_redeem(call):
     bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
+
+    # လက်ရှိ သုံးရန်ကျန်ရှိနေသော Redeem Bonus ရှိပါက ထပ်မံရယူခွင့် ပိတ်ထားခြင်း
+    _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
+    if bonus_bal > 0 and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        bot.send_message(
+            chat_id,
+            f"⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနိုင်သော Redeem Bonus လက်ကျန်ငွေ ({bonus_bal:,} MMK) ရှိနေဆဲ ဖြစ်ပါသဖြင့် နောက်ထပ် Code အသစ်ကို ထပ်မံ ရယူခွင့် မရှိသေးပါခင်ဗျာ။</b>\n\n"
+            f"💡 <i>အဆိုပါ Redeem ငွေ ကုန်ဆုံးသွားမှ (သို့မဟုတ် Plan ဝယ်ယူအသုံးပြုပြီးမှ) သာ နောက်ထပ် Code အသစ်ကို ရယူနိုင်ပါမည်။</i>",
+            parse_mode="HTML",
+            reply_markup=get_back_inline_keyboard()
+        )
+        return
+
     set_redeem_state(chat_id, True)
     redeem_guide = (
         "🎟️ <b>Wallet Redeem Code အသုံးပြုရန်:</b>\n\n"
-        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:"
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:\n\n"
+        "<i>(သတိပေးချက်: လူတစ်ဦးလျှင် တစ်ကြိမ်သာ အသုံးပြုခွင့်ရှိပါသည်)</i>"
     )
     bot.send_message(chat_id, redeem_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
@@ -2525,6 +2553,18 @@ def handle_all_messages(message):
     # 🎟️ Wallet Amount Redeem Code စစ်ဆေးခြင်း Handler
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)
+        
+        # စစ်ဆေးချက် ၁ - လက်ကျန် Bonus ငွေ ရှိမရှိ စစ်ဆေးခြင်း
+        _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
+        if bonus_bal > 0 and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+            bot.send_message(
+                chat_id,
+                f"⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနိုင်သော Redeem Bonus လက်ကျန်ငွေ ({bonus_bal:,} MMK) ရှိနေဆဲ ဖြစ်ပါသဖြင့် နောက်ထပ် Code အသစ်ကို ထပ်မံ ရယူခွင့် မရှိသေးပါခင်ဗျာ။</b>\n\n"
+                f"💡 <i>လူတစ်ဦးလျှင် တစ်ကြိမ်သာ သုံးခွင့်ရှိပြီး အဆိုပါငွေဖြင့် Plan ဝယ်ယူပြီးမှသာ နောက်ထပ် Code ကို ထပ်မံ အသုံးပြုနိုင်ပါမည်။</i>",
+                parse_mode="HTML",
+                reply_markup=get_back_inline_keyboard()
+            )
+            return
         
         codes = load_redeem_codes()
         code_input = input_value.strip().lower()
