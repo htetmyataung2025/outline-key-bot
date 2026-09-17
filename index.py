@@ -187,7 +187,6 @@ def update_user_balance(chat_id, amount_delta):
             pass
             
     sorted_grants.sort(key=lambda x: x["expire_at"])
-    
     used_bonus_days = []
     
     for g in sorted_grants:
@@ -217,7 +216,6 @@ def update_user_balance(chat_id, amount_delta):
         except:
             pass
             
-    # အကယ်၍ Redeem Bonus ငွေကို အသုံးပြုခဲ့ပါက အဆိုပါ Bonus ၏ ရက်စွဲအတိုင်း Key သက်တမ်း သတ်မှတ်ရန် အငယ်ဆုံးရက်ကို ယူမည်
     min_bonus_days = min(used_bonus_days) if used_bonus_days else None
     return get_user_balance(chat_id), min_bonus_days
 
@@ -1250,50 +1248,64 @@ def handle_back_to_main_callback(call):
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_gen_rd")
 def handle_back_to_gen_rd(call):
     bot.answer_callback_query(call.id)
-    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
-    bot.edit_message_text(
-        "🎟️ <b>Wallet Amount Redeem Code ထုတ်ရန်:</b>\n\nကျေးဇူးပြု၍ မည်သည့် <b>ငွေပမာဏ</b> အတွက် Code ထုတ်ယူမည်ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id,
-        parse_mode="HTML",
-        reply_markup=get_admin_rd_amounts_keyboard()
-    )
+    try:
+        bot.edit_message_text(
+            "🎟️ <b>Wallet Amount Redeem Code ထုတ်ရန်:</b>\n\nကျေးဇူးပြု၍ မည်သည့် <b>ငွေပမာဏ</b> အတွက် Code ထုတ်ယူမည်ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+            reply_markup=get_admin_rd_amounts_keyboard()
+        )
+    except Exception as e:
+        bot.send_message(call.message.chat.id, "🎟️ <b>Wallet Amount Redeem Code ထုတ်ရန်:</b>", parse_mode="HTML", reply_markup=get_admin_rd_amounts_keyboard())
 
+# 🎟️ Admin Wallet Amount Select Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdamt_"))
 def handle_admin_rd_amt_select(call):
     bot.answer_callback_query(call.id)
-    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
     amt = int(call.data.replace("adm_rdamt_", ""))
     
-    if amt in [5000, 10000]:
-        prompt = (
-            f"🎟️ <b>{amt:,} Ks Wallet Redeem Code</b>\n\n"
-            f"မည်သည့် ပုံစံဖြင့် ထုတ်ယူလိုပါသလဲ ရွေးချယ်ပေးပါခင်ဗျာ:"
-        )
-        bot.edit_message_text(
-            prompt,
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            parse_mode="HTML",
-            reply_markup=get_admin_rd_mode_keyboard(amt)
-        )
-    else:
-        prompt = f"🎟️ <b>{amt:,} Ks (တစ်ဦးတည်းသုံး)</b> အတွက် ရရှိမည့် Wallet ငွေ၏ <b>သက်တမ်း (ရက်)</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
-        bot.edit_message_text(
-            prompt,
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            parse_mode="HTML",
-            reply_markup=get_admin_rd_days_keyboard(amt, "single")
-        )
+    try:
+        if amt in [5000, 10000]:
+            prompt = (
+                f"🎟️ <b>{amt:,} Ks Wallet Redeem Code</b>\n\n"
+                f"မည်သည့် ပုံစံဖြင့် ထုတ်ယူလိုပါသလဲ ရွေးချယ်ပေးပါခင်ဗျာ:"
+            )
+            bot.edit_message_text(
+                prompt,
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML",
+                reply_markup=get_admin_rd_mode_keyboard(amt)
+            )
+        else:
+            prompt = f"🎟️ <b>{amt:,} Ks (တစ်ဦးတည်းသုံး)</b> အတွက် ရရှိမည့် Wallet ငွေ၏ <b>သက်တမ်း (ရက်)</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
+            bot.edit_message_text(
+                prompt,
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML",
+                reply_markup=get_admin_rd_days_keyboard(amt, "single")
+            )
+    except Exception as e:
+        pass
 
+# 🎟️ Admin Mode Select Callback (Single vs Shared)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdmode_"))
 def handle_admin_rd_mode_select(call):
     bot.answer_callback_query(call.id)
-    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
     parts = call.data.split("_")
@@ -1302,18 +1314,24 @@ def handle_admin_rd_mode_select(call):
     
     mode_text = "တစ်ဦးတည်းသုံး" if mode == "single" else "လူအများခွဲသုံး (၅၀၀ မှ ၁၅၀၀ Ks အထိ)"
     prompt = f"🎟️ <b>{int(amt):,} Ks ({mode_text})</b> အတွက် ရရှိမည့် Wallet ငွေ၏ <b>သက်တမ်း (ရက်)</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
-    bot.edit_message_text(
-        prompt,
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id,
-        parse_mode="HTML",
-        reply_markup=get_admin_rd_days_keyboard(amt, mode)
-    )
+    try:
+        bot.edit_message_text(
+            prompt,
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+            reply_markup=get_admin_rd_days_keyboard(amt, mode)
+        )
+    except Exception as e:
+        pass
 
+# 🎟️ Admin Days Select Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rddur_"))
 def handle_admin_rd_days_select(call):
     bot.answer_callback_query(call.id)
-    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
     parts = call.data.split("_")
@@ -1323,21 +1341,27 @@ def handle_admin_rd_days_select(call):
     
     mode_text = "တစ်ဦးတည်းသုံး" if mode == "single" else "လူအများခွဲသုံး"
     prompt = f"🎟️ <b>{int(amt):,} Ks ({mode_text} - ငွေသက်တမ်း {days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?"
-    bot.edit_message_text(
-        prompt,
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id,
-        parse_mode="HTML",
-        reply_markup=get_admin_rd_count_keyboard(amt, mode, days)
-    )
+    try:
+        bot.edit_message_text(
+            prompt,
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+            reply_markup=get_admin_rd_count_keyboard(amt, mode, days)
+        )
+    except Exception as e:
+        pass
 
+# 🎟️ Admin Final Generate Wallet Redeem Code Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdcnt_"))
 def handle_admin_rd_generate(call):
     bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
     if is_callback_processed(f"adm_rdgen_{call.message.message_id}_{call.data}"):
         return
 
-    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
     parts = call.data.split("_")
@@ -1374,9 +1398,12 @@ def handle_admin_rd_generate(call):
         f"📌 ပုံစံ: <b>{mode_desc}</b>\n"
         f"⏰ Wallet ငွေ သက်တမ်း: <b>{days} ရက်</b>\n\n"
         + "\n".join(generated_list) +
-        f"\n\n💡 <i>Customer များသည် Wallet Menu ထဲရှိ '🎟️ Redeem Code သုံးမည်' တွင် ထည့်သွင်းပြီး {days} ရက်အတွင်း အသုံးပြုနိုင်ပါပြီဗျာ။</i>"
+        f"\n\n💡 <i>Customer များသည် Wallet Menu ထဲရှိ '🎟️ Redeem Code သုံးမည်' တွင် ထည့်သွင်းပြီး {days} ရက်အတွင်း အသုံးပြုနိုင်ပါပြီဗျာ။ (အဆိုပါငွေဖြင့် ဝယ်ယူသော Key သက်တမ်းသည်လည်း {days} ရက် ဖြစ်ပါမည်)</i>"
     )
-    bot.edit_message_text(reply_msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    try:
+        bot.edit_message_text(reply_msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    except Exception as e:
+        bot.send_message(call.message.chat.id, reply_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
 def handle_view_key_detail(call):
@@ -1905,8 +1932,6 @@ def handle_buy_with_wallet(call):
         return
 
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    
-    # Wallet နှုတ်ယူခြင်း (ရက်သတ်မှတ်ချက်ပါသော Redeem ငွေ ပါဝင်သုံးစွဲခြင်း ရှိ/မရှိ စစ်ဆေးခြင်း)
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
     chat_info = bot.get_chat(chat_id)
@@ -1914,7 +1939,6 @@ def handle_buy_with_wallet(call):
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
-    # စိတ်ကြိုက်သုံး 5 Device Plan (Manual Flow)
     if plan.get("manual"):
         save_sale_transaction("VIP", chat_id, plan_code, plan["name"], plan.get("months", 1), amount, order_id=order_id)
         
@@ -1954,7 +1978,6 @@ def handle_buy_with_wallet(call):
     expire_date = None
     disp_gb = plan["data"]
 
-    # Key သက်တမ်းသတ်မှတ်ချက်: အကယ်၍ Redeem ငွေ ပါဝင်သုံးစွဲပါက ထိုရက်စွဲ (၁/၃/၅/၇ ရက်) အတိုင်း ထုတ်ပေးမည်
     if plan_code == "ultimate":
         vpn_key, key_name, expire_date, _ = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=1, custom_days=used_bonus_days, order_id=order_id)
     else:
