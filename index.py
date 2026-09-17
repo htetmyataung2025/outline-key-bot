@@ -2141,7 +2141,7 @@ def handle_select_plan(call):
                 markup = InlineKeyboardMarkup()
                 for idx, uk in enumerate(user_keys, 1):
                     markup.row(InlineKeyboardButton(f"♻️ Key #{idx} ({uk['name'][:25]}) သက်တမ်းတိုးမည်", callback_data=f"renew_choice_{plan_code}_1_{uk['id']}"))
-                markup.row(InlineKeyboardButton("➕ Key အသစ် အစအဆုံး ထပ်ဝယ်မည်", callback_data=f"renew_choice_{plan_code}_1_new"))
+                markup.row(InlineKeyboardButton("➕ Key အသစ် ထပ်ဝယ်မည်", callback_data=f"renew_choice_{plan_code}_1_new"))
                 markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
                 markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
 
