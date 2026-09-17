@@ -2063,7 +2063,7 @@ def handle_select_plan(call):
         balance_disp = "♾️ Unlimited" if is_admin else f"{balance:,} MMK"
         balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
     
-       text = (
+        text = (
             f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
             f"📮 <b>Plan:</b> {plan['name']}\n\n"
             f"🗃️ <b>Data:</b> {plan['data']}\n\n"
