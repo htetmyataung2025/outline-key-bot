@@ -139,7 +139,6 @@ def load_claimed_redeem_users():
     return []
 
 def save_claimed_redeem_user(chat_id):
-    # Admin များကို စာရင်းမသွင်းဘဲ အမြဲတမ်း Unlimited ခွင့်ပြုမည်
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     users = load_claimed_redeem_users()
@@ -181,6 +180,8 @@ def get_user_balance_breakdown(chat_id):
     return main_bal, valid_bonus, (main_bal + valid_bonus)
 
 def get_user_balance(chat_id):
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return 999999999
     _, _, total_bal = get_user_balance_breakdown(chat_id)
     return total_bal
 
@@ -268,13 +269,11 @@ def add_expiring_bonus_to_wallet(chat_id, amount, validity_days):
     save_claimed_redeem_user(chat_id)
     return get_user_balance(chat_id), grant["expire_disp"]
 
-# 👮‍♂️ Admin Fund Deductions (Redeem သီးသန့် နှင့် ပုံမှန်ငွေ သီးသန့် နှုတ်ယူခြင်း)
 def admin_deduct_specific_funds(target_chat_id, amount_to_deduct, deduct_type="all"):
     uid = str(target_chat_id)
     needed = int(amount_to_deduct)
     deducted = 0
     
-    # ၁။ Redeem Bonus ငွေသီးသန့် နှုတ်ယူခြင်း
     if deduct_type in ["bonus", "all"]:
         expiring_data = load_expiring_credits()
         user_grants = expiring_data.get(uid, [])
@@ -293,7 +292,6 @@ def admin_deduct_specific_funds(target_chat_id, amount_to_deduct, deduct_type="a
         expiring_data[uid] = [g for g in user_grants if g.get("remaining", 0) > 0]
         save_expiring_credits(expiring_data)
         
-    # ၂။ ပုံမှန်ငွေ (Main Balance) သီးသန့် နှုတ်ယူခြင်း
     if deduct_type in ["main", "all"]:
         if deduct_type == "main":
             needed = int(amount_to_deduct)
@@ -313,7 +311,6 @@ def admin_deduct_specific_funds(target_chat_id, amount_to_deduct, deduct_type="a
     m_bal, b_bal, f_total = get_user_balance_breakdown(uid)
     return deducted, m_bal, b_bal, f_total
 
-# Deduct Menu State
 def set_admin_deduct_state(admin_id, state_dict=None):
     states = redis_get("admin_deduct_state") or {}
     if state_dict:
@@ -953,7 +950,7 @@ def clean_ss_url(url_str):
     main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
     return main_part.strip()
 
-# 📱 ပင်မ Menu Keyboard (Admin Menu တွင် 💸 ငွေနှုတ်ရန် ခလုတ်အသစ် ပါဝင်သည်)
+# 📱 ပင်မ Menu Keyboard
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_buy = KeyboardButton("🛍️ Plan များဝယ်ရန်")
@@ -1081,7 +1078,7 @@ def get_admin_deduct_type_keyboard():
         InlineKeyboardButton("🎁 Redeem Bonus ငွေနှုတ်မည်", callback_data="adm_deduct_type_bonus")
     )
     markup.row(
-        InlineKeyboardButton("💵 ပုံမှန် လက်ကျန်ငွေနှုတ်မည်", callback_data="adm_deduct_type_main")
+        InlineKeyboardButton("💵 လက်ကျန်ငွေ ပမာဏနှုတ်မည်", callback_data="adm_deduct_type_main")
     )
     markup.row(
         InlineKeyboardButton("⚡ စုစုပေါင်း လက်ကျန်ငွေမှ အကုန်နှုတ်မည်", callback_data="adm_deduct_type_all")
@@ -1195,7 +1192,7 @@ def get_servers_total_usage():
     s3_total, s3_bytes = get_server_stats(OUTLINE_API_URL_3)
 
     s1_gb = bytes_to_gb(s1_bytes)
-    s2_gb = bytes_to_gb(s2_bytes)
+    s2_gb = bytes_to_gb(s2_gb) if False else bytes_to_gb(s2_bytes)
     s3_gb = bytes_to_gb(s3_bytes)
     
     overall_bytes = s1_bytes + s2_bytes + s3_bytes
@@ -1521,7 +1518,7 @@ def handle_admin_deduct_type_select(call):
     dtype = call.data.replace("adm_deduct_type_", "")
     set_admin_deduct_state(call.message.chat.id, {"type": dtype, "step": "ask_user"})
 
-    type_name = "Redeem Bonus ငွေ" if dtype == "bonus" else ("ပုံမှန် လက်ကျန်ငွေ" if dtype == "main" else "စုစုပေါင်း လက်ကျန်ငွေ")
+    type_name = "Redeem Bonus ငွေ" if dtype == "bonus" else ("လက်ကျန်ငွေ ပမာဏ" if dtype == "main" else "စုစုပေါင်း လက်ကျန်ငွေ")
     prompt = (
         f"💸 <b>{type_name} နှုတ်ယူရန်:</b>\n\n"
         f"👇 ငွေနှုတ်လိုသော Customer ၏ <b>Telegram Chat ID</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:"
@@ -1766,8 +1763,6 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     curr_max, next_number = get_user_next_key_number(user_name, target_chat_id)
     id_str = f" ({target_chat_id})" if target_chat_id else ""
     gw_str = " [GW]" if is_giveaway else ""
-    
-    # Admin များ၏ အမည်နောက်တွင် 👑 ထည့်သွင်းပေးခြင်း
     crown_str = " 👑" if str(target_chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] else ""
     
     if curr_max == 0:
@@ -1899,7 +1894,7 @@ def handle_admin_deduct_command(message):
         f"✅ <b>ငွေပြန်နှုတ်ခြင်း အောင်မြင်ပါသည်!</b>\n\n"
         f"👤 Target User ID: <code>{target_id}</code>\n"
         f"💵 နှုတ်ယူငွေ: <b>-{deducted:,} MMK</b>\n"
-        f"💳 User ၏ လက်ရှိ ကျန်ငွေ: <b>{final_bal:,} MMK</b> (Main: {m_bal:,} Ks | Redeem: {b_bal:,} Ks)",
+        f"💳 User ၏ လက်ရှိ ကျန်ငွေ: <b>{final_bal:,} MMK</b> (လက်ကျန်ငွေ ပမာဏ: {m_bal:,} Ks | Redeem: {b_bal:,} Ks)",
         parse_mode="HTML"
     )
 
@@ -1913,7 +1908,7 @@ def handle_admin_deduct_command(message):
     except:
         pass
 
-# 🎟️ Redeem Code Command (Admin မှအပ အခြားသူများ လက်ကျန်ငွေရှိနေသရွေ့ ထပ်မံရယူခွင့် ပိတ်ထားခြင်း)
+# 🎟️ Redeem Code Command
 @bot.message_handler(commands=['redeem'])
 def handle_redeem_command(message):
     chat_id = message.chat.id
@@ -2046,7 +2041,7 @@ def handle_approve_topup(call):
     except:
         pass
 
-# Customer Plan Review
+# Customer Plan Review (Redeem ငွေရှိပါက Server 1 သာ ထုတ်ပေးခြင်း)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
     bot.answer_callback_query(call.id)
@@ -2061,13 +2056,20 @@ def handle_select_plan(call):
     if plan:
         amount = plan["price"]
         balance = get_user_balance(chat_id)
+        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
         
+        # Redeem Bonus လက်ကျန်ငွေ ရှိမရှိ စစ်ဆေးခြင်း
+        _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
+        has_redeem_credit = (bonus_bal > 0) and not is_admin
+
         markup = InlineKeyboardMarkup()
-        if balance >= amount:
+        if balance >= amount or is_admin:
             if plan.get("manual"):
                 markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
-            elif plan_code == "ultimate":
-                markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
+            elif plan_code == "ultimate" or has_redeem_credit:
+                # Redeem ငွေဖြင့်ဝယ်ယူပါက သို့မဟုတ် Ultimate Plan ဖြစ်ပါက Server 1 တစ်ခုတည်းသာ ပေးမည်
+                srv1_label = "📡 Server 1 🇸🇬 (Redeem Credit)" if has_redeem_credit else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
+                markup.row(InlineKeyboardButton(srv1_label, callback_data=f"buywallet_{plan_code}_1"))
             else:
                 markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
                 markup.row(InlineKeyboardButton("📡 Server 2 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_2"))
@@ -2079,16 +2081,20 @@ def handle_select_plan(call):
         markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
         markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
 
-        balance_status = f"✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if balance >= amount else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
+        balance_disp = "♾️ Unlimited" if is_admin else f"{balance:,} MMK"
+        balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
+        
+        server_notice = "\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် Server 1 မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
+
         text = (
             f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
             f"📮 <b>Plan:</b> {plan['name']}\n\n"
             f"🗃️ <b>Data:</b> {plan['data']}\n\n"
             f"💵 <b>ကျသင့်ငွေ:</b> {amount:,} MMK\n\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💳 <b>လူကြီးမင်း၏ လက်ကျန်ငွေ:</b> <b>{balance:,} MMK</b>\n"
+            f"💳 <b>လူကြီးမင်း၏ လက်ကျန်ငွေ:</b> <b>{balance_disp}</b>\n"
             f"အခြေအနေ: <b>{balance_status}</b>\n"
-            f"━━━━━━━━━━━━━━━\n\n"
+            f"━━━━━━━━━━━━━━━\n{server_notice}\n"
             f"👇 ဝယ်ယူလိုပါက အောက်ပါ ဆာဗာခလုတ်များမှ မိမိနှစ်သက်ရာကို ရွေးချယ်နှိပ်ပါခင်ဗျာ:"
         )
         bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
@@ -2112,8 +2118,9 @@ def handle_buy_with_wallet(call):
 
     amount = plan["price"]
     balance = get_user_balance(chat_id)
+    is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
 
-    if balance < amount:
+    if not is_admin and balance < amount:
         bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။ ကျေးဇူးပြု၍ ငွေအရင်ဖြည့်ပေးပါ။", show_alert=True)
         return
 
@@ -2146,12 +2153,13 @@ def handle_buy_with_wallet(call):
             except:
                 pass
 
+        user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
         user_msg = (
             f"🎉 <b>အော်ဒါမှာယူမှု အောင်မြင်ပါသည်!</b>\n\n"
             f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
             f"🛍️ <b>Plan:</b> {plan['name']}\n"
             f"💵 <b>ကျသင့်ငွေ:</b> -{amount:,} MMK\n"
-            f"💳 <b>လက်ကျန်ငွေ:</b> {new_bal:,} MMK\n\n"
+            f"💳 <b>လက်ကျန်ငွေ:</b> {user_disp_bal}\n\n"
             f"💡 <i>ဤ Plan သည် စိတ်ကြိုက်သုံး Plan ဖြစ်သဖြင့် Admin မှ ခေတ္တအတွင်း Key အား ပြင်ဆင်၍ ပို့ပေးပါမည်ခင်ဗျာ။ စောင့်ဆိုင်းပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။</i>"
         )
         bot.edit_message_text(user_msg, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
@@ -2164,8 +2172,6 @@ def handle_buy_with_wallet(call):
     expire_date = None
     disp_gb = plan["data"]
 
-    # Key သက်တမ်းသတ်မှတ်ချက်: Admin မဟုတ်ပါက Redeem Bonus အလိုက် ရက်စွဲ (၁/၃/၅/၇) သတ်မှတ်မည်
-    is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
     apply_days = None if is_admin else used_bonus_days
 
     if plan_code == "ultimate":
@@ -2198,13 +2204,14 @@ def handle_buy_with_wallet(call):
     if apply_days:
         exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {apply_days} ရက် သက်တမ်း)</i>"
 
+    user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
     success_text = (
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
         f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
         f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
         f"{exp_info_text}\n\n"
-        f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{new_bal:,} MMK</code>\n\n"
+        f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{user_disp_bal}</code>\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
         f"<code>{vpn_key}</code>\n\n"
         f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
@@ -2562,7 +2569,7 @@ def handle_all_messages(message):
                 bot.reply_to(
                     message,
                     f"👤 <b>Customer ID:</b> <code>{target_user_id}</code>\n"
-                    f"💵 ပုံမှန်ငွေ: <b>{m_b:,} Ks</b>\n"
+                    f"💵 လက်ကျန်ငွေ ပမာဏ: <b>{m_b:,} Ks</b>\n"
                     f"🎁 Redeem Bonus: <b>{b_b:,} Ks</b>\n"
                     f"💎 စုစုပေါင်းလက်ကျန်: <b>{t_b:,} Ks</b>\n\n"
                     f"👇 <b>နှုတ်ယူလိုသော ငွေပမာဏ</b> ကို ဂဏန်းသီးသန့် ရိုက်ပို့ပေးပါခင်ဗျာ:",
@@ -2588,7 +2595,7 @@ def handle_all_messages(message):
                     f"✅ <b>ငွေပြန်နှုတ်ခြင်း အောင်မြင်ပါသည်!</b>\n\n"
                     f"👤 Customer ID: <code>{target_user_id}</code>\n"
                     f"💵 နှုတ်ယူငွေ: <b>-{deducted:,} MMK</b>\n"
-                    f"💳 User ၏ လက်ရှိ ကျန်ငွေ: <b>{final_bal:,} MMK</b> (Main: {m_bal:,} Ks | Redeem: {b_bal:,} Ks)",
+                    f"💳 User ၏ လက်ရှိ ကျန်ငွေ: <b>{final_bal:,} MMK</b> (လက်ကျန်ငွေ ပမာဏ: {m_bal:,} Ks | Redeem: {b_bal:,} Ks)",
                     parse_mode="HTML"
                 )
 
@@ -2682,6 +2689,7 @@ def handle_all_messages(message):
     # 💳 လက်ကျန်ငွေ
     if input_value in ["💳 လက်ကျန်ငွေ", "လက်ကျန်ငွေ", "💳 လက်ကျန်ငွေ / Wallet"]:
         clear_all_states(chat_id)
+        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
         main_bal, bonus_bal, total_bal = get_user_balance_breakdown(chat_id)
         
         bonus_detail_str = ""
@@ -2694,16 +2702,19 @@ def handle_all_messages(message):
             if lines:
                 bonus_detail_str = "\n⏳ <b>ရက်စွဲပါ လက်ကျန်ငွေများ:</b>\n" + "\n".join(lines) + "\n"
 
-        crown = " 👑" if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] else ""
+        crown = " 👑" if is_admin else ""
+        main_bal_disp = "♾️ Unlimited" if is_admin else f"{main_bal:,} MMK"
+        total_bal_disp = "♾️ Unlimited" if is_admin else f"{total_bal:,} MMK"
+
         wallet_text = (
             f"💳 <b>လူကြီးမင်း၏ Wallet အချက်အလက်</b>\n\n"
             f"👤 <b>အသုံးပြုသူ:</b> {message.from_user.first_name}{crown}\n"
             f"🆔 <b>Chat ID:</b> <code>{chat_id}</code>\n\n"
-            f"💵 <b>ပုံမှန်လက်ကျန်ငွေ:</b> {main_bal:,} MMK\n"
+            f"💵 <b>လက်ကျန်ငွေ ပမာဏ:</b> {main_bal_disp}\n"
             f"🎁 <b>Redeem လက်ကျန်ငွေ:</b> {bonus_bal:,} MMK\n"
             f"{bonus_detail_str}"
             f"━━━━━━━━━━━━━━━\n"
-            f"💎 <b>စုစုပေါင်း သုံးနိုင်သောငွေ:</b> <b>{total_bal:,} MMK</b>\n"
+            f"💎 <b>စုစုပေါင်း သုံးနိုင်သောငွေ:</b> <b>{total_bal_disp}</b>\n"
             f"━━━━━━━━━━━━━━━\n\n"
         )
         markup = InlineKeyboardMarkup()
@@ -2793,7 +2804,6 @@ def handle_all_messages(message):
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)
         
-        # စစ်ဆေးချက် - Admin မဟုတ်ပါက လက်ရှိ သုံးရန်ကျန်နေသော Bonus မကုန်မချင်း Code အသစ်ထပ်ယူခွင့် ပိတ်ထားခြင်း
         is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
         if not is_admin:
             _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
@@ -2823,7 +2833,7 @@ def handle_all_messages(message):
             user_str_id = str(chat_id)
             claimed_users = code_info.get("claimed_users", [])
 
-            # လူအများခွဲသုံးစနစ် (Lucky Draw Pool - ၅၀၀ မှ ၁၅၀၀ အထိ)
+            # လူအများခွဲသုံးစနစ်
             if mode == "shared":
                 if not is_admin and user_str_id in claimed_users:
                     bot.send_message(chat_id, "⚠️ <b>သင်သည် ဤ Code အား ရယူပြီးဖြစ်ပါသည်ခင်ဗျာ။</b>\n<i>(Code တစ်ခုလျှင် လူတစ်ဦး ၁ ကြိမ်သာ ရယူနိုင်ပါသည်)</i>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
@@ -2860,14 +2870,16 @@ def handle_all_messages(message):
 
                 user_name = message.from_user.first_name if message.from_user.first_name else "Winner"
                 crown_icon = " 👑" if is_admin else ""
+                disp_total_bal = "♾️ Unlimited" if is_admin else f"{new_balance:,} MMK"
+
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
                     f"👤 <b>အသုံးပြုသူ:</b> {user_name}{crown_icon}\n"
                     f"🎟️ <b>Code:</b> <code>{matched_code_key}</code>\n"
                     f"💵 <b>ရရှိသော Wallet ငွေ:</b> <b>+{awarded_amt:,} MMK</b>\n"
                     f"⏰ <b>ငွေသက်တမ်း:</b> <b>{validity_days} ရက် (ကုန်ဆုံးရက်: {exp_disp})</b>\n\n"
-                    f"💳 <b>လက်ရှိ သုံးနိုင်သော စုစုပေါင်းငွေ:</b> <b>{new_balance:,} MMK</b>\n\n"
-                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူသော Key ၏ သက်တမ်းသည်လည်း {validity_days} ရက် ဖြစ်ပါမည်ခင်ဗျာ။</i>"
+                    f"💳 <b>လက်ရှိ သုံးနိုင်သော စုစုပေါင်းငွေ:</b> <b>{disp_total_bal}</b>\n\n"
+                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူပါက Server 1 တွင် သက်တမ်း {validity_days} ရက် ရရှိမည် ဖြစ်ပါသည်ခင်ဗျာ။</i>"
                 )
                 bot.send_message(chat_id, success_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
@@ -2882,7 +2894,7 @@ def handle_all_messages(message):
                         pass
                 return
 
-            # တစ်ဦးတည်းသုံးစနစ် (Single Use - ချက်ချင်းဖျက်ပစ်မည်)
+            # တစ်ဦးတည်းသုံးစနစ်
             else:
                 amt_to_add = int(code_info.get("amount", 1000))
                 del codes[matched_code_key]
@@ -2891,6 +2903,7 @@ def handle_all_messages(message):
                 new_balance, exp_disp = add_expiring_bonus_to_wallet(chat_id, amt_to_add, validity_days)
                 user_name = message.from_user.first_name if message.from_user.first_name else "Winner"
                 crown_icon = " 👑" if is_admin else ""
+                disp_total_bal = "♾️ Unlimited" if is_admin else f"{new_balance:,} MMK"
 
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
@@ -2898,8 +2911,8 @@ def handle_all_messages(message):
                     f"🎟️ <b>Code:</b> <code>{matched_code_key}</code>\n"
                     f"💵 <b>ရရှိသော Wallet ငွေ:</b> <b>+{amt_to_add:,} MMK</b>\n"
                     f"⏰ <b>ငွေသက်တမ်း:</b> <b>{validity_days} ရက် (ကုန်ဆုံးရက်: {exp_disp})</b>\n\n"
-                    f"💳 <b>လက်ရှိ သုံးနိုင်သော စုစုပေါင်းငွေ:</b> <b>{new_balance:,} MMK</b>\n\n"
-                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူသော Key ၏ သက်တမ်းသည်လည်း {validity_days} ရက် ဖြစ်ပါမည်ခင်ဗျာ။</i>"
+                    f"💳 <b>လက်ရှိ သုံးနိုင်သော စုစုပေါင်းငွေ:</b> <b>{disp_total_bal}</b>\n\n"
+                    f"💡 <i>ဤငွေဖြင့် ဝယ်ယူပါက Server 1 တွင် သက်တမ်း {validity_days} ရက် ရရှိမည် ဖြစ်ပါသည်ခင်ဗျာ။</i>"
                 )
                 bot.send_message(chat_id, success_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
@@ -3025,7 +3038,7 @@ def handle_all_messages(message):
             bot.send_message(chat_id, "✅ <b>Key စစ်ဆေးမှု အောင်မြင်ပါသည်။ Admin မှ အမြန်ဆုံး လဲလှယ်ပေးပါမည်။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
             return
         else:
-            bot.send_message(chat_id, "❌ ပေးပို့ထားသော Key ရှာမတွေ့ပါ။", parse_mode="HTML", reply_back_keyboard=get_back_inline_keyboard())
+            bot.send_message(chat_id, "❌ ပေးပို့ထားသော Key ရှာမတွေ့ပါ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
             return
 
     if input_value == "📊 Total Data Usage":
