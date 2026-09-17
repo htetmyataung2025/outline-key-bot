@@ -2061,7 +2061,7 @@ def handle_select_plan(call):
             if plan.get("manual"):
                 markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
             elif plan_code == "ultimate" or has_redeem_credit:
-                srv1_label = "📡 Server 1 🇸🇬 (လှည့်ကွက်/Redeem Credit)" if has_redeem_credit else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
+                srv1_label = "📡 Server 1 🇸🇬 (Redeem Credit)" if has_redeem_credit else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
                 markup.row(InlineKeyboardButton(srv1_label, callback_data=f"buywallet_{plan_code}_1"))
             else:
                 markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
