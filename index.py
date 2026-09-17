@@ -2693,7 +2693,6 @@ def handle_all_messages(message):
             f"━━━━━━━━━━━━━━━\n"
             f"💎 <b>စုစုပေါင်း သုံးနိုင်သောငွေ:</b> <b>{total_bal_disp}</b>\n"
             f"━━━━━━━━━━━━━━━\n\n"
-            f"💡 <i>Plan ဝယ်ယူပါက Redeem ငွေထဲမှ အရင်ဆုံး ဦးစားပေး နှုတ်ယူမည်ဖြစ်ပြီး ထုတ်ယူမည့် Key ၏ သက်တမ်းသည်လည်း အဆိုပါ Redeem ငွေသက်တမ်းအတိုင်း ဖြစ်ပါမည်ခင်ဗျာ။</i>"
         )
         markup = InlineKeyboardMarkup()
         markup.row(
