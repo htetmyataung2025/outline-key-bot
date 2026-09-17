@@ -1706,7 +1706,73 @@ def get_user_next_key_number(user_name, target_chat_id=None):
     else:
         return max_num, max_num + 1
 
-def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, custom_days=None, order_id=None):
+def get_user_ultimate_keys(chat_id, server_num="1"):
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    user_keys = []
+    try:
+        res = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
+        if res.status_code == 200:
+            keys_data = res.json().get("accessKeys", [])
+            for k in keys_data:
+                k_name = k.get("name", "")
+                if f"({chat_id})" in k_name and not "[gw]" in k_name.lower():
+                    user_keys.append({
+                        "id": k.get("id"),
+                        "name": k_name,
+                        "server": str(server_num)
+                    })
+    except:
+        pass
+    return user_keys
+
+def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days=None, order_id=None):
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    today = datetime.now()
+    if custom_days:
+        new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
+    else:
+        new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+        
+    add_bytes = (500 * months_count) * 1000**3
+    
+    try:
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+        
+        if keys_resp.status_code == 200:
+            keys_data = keys_resp.json().get("accessKeys", [])
+            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
+            
+            target_key = None
+            for k in keys_data:
+                if str(k.get("id")) == str(key_id):
+                    target_key = k
+                    break
+            
+            if target_key:
+                target_key_name = target_key.get("name", "")
+                used_bytes = bytes_transferred.get(str(key_id), 0)
+                new_fup_limit = used_bytes + add_bytes
+
+                updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
+                if updated_name == target_key_name:
+                    updated_name = f"{target_key_name.split('(')[0].strip()} {new_expire_date}"
+                
+                requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
+                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=8)
+                
+                if order_id:
+                    map_key_to_order(updated_name, order_id)
+
+                raw_access_url = target_key.get("accessUrl", "")
+                final_key = f"{raw_access_url}#{updated_name}"
+                save_persistent_key(server_num, key_id, updated_name, final_key, new_fup_limit, order_id)
+                return final_key, updated_name, new_expire_date
+    except Exception as e:
+        print("Specific Unlimited Renewal Error:", e)
+    return None, None, None
+
+def renew_or_ земли_unlimited_key(server_num, user_name, target_chat_id, months_count=1, custom_days=None, order_id=None):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     today = datetime.now()
     if custom_days:
@@ -1757,6 +1823,9 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
 
     vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, custom_days=custom_days, is_giveaway=False, order_id=order_id)
     return vpn_key, key_name, expire_date, False
+
+# Fix spelling function name mapping
+renew_or_create_unlimited_key = renew_or_ земли_unlimited_key
 
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None, order_id=None):
     today = datetime.now()
@@ -2048,7 +2117,7 @@ def handle_approve_topup(call):
     except:
         pass
 
-# Customer Plan Review (Redeem ငွေရှိပါက Server 1 သာ ထုတ်ပေးခြင်း)
+# Customer Plan Review & Choice Logic for Ultimate VIP
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
     bot.answer_callback_query(call.id)
@@ -2067,6 +2136,28 @@ def handle_select_plan(call):
         
         _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
         has_redeem_credit = (bonus_bal > 0) and not is_admin
+
+        # 🌟 Ultimate VIP Plan အတွက် ကီးများစွာရှိလျှင် ရွေးချယ်ခွင့်စနစ် (Choice Flow)
+        if plan_code == "ultimate" and not has_redeem_credit:
+            user_keys = get_user_ultimate_keys(chat_id, "1")
+            if len(user_keys) > 1:
+                markup = InlineKeyboardMarkup()
+                for idx, uk in enumerate(user_keys, 1):
+                    markup.row(InlineKeyboardButton(f"♻️ Key #{idx} ({uk['name'][:25]}) သက်တမ်းတိုးမည်", callback_data=f"renew_choice_{plan_code}_1_{uk['id']}"))
+                markup.row(InlineKeyboardButton("➕ Key အသစ် အစအဆုံး ထပ်ဝယ်မည်", callback_data=f"renew_choice_{plan_code}_1_new"))
+                markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
+                markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+
+                choice_text = (
+                    f"🌌 <b>Ultimate VIP Plan ဝယ်ယူခြင်း</b>\n\n"
+                    f"💡 လူကြီးမင်းတွင် လက်ရှိ Active ဖြစ်နေသော Ultimate VIP Key <b>({len(user_keys)} ခု)</b> ရှိနေသည်ကို တွေ့ရှိရပါသည်။\n\n"
+                    f"👇 အောက်ပါတို့မှ <b>သက်တမ်းတိုးမည့် Key အဟောင်း</b> ကို ရွေးချယ်ပါ (သို့မဟုတ်) <b>ကီးအသစ် အစအဆုံး ဝယ်ယူရန်</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
+                )
+                try:
+                    bot.edit_message_text(choice_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
+                except Exception:
+                    bot.send_message(chat_id, choice_text, parse_mode="HTML", reply_markup=markup)
+                return
 
         markup = InlineKeyboardMarkup()
         if balance >= amount or is_admin:
@@ -2106,6 +2197,97 @@ def handle_select_plan(call):
             bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
         except Exception:
             bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
+
+# 🌟 Ultimate VIP Key Choice Handler (Key အဟောင်းတိုးမည်လား၊ အသစ်ဝယ်မည်လား)
+@bot.callback_query_handler(func=lambda call: call.data.startswith("renew_choice_"))
+def handle_renew_choice(call):
+    bot.answer_callback_query(call.id)
+    chat_id = call.message.chat.id
+    parts = call.data.split("_")
+    plan_code = parts[2]
+    server_num = parts[3]
+    choice_val = parts[4]
+
+    plan = PLANS.get(plan_code)
+    if not plan:
+        return
+
+    amount = plan["price"]
+    balance = get_user_balance(chat_id)
+    is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
+
+    if not is_admin and balance < amount:
+        bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။", show_alert=True)
+        return
+
+    order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
+    
+    chat_info = bot.get_chat(chat_id)
+    user_first = chat_info.first_name if chat_info.first_name else ""
+    user_last = chat_info.last_name if chat_info.last_name else ""
+    user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
+
+    bot.answer_callback_query(call.id, "⏳ VPN Key ဆောင်ရွက်နေပါသည်...")
+
+    vpn_key = None
+    key_name = None
+    expire_date = None
+    disp_gb = plan["data"]
+    apply_days = None if is_admin else used_bonus_days
+
+    if choice_val == "new":
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan, target_chat_id=chat_id, months_count=1, custom_days=apply_days, is_giveaway=False, order_id=order_id)
+    else:
+        today = datetime.now()
+        if apply_days:
+            expire_date = (today + timedelta(days=apply_days)).strftime("%d.%m.%Y")
+        else:
+            expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
+        
+        vpn_key, key_name, expire_date = renew_specific_unlimited_key(server_num, choice_val, months_count=1, custom_days=apply_days, order_id=order_id)
+
+    if not vpn_key:
+        update_user_balance(chat_id, amount)
+        bot.send_message(chat_id, "❌ ဆာဗာလိုင်းမရသဖြင့် မဆောင်ရွက်နိုင်ပါ။ ငွေအား ပြန်လည်ထည့်သွင်းပေးထားပါသည်။", reply_markup=get_back_inline_keyboard())
+        return
+
+    save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
+    save_user_purchase_record(
+        chat_id=chat_id,
+        order_id=order_id,
+        plan_name=plan['name'],
+        disp_gb=disp_gb,
+        months_count=1,
+        price_str=f"{amount:,} Ks",
+        server_num=server_num,
+        expire_date=expire_date,
+        vpn_key=vpn_key
+    )
+
+    clean_name = user_name.strip().lower()
+    save_key_mapping(clean_name, chat_id)
+
+    exp_info_text = f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}"
+    if apply_days:
+        exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {apply_days} ရက် သက်တမ်း)</i>"
+
+    user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
+    success_text = (
+        f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
+        f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+        f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
+        f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
+        f"{exp_info_text}\n\n"
+        f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{user_disp_bal}</code>\n\n"
+        f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
+        f"<code>{vpn_key}</code>\n\n"
+        f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+    )
+    try:
+        bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    except Exception:
+        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
 def handle_buy_with_wallet(call):
@@ -2782,7 +2964,7 @@ def handle_all_messages(message):
         final_history_msg = (
             f"📇 <b>လူကြီးမင်း ဝယ်ယူခဲ့သော VPN Key များ ({len(records)} ခု):</b>\n\n" +
             "\n\n━━━━━━━━━━━━━━━━━\n\n".join(history_texts) +
-            "\n\n☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့်setAuto Copy ကူးယူနိုင်ပါသည်ခင်ဗျာ။</i>"
+            "\n\n☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးယူနိုင်ပါသည်ခင်ဗျာ။</i>"
         )
         
         if len(final_history_msg) > 4000:
