@@ -2182,7 +2182,7 @@ def handle_select_plan(call):
         text = (
             f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
             f"📮 <b>Plan:</b> {plan['name']}\n\n"
-            f"🗃️ <b>Data:</b> {plan['data']}\n\n"
+            f"🗃️ <b>Data:</b> {plan['data']} ( ၁လစာ )\n\n"
             f"💵 <b>ကျသင့်ငွေ:</b> {amount:,} MMK\n\n"
             f"━━━━━━━━━━━━━━━\n"
             f"💳 <b>လူကြီးမင်း၏ လက်ကျန်ငွေ:</b> <b>{balance_disp}</b>\n"
@@ -2421,7 +2421,7 @@ def handle_buy_with_wallet(call):
                 f"🛍️ Plan: {plan['name']}\n"
                 f"📡 Server: Server {server_num}\n"
                 f"💵 ရရှိငွေ: {amount:,} MMK\n"
-                f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else '၁ လပြည့်'})",
+                f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else '၁လစာ'})",
                 parse_mode="HTML"
             )
         except:
