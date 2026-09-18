@@ -1920,7 +1920,7 @@ def send_welcome(message):
         send_force_join_message(chat_id)
         return
 
-    # 🛠️ ပြင်ဆင်ချက်: Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
+    # Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
     user_first = message.from_user.first_name if message.from_user.first_name else ""
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     full_name = f"{user_first} {user_last}".strip() or "HMA User"
@@ -2132,7 +2132,6 @@ def handle_approve_topup(call):
     except:
         pass
 
-# Customer Plan Review & Choice Logic for Ultimate VIP
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
     bot.answer_callback_query(call.id)
@@ -2152,7 +2151,6 @@ def handle_select_plan(call):
         _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
         has_redeem_credit = (bonus_bal > 0) and not is_admin
 
-        # 🌟 Ultimate VIP Plan အတွက် ကီးရှိနေလျှင် (၁ ခုဖြစ်စေ၊ များစွာဖြစ်စေ) သက်တမ်းတိုးရန် သို့မဟုတ် အသစ်ဝယ်ရန် ရွေးချယ်ခွင့်ပေးခြင်း
         if plan_code == "ultimate" and not has_redeem_credit:
             user_keys = get_user_ultimate_keys(chat_id, "1")
             if len(user_keys) > 0:
@@ -2213,7 +2211,6 @@ def handle_select_plan(call):
         except Exception:
             bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
-# 🌟 Ultimate VIP Key Choice Handler (Key အဟောင်းတိုးမည်လား၊ အသစ်ဝယ်မည်လား)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("renew_choice_"))
 def handle_renew_choice(call):
     bot.answer_callback_query(call.id)
@@ -2334,7 +2331,7 @@ def handle_buy_with_wallet(call):
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
-    # 🛠️ ပြင်ဆင်ချက်: Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
+    chat_info = bot.get_chat(chat_id)
     user_first = chat_info.first_name if chat_info.first_name else ""
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
@@ -2433,7 +2430,7 @@ def handle_buy_with_wallet(call):
         try:
             bot.send_message(
                 aid,
-                f"🛍️ <b>Instant Auto Purchase Alert</b>\n\n"
+                f"🛍️ <b>Custromer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
                 f"🧾 Order ID: <code>{order_id}</code>\n"
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
@@ -2915,7 +2912,6 @@ def handle_all_messages(message):
         main_bal_disp = "♾️ Unlimited" if is_admin else f"{main_bal:,} MMK"
         total_bal_disp = "♾️ Unlimited" if is_admin else f"{total_bal:,} MMK"
 
-        # 🛠️ ပြင်ဆင်ချက်: Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
         user_first = message.from_user.first_name if message.from_user.first_name else ""
         user_last = message.from_user.last_name if message.from_user.last_name else ""
         full_name = f"{user_first} {user_last}".strip() or "HMA User"
@@ -2930,7 +2926,6 @@ def handle_all_messages(message):
             f"━━━━━━━━━━━━━━━\n"
             f"💎 <b>စုစုပေါင်း သုံးနိုင်သောငွေ:</b> <b>{total_bal_disp}</b>\n"
             f"━━━━━━━━━━━━━━━\n\n"
-
         )
         markup = InlineKeyboardMarkup()
         markup.row(
@@ -3424,32 +3419,49 @@ def cron_check():
 
                 order_id_tag = get_order_id_for_key(full_name)
 
-                if should_delete:
-                    try:
-                        del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
-                        if del_res.status_code in [200, 204]:
-                            deleted_count += 1
-                            ord_txt = f"🧾 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
-                            for aid in ADMIN_CHAT_IDS:
-                                try: bot.send_message(aid, f"🗑️ <b>Auto Delete:</b>\n\n{ord_txt}Key: <code>{full_name}</code> အား သက်တမ်းကုန်သဖြင့် ဖျက်ဆီးလိုက်ပါပြီ။", parse_mode="HTML")
-                                except: pass
-                    except: pass
-                    continue
-
                 if is_gb_full or is_expired_today:
                     target_chat_id = extract_chat_id_from_key_name(full_name)
                     if not target_chat_id:
-                        id_match = re.search(r'\((\d+)\)', full_name)
-                        if id_match: target_chat_id = id_match.group(1)
+                        id_match = re.search(r'\((\d{8,12})\)', full_name)
+                        if id_match: 
+                            target_chat_id = id_match.group(1)
 
-                    reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
+                    reason_text = "ဝယ်ယူထားသော Data GB ကုန်သွားပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ဆုံးသွားပါပြီ"
+                    
+                    # 1️⃣ Customer ဆီသို့ Noti ပို့ရန်
                     if target_chat_id:
                         try:
-                            user_noti = f"⚠️ <b>သတိပေးချက်:</b>\n\nလူကြီးမင်း၏ VPN Key ({full_name}) သည် <b>{reason_text}</b>။ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် ပြန်လည်ဝယ်ယူနိုင်ပါပြီခင်ဗျာ။"
+                            user_noti = (
+                                f"⚠️ <b>သတိပေးချက်:</b>\n\n"
+                                f"လူကြီးမင်း၏ VPN Key (<code>{full_name}</code>) သည် <b>{reason_text}</b> ပါခင်ဗျာ။\n\n"
+                                f"👇 ဆက်လက်အသုံးပြုလိုပါက Bot ထဲရှိ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် အလွယ်တကူ ပြန်လည်ဝယ်ယူနိုင်ပါပြီခင်ဗျာ။"
+                            )
                             bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
                             notified_count += 1
-                        except: pass
-        except: pass
+                        except Exception as e:
+                            print(f"User Noti Error: {e}")
+
+                    # 2️⃣ Admin ဆီသို့ အသိပေးရန် (Key ဖျက်ပြီးပါက)
+                    if should_delete:
+                        try:
+                            del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+                            if del_res.status_code in [200, 204]:
+                                deleted_count += 1
+                                ord_txt = f"🧾 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
+                                for aid in ADMIN_CHAT_IDS:
+                                    try: 
+                                        bot.send_message(
+                                            aid, 
+                                            f"🗑️ <b>Auto Delete & Noti:</b>\n\n{ord_txt}Key: <code>{full_name}</code> သည် <b>{reason_text}</b> သဖြင့် ဆာဗာမှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပြီဖြစ်ပြီး Customer ထံသို့လည်း Noti ပို့ပြီးပါပြီ။", 
+                                            parse_mode="HTML"
+                                        )
+                                    except: 
+                                        pass
+                        except: 
+                            pass
+                        continue
+        except: 
+            pass
 
     return jsonify({"status": "cron completed", "notified": notified_count, "deleted": deleted_count}), 200
 
