@@ -1706,6 +1706,14 @@ def get_user_next_key_number(user_name, target_chat_id=None):
     else:
         return max_num, max_num + 1
 
+def extract_chat_id_from_key_name(key_name):
+    if not key_name:
+        return None
+    match = re.search(r'\((\d{8,12})\)', key_name)
+    if match:
+        return match.group(1)
+    return None
+
 def get_user_ultimate_keys(chat_id, server_num="1"):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     user_keys = []
@@ -1715,12 +1723,14 @@ def get_user_ultimate_keys(chat_id, server_num="1"):
             keys_data = res.json().get("accessKeys", [])
             for k in keys_data:
                 k_name = k.get("name", "")
-                if f"({chat_id})" in k_name and not "[gw]" in k_name.lower():
-                    user_keys.append({
-                        "id": k.get("id"),
-                        "name": k_name,
-                        "server": str(server_num)
-                    })
+                extracted_cid = extract_chat_id_from_key_name(k_name)
+                if (extracted_cid and str(extracted_cid) == str(chat_id)) or (f"({chat_id})" in k_name):
+                    if not "[gw]" in k_name.lower():
+                        user_keys.append({
+                            "id": k.get("id"),
+                            "name": k_name,
+                            "server": str(server_num)
+                        })
     except:
         pass
     return user_keys
@@ -1795,10 +1805,12 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
             
             for k in keys_data:
                 k_name = k.get("name", "")
-                if f"({target_chat_id})" in k_name and not "[gw]" in k_name.lower():
-                    target_key_id = k.get("id")
-                    target_key_name = k_name
-                    break
+                extracted_cid = extract_chat_id_from_key_name(k_name)
+                if (extracted_cid and str(extracted_cid) == str(target_chat_id)) or (f"({target_chat_id})" in k_name):
+                    if not "[gw]" in k_name.lower():
+                        target_key_id = k.get("id")
+                        target_key_name = k_name
+                        break
             
             if target_key_id:
                 used_bytes = bytes_transferred.get(str(target_key_id), 0)
@@ -1908,8 +1920,14 @@ def send_welcome(message):
         send_force_join_message(chat_id)
         return
 
+    # 🛠️ ပြင်ဆင်ချက်: Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
+    user_first = message.from_user.first_name if message.from_user.first_name else ""
+    user_last = message.from_user.last_name if message.from_user.last_name else ""
+    full_name = f"{user_first} {user_last}".strip() or "HMA User"
+
     welcome_text = (
-        "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+        f"👋 မင်္ဂလာပါ {full_name}!\n"
+        "H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
         "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
     )
     
@@ -2316,7 +2334,7 @@ def handle_buy_with_wallet(call):
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
-    chat_info = bot.get_chat(chat_id)
+    # 🛠️ ပြင်ဆင်ချက်: Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
     user_first = chat_info.first_name if chat_info.first_name else ""
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
@@ -2897,9 +2915,14 @@ def handle_all_messages(message):
         main_bal_disp = "♾️ Unlimited" if is_admin else f"{main_bal:,} MMK"
         total_bal_disp = "♾️ Unlimited" if is_admin else f"{total_bal:,} MMK"
 
+        # 🛠️ ပြင်ဆင်ချက်: Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
+        user_first = message.from_user.first_name if message.from_user.first_name else ""
+        user_last = message.from_user.last_name if message.from_user.last_name else ""
+        full_name = f"{user_first} {user_last}".strip() or "HMA User"
+
         wallet_text = (
             f"💳 <b>လူကြီးမင်း၏ Wallet အချက်အလက်</b>\n\n"
-            f"👤 <b>အသုံးပြုသူ:</b> {message.from_user.first_name}{crown}\n"
+            f"👤 <b>အသုံးပြုသူ:</b> {full_name}{crown}\n"
             f"🆔 <b>Chat ID:</b> <code>{chat_id}</code>\n\n"
             f"💵 <b>လက်ကျန်ငွေ ပမာဏ:</b> {main_bal_disp}\n"
             f"🎁 <b>Redeem လက်ကျန်ငွေ:</b> {bonus_bal:,} MMK\n"
@@ -3414,9 +3437,10 @@ def cron_check():
                     continue
 
                 if is_gb_full or is_expired_today:
-                    target_chat_id = None
-                    id_match = re.search(r'\((\d+)\)', full_name)
-                    if id_match: target_chat_id = id_match.group(1)
+                    target_chat_id = extract_chat_id_from_key_name(full_name)
+                    if not target_chat_id:
+                        id_match = re.search(r'\((\d+)\)', full_name)
+                        if id_match: target_chat_id = id_match.group(1)
 
                     reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
                     if target_chat_id:
