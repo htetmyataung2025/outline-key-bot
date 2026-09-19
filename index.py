@@ -3419,7 +3419,8 @@ def cron_check():
 
                 order_id_tag = get_order_id_for_key(full_name)
 
-                if is_gb_full or is_expired_today:
+                # 🛠️ ပြင်ဆင်ချက်: Data ပြည့်သွားတာ (သို့) သက်တမ်းကုန်သွားတာ ဖြစ်ပါက Noti ပို့ရန်နှင့် ဖျက်ရန်
+                if is_gb_full or is_expired_today or should_delete:
                     target_chat_id = extract_chat_id_from_key_name(full_name)
                     if not target_chat_id:
                         id_match = re.search(r'\((\d{8,12})\)', full_name)
@@ -3441,8 +3442,8 @@ def cron_check():
                         except Exception as e:
                             print(f"User Noti Error: {e}")
 
-                    # 2️⃣ Admin ဆီသို့ အသိပေးရန် (Key ဖျက်ပြီးပါက)
-                    if should_delete:
+                    # 2️⃣ သက်တမ်းလွန်သွားပါက ဆာဗာမှ ဖျက်ဆီးပြီး Admin ဆီသို့ Noti ပို့ရန်
+                    if should_delete or (is_gb_full and today > key_expire_date if 'key_expire_date' in locals() else False):
                         try:
                             del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
                             if del_res.status_code in [200, 204]:
@@ -3459,7 +3460,6 @@ def cron_check():
                                         pass
                         except: 
                             pass
-                        continue
         except: 
             pass
 
