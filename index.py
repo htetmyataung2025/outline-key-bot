@@ -1342,19 +1342,12 @@ def search_users_by_query(query):
 
     return found_matches, markup
 
-# 🌐 Global Callback Query Handler (ခလုတ်များ အားလုံးအတွက် ပထမဆုံး လက်ခံမည့် နေရာ - Loading မလည်တော့ရန်)
-@bot.callback_query_handler(func=lambda call: True)
-def global_callback_handler(call):
-    try:
-        bot.answer_callback_query(call.id)
-    except:
-        pass
-
 # 🔙 Back to Main Menu Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
 def handle_back_to_main_callback(call):
     chat_id = call.message.chat.id
     clear_all_states(chat_id)
+    bot.answer_callback_query(call.id, "🔙 မူလ Menu သို့ ပြန်သွားပါပြီ။")
     try:
         bot.delete_message(chat_id, call.message.message_id)
     except:
@@ -1368,6 +1361,7 @@ def handle_back_to_main_callback(call):
 # 🔙 Admin Back to Gen RD Code Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_gen_rd")
 def handle_back_to_gen_rd(call):
+    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     chat_id = str(call.message.chat.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1385,6 +1379,7 @@ def handle_back_to_gen_rd(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdamt_"))
 def handle_admin_rd_amt_select(call):
+    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     chat_id = str(call.message.chat.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1419,6 +1414,7 @@ def handle_admin_rd_amt_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdmode_"))
 def handle_admin_rd_mode_select(call):
+    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     chat_id = str(call.message.chat.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1443,6 +1439,7 @@ def handle_admin_rd_mode_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rddur_"))
 def handle_admin_rd_days_select(call):
+    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     chat_id = str(call.message.chat.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1468,6 +1465,7 @@ def handle_admin_rd_days_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdcnt_"))
 def handle_admin_rd_generate(call):
+    bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
     if is_callback_processed(f"adm_rdgen_{call.message.message_id}_{call.data}"):
         return
 
@@ -1519,6 +1517,7 @@ def handle_admin_rd_generate(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_deduct_type_"))
 def handle_admin_deduct_type_select(call):
+    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
@@ -1535,6 +1534,7 @@ def handle_admin_deduct_type_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
 def handle_view_key_detail(call):
+    bot.answer_callback_query(call.id)
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
@@ -1617,6 +1617,7 @@ def handle_view_key_detail(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("delkey_"))
 def handle_admin_del_key(call):
+    bot.answer_callback_query(call.id)
     if is_callback_processed(f"del_{call.message.message_id}_{call.data}"):
         return
 
@@ -1895,6 +1896,7 @@ def handle_verify_subscription(call):
     chat_id = call.message.chat.id
     if is_user_subscribed(chat_id):
         save_user_id(chat_id)
+        bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
@@ -1918,6 +1920,7 @@ def send_welcome(message):
         send_force_join_message(chat_id)
         return
 
+    # Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
     user_first = message.from_user.first_name if message.from_user.first_name else ""
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     full_name = f"{user_first} {user_last}".strip() or "HMA User"
@@ -2054,6 +2057,7 @@ def get_payment_instruction_text(amt):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("topup_amt_"))
 def handle_topup_amount_select(call):
+    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     raw_val = call.data.replace("topup_amt_", "")
     
@@ -2082,6 +2086,7 @@ def handle_topup_amount_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "btn_open_topup")
 def handle_btn_open_topup(call):
+    bot.answer_callback_query(call.id)
     set_custom_topup_state(call.message.chat.id, False)
     bot.edit_message_text(
         "💰 <b>Wallet ထဲသို့ ဖြည့်သွင်းလိုသော ငွေပမာဏကို ရွေးချယ်ပေးပါ:</b>",
@@ -2095,6 +2100,7 @@ def handle_btn_open_topup(call):
 def handle_approve_topup(call):
     lock_key = f"appr_topup_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
+        bot.answer_callback_query(call.id, "⚠️ ငွေဖြည့်ပေးပြီးပါပြီ။")
         return
 
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -2106,6 +2112,7 @@ def handle_approve_topup(call):
     topup_id = parts[4]
 
     new_balance, _ = update_user_balance(target_chat_id, amount)
+    bot.answer_callback_query(call.id, f"✅ {amount:,} Ks ဖြည့်သွင်းပေးပြီးပါပြီ။")
 
     user_noti = (
         f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
@@ -2127,6 +2134,7 @@ def handle_approve_topup(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
+    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
@@ -2205,6 +2213,7 @@ def handle_select_plan(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("renew_choice_"))
 def handle_renew_choice(call):
+    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     parts = call.data.split("_")
     plan_code = parts[2]
@@ -2230,6 +2239,8 @@ def handle_renew_choice(call):
     user_first = chat_info.first_name if chat_info.first_name else ""
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
+
+    bot.answer_callback_query(call.id, "⏳ VPN Key ဆောင်ရွက်နေပါသည်...")
 
     vpn_key = None
     key_name = None
@@ -2295,6 +2306,7 @@ def handle_buy_with_wallet(call):
     chat_id = call.message.chat.id
     lock_key = f"buy_wallet_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
+        bot.answer_callback_query(call.id, "⚠️ စာရင်းလုပ်ဆောင်နေပါသည်...")
         return
 
     parts = call.data.split("_")
@@ -2303,6 +2315,7 @@ def handle_buy_with_wallet(call):
     plan = PLANS.get(plan_code)
 
     if not plan:
+        bot.answer_callback_query(call.id, "❌ Plan ရှာမတွေ့ပါ။")
         return
 
     amount = plan["price"]
@@ -2312,6 +2325,8 @@ def handle_buy_with_wallet(call):
     if not is_admin and balance < amount:
         bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။ ကျေးဇူးပြု၍ ငွေအရင်ဖြည့်ပေးပါ။", show_alert=True)
         return
+
+    bot.answer_callback_query(call.id, "⏳ VPN Key ထုတ်ပေးနေပါသည်...")
 
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
@@ -2345,7 +2360,7 @@ def handle_buy_with_wallet(call):
         user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
         user_msg = (
             f"🎉 <b>အော်ဒါမှာယူမှု အောင်မြင်ပါသည်!</b>\n\n"
-            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
             f"🛍️ <b>Plan:</b> {plan['name']}\n"
             f"💵 <b>ကျသင့်ငွေ:</b> -{amount:,} MMK\n"
             f"💳 <b>လက်ကျန်ငွေ:</b> {user_disp_bal}\n\n"
@@ -2429,6 +2444,7 @@ def handle_buy_with_wallet(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_plans")
 def handle_back_to_plans(call):
+    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     bot.edit_message_text(
         "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
@@ -2440,6 +2456,7 @@ def handle_back_to_plans(call):
 # 🔑 Admin Manual Key Send Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ask_send_key_"))
 def handle_ask_send_key_callback(call):
+    bot.answer_callback_query(call.id)
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
@@ -2467,6 +2484,7 @@ def handle_ask_send_key_callback(call):
 # 🎟️ Redeem Code Trigger Callback
 @bot.callback_query_handler(func=lambda call: call.data == "btn_open_redeem")
 def handle_btn_open_redeem(call):
+    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
 
     is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
@@ -2644,7 +2662,9 @@ def fetch_key_from_server(api_url, input_value):
 # 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
-    if is_callback_processed(f"repl_{call.message.message_id}_{call.data}"):
+    lock_key = f"repl_{call.message.message_id}_{call.data}"
+    if is_callback_processed(lock_key):
+        bot.answer_callback_query(call.id, "⚠️ လုပ်ဆောင်ပြီးပါပြီ။")
         return
 
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -2698,8 +2718,9 @@ def handle_admin_replace_callback(call):
             )
             bot.send_message(target_chat_id, success_msg, parse_mode="HTML")
             bot.edit_message_text(call.message.text + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
+            bot.answer_callback_query(call.id, "✅ Key အသစ် အစားထိုး ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
     except Exception as e:
-        print("Replacement error:", e)
+        bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
 # ----------------- MAIN MESSAGE DISPATCHER -----------------
 
@@ -2937,30 +2958,35 @@ def handle_all_messages(message):
             bot.send_message(chat_id, empty_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
             return
 
+        history_texts = []
         for idx, rec in enumerate(reversed(records), 1):
             srv_name = f"Singapore Server {rec.get('server', '1')} 🇸🇬" if rec.get('server') != "VIP" else "VIP Server 🇸🇬"
-            vpn_k = html.escape(rec.get('vpn_key', ''))
-            key_block = f"<code>{vpn_k}</code>" if rec.get('vpn_key', '') != "N/A" else "<i>(Key လဲလှယ်ရန် Menu ရှိ '♻️ Key လဲရန်' အသုံးပြုနိုင်ပါသည်)</i>"
+            vpn_k = rec.get('vpn_key', '')
+            key_block = f"<code>{vpn_k}</code>" if vpn_k != "N/A" else "<i>(Key လဲလှယ်ရန် Menu ရှိ '♻️ Key လဲရန်' အသုံးပြုနိုင်ပါသည်)</i>"
             
-            plan_name_esc = html.escape(rec.get('plan_name', ''))
-            disp_gb_esc = html.escape(rec.get('disp_gb', ''))
-            order_id_esc = html.escape(rec.get('order_id', 'N/A'))
-            timestamp_esc = html.escape(rec.get('timestamp', 'N/A'))
-            expire_date_esc = html.escape(rec.get('expire_date', 'N/A'))
-
             item_txt = (
                 f"<b>#{idx} | ဝယ်ယူမှု အချက်အလက်</b>\n\n"
-                f"🧾 <b>Order ID:</b> <code>{order_id_esc}</code>\n\n"
-                f"📅 <b>အချိန်:</b> <code>{timestamp_esc}</code>\n\n"
-                f"🛍️ <b>Plan:</b> {plan_name_esc} ({disp_gb_esc})\n\n"
+                f"🧾 <b>Order ID:</b> <code>{rec.get('order_id', 'N/A')}</code>\n\n"
+                f"📅 <b>အချိန်:</b> <code>{rec.get('timestamp', 'N/A')}</code>\n\n"
+                f"🛍️ <b>Plan:</b> {rec.get('plan_name', '')} ({rec.get('disp_gb', '')})\n\n"
                 f"📡 <b>Server:</b> {srv_name}\n\n"
-                f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{expire_date_esc}</code>\n\n"
+                f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{rec.get('expire_date', 'N/A')}</code>\n\n"
                 f"🔑 <b>VPN Key:</b>\n\n"
                 f"{key_block}"
             )
-            bot.send_message(chat_id, item_txt, parse_mode="HTML")
+            history_texts.append(item_txt)
 
-        bot.send_message(chat_id, "☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။</i>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        final_history_msg = (
+            f"📇 <b>လူကြီးမင်း ဝယ်ယူခဲ့သော VPN Key များ ({len(records)} ခု):</b>\n\n" +
+            "\n\n━━━━━━━━━━━━━━━━━\n\n".join(history_texts) +
+            "\n\n☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးယူနိုင်ပါသည်ခင်ဗျာ။</i>"
+        )
+        
+        if len(final_history_msg) > 4000:
+            for piece in [final_history_msg[i:i+4000] for i in range(0, len(final_history_msg), 4000)]:
+                bot.send_message(chat_id, piece, parse_mode="HTML")
+        else:
+            bot.send_message(chat_id, final_history_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
     # ♻️ Key လဲရန်
@@ -3325,19 +3351,43 @@ def handle_all_messages(message):
 
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
-    today = (datetime.utcnow() + timedelta(hours=6, minutes=30)).date()
-    
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    today = now.date()
     key_mappings = load_key_mappings()
     notified_count = 0
     deleted_count = 0
+
+    expiring_data = load_expiring_credits()
+    exp_changed = False
+    for uid, grants in list(expiring_data.items()):
+        valid_grants = []
+        expired_sum = 0
+        for g in grants:
+            try:
+                exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
+                if now > exp_dt:
+                    expired_sum += g.get("remaining", 0)
+                else:
+                    valid_grants.append(g)
+            except:
+                pass
+                
+        if expired_sum > 0:
+            exp_changed = True
+            expiring_data[uid] = valid_grants
+            try:
+                bot.send_message(uid, f"⚠️ <b>အသိပေးချက်:</b>\n\nလူကြီးမင်း၏ Wallet ထဲမှ ရက်သတ်မှတ်ချက်ပါ Redeem Bonus ငွေ (<b>-{expired_sum:,} MMK</b>) သည် သက်တမ်းစေ့သွားသဖြင့် ပျက်ပြယ်သွားပါပြီခင်ဗျာ။", parse_mode="HTML")
+            except:
+                pass
+                
+    if exp_changed:
+        save_expiring_credits(expiring_data)
 
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
-            
-            if keys_resp.status_code != 200:
-                continue
+            if keys_resp.status_code != 200: continue
                 
             keys_data = keys_resp.json().get("accessKeys", [])
             bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
@@ -3348,15 +3398,11 @@ def cron_check():
                 limit_bytes = key.get("dataLimit", {}).get("bytes")
                 usage_bytes = bytes_transferred.get(key_id, 0)
                 
-                is_gb_full = False
-                if limit_bytes and usage_bytes >= limit_bytes:
-                    is_gb_full = True
-
+                is_gb_full = limit_bytes and usage_bytes >= limit_bytes
                 is_expired_today = False
                 should_delete = False
                 
                 date_matches = list(re.finditer(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name))
-                
                 if date_matches:
                     date_match = date_matches[-1]
                     try:
@@ -3364,88 +3410,57 @@ def cron_check():
                         k_month = int(date_match.group(2))
                         k_year_raw = date_match.group(3)
                         k_year = int("20" + k_year_raw) if len(k_year_raw) == 2 else int(k_year_raw)
-                        
                         key_expire_date = datetime(k_year, k_month, k_day).date()
                         
-                        if key_expire_date == today:
-                            is_expired_today = True
-                        elif today > key_expire_date:
-                            should_delete = True
+                        if key_expire_date == today: is_expired_today = True
+                        elif today > key_expire_date: should_delete = True
                     except:
                         pass
 
-                if should_delete:
-                    try:
-                        del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
-                        if del_res.status_code in [200, 204]:
-                            deleted_count += 1
-                            for aid in ADMIN_CHAT_IDS:
-                                try:
-                                    bot.send_message(
-                                        aid, 
-                                        f"🗑️ <b>Customer Key Expired:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
-                                        parse_mode="HTML"
-                                    )
-                                except:
-                                    pass
-                    except:
-                        pass
-                    continue 
+                order_id_tag = get_order_id_for_key(full_name)
 
                 if is_gb_full or is_expired_today:
                     target_chat_id = extract_chat_id_from_key_name(full_name)
                     if not target_chat_id:
                         id_match = re.search(r'\((\d{8,12})\)', full_name)
-                        if id_match:
+                        if id_match: 
                             target_chat_id = id_match.group(1)
+
+                    reason_text = "ဝယ်ယူထားသော Data GB ကုန်သွားပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ဆုံးသွားပါပြီ"
                     
-                    if not target_chat_id:
-                        clean_name = full_name
-                        if date_matches:
-                            clean_name = clean_name.replace(date_matches[-1].group(0), "")
-                        clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
-                        clean_name = clean_name.replace("[GW]", "").replace("[gw]", "")
-                        clean_name = clean_name.strip().lower()
-
-                        target_chat_id = key_mappings.get(clean_name)
-                        if not target_chat_id:
-                            for mapped_name, cid in key_mappings.items():
-                                if mapped_name in clean_name or clean_name in mapped_name:
-                                    target_chat_id = cid
-                                    break
-
-                    if is_gb_full:
-                        reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ"
-                        user_warning = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ ခင်ဗျာ။"
-                    else:
-                        reason_text = "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
-                        user_warning = "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ ခင်ဗျာ။ (မနက်ဖြန်တွင် အသုံးပြုခွင့် ပိတ်သိမ်းပါမည်)"
-
+                    # 1️⃣ Customer ဆီသို့ Noti ပို့ရန်
                     if target_chat_id:
                         try:
                             user_noti = (
                                 f"⚠️ <b>သတိပေးချက်:</b>\n\n"
-                                f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် <b>{user_warning}</b>\n\n"
-                                f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
+                                f"လူကြီးမင်း၏ VPN Key (<code>{full_name}</code>) သည် <b>{reason_text}</b> ပါခင်ဗျာ။\n\n"
+                                f"👇 ဆက်လက်အသုံးပြုလိုပါက Bot ထဲရှိ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် အလွယ်တကူ ပြန်လည်ဝယ်ယူနိုင်ပါပြီခင်ဗျာ။"
                             )
                             bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
                             notified_count += 1
-                        except:
-                            pass
+                        except Exception as e:
+                            print(f"User Noti Error: {e}")
 
-                    admin_noti = (
-                        f"📢 <b>Customer သိပေးချက်</b>\n"
-                        f"👤 အသုံးပြုသူ: {full_name}\n"
-                        f"⚠️ အခြေအနေ: {reason_text}\n"
-                        f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
-                    )
-                    
-                    for aid in ADMIN_CHAT_IDS:
+                    # 2️⃣ Admin ဆီသို့ အသိပေးရန် (Key ဖျက်ပြီးပါက)
+                    if should_delete:
                         try:
-                            bot.send_message(aid, admin_noti, parse_mode="HTML")
-                        except:
+                            del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+                            if del_res.status_code in [200, 204]:
+                                deleted_count += 1
+                                ord_txt = f"🧾 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
+                                for aid in ADMIN_CHAT_IDS:
+                                    try: 
+                                        bot.send_message(
+                                            aid, 
+                                            f"🗑️ <b>Auto Delete & Noti:</b>\n\n{ord_txt}Key: <code>{full_name}</code> သည် <b>{reason_text}</b> သဖြင့် ဆာဗာမှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပြီဖြစ်ပြီး Customer ထံသို့လည်း Noti ပို့ပြီးပါပြီ။", 
+                                            parse_mode="HTML"
+                                        )
+                                    except: 
+                                        pass
+                        except: 
                             pass
-        except:
+                        continue
+        except: 
             pass
 
     return jsonify({"status": "cron completed", "notified": notified_count, "deleted": deleted_count}), 200
