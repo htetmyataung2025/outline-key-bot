@@ -1342,12 +1342,19 @@ def search_users_by_query(query):
 
     return found_matches, markup
 
+# 🌐 Global Callback Query Handler (ခလုတ်များ အားလုံးအတွက် ပထမဆုံး လက်ခံမည့် နေရာ - Loading မလည်တော့ရန်)
+@bot.callback_query_handler(func=lambda call: True)
+def global_callback_handler(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+
 # 🔙 Back to Main Menu Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
 def handle_back_to_main_callback(call):
     chat_id = call.message.chat.id
     clear_all_states(chat_id)
-    bot.answer_callback_query(call.id, "🔙 မူလ Menu သို့ ပြန်သွားပါပြီ။")
     try:
         bot.delete_message(chat_id, call.message.message_id)
     except:
@@ -1361,7 +1368,6 @@ def handle_back_to_main_callback(call):
 # 🔙 Admin Back to Gen RD Code Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_gen_rd")
 def handle_back_to_gen_rd(call):
-    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     chat_id = str(call.message.chat.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1379,7 +1385,6 @@ def handle_back_to_gen_rd(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdamt_"))
 def handle_admin_rd_amt_select(call):
-    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     chat_id = str(call.message.chat.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1414,7 +1419,6 @@ def handle_admin_rd_amt_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdmode_"))
 def handle_admin_rd_mode_select(call):
-    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     chat_id = str(call.message.chat.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1439,7 +1443,6 @@ def handle_admin_rd_mode_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rddur_"))
 def handle_admin_rd_days_select(call):
-    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     chat_id = str(call.message.chat.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -1465,7 +1468,6 @@ def handle_admin_rd_days_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdcnt_"))
 def handle_admin_rd_generate(call):
-    bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
     if is_callback_processed(f"adm_rdgen_{call.message.message_id}_{call.data}"):
         return
 
@@ -1517,7 +1519,6 @@ def handle_admin_rd_generate(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_deduct_type_"))
 def handle_admin_deduct_type_select(call):
-    bot.answer_callback_query(call.id)
     user_id = str(call.from_user.id)
     if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
@@ -1534,7 +1535,6 @@ def handle_admin_deduct_type_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
 def handle_view_key_detail(call):
-    bot.answer_callback_query(call.id)
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
@@ -1617,7 +1617,6 @@ def handle_view_key_detail(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("delkey_"))
 def handle_admin_del_key(call):
-    bot.answer_callback_query(call.id)
     if is_callback_processed(f"del_{call.message.message_id}_{call.data}"):
         return
 
@@ -1896,7 +1895,6 @@ def handle_verify_subscription(call):
     chat_id = call.message.chat.id
     if is_user_subscribed(chat_id):
         save_user_id(chat_id)
-        bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
@@ -1920,7 +1918,6 @@ def send_welcome(message):
         send_force_join_message(chat_id)
         return
 
-    # Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
     user_first = message.from_user.first_name if message.from_user.first_name else ""
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     full_name = f"{user_first} {user_last}".strip() or "HMA User"
@@ -2057,7 +2054,6 @@ def get_payment_instruction_text(amt):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("topup_amt_"))
 def handle_topup_amount_select(call):
-    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     raw_val = call.data.replace("topup_amt_", "")
     
@@ -2086,7 +2082,6 @@ def handle_topup_amount_select(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "btn_open_topup")
 def handle_btn_open_topup(call):
-    bot.answer_callback_query(call.id)
     set_custom_topup_state(call.message.chat.id, False)
     bot.edit_message_text(
         "💰 <b>Wallet ထဲသို့ ဖြည့်သွင်းလိုသော ငွေပမာဏကို ရွေးချယ်ပေးပါ:</b>",
@@ -2100,7 +2095,6 @@ def handle_btn_open_topup(call):
 def handle_approve_topup(call):
     lock_key = f"appr_topup_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
-        bot.answer_callback_query(call.id, "⚠️ ငွေဖြည့်ပေးပြီးပါပြီ။")
         return
 
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -2112,7 +2106,6 @@ def handle_approve_topup(call):
     topup_id = parts[4]
 
     new_balance, _ = update_user_balance(target_chat_id, amount)
-    bot.answer_callback_query(call.id, f"✅ {amount:,} Ks ဖြည့်သွင်းပေးပြီးပါပြီ။")
 
     user_noti = (
         f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
@@ -2134,7 +2127,6 @@ def handle_approve_topup(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
-    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
@@ -2213,7 +2205,6 @@ def handle_select_plan(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("renew_choice_"))
 def handle_renew_choice(call):
-    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     parts = call.data.split("_")
     plan_code = parts[2]
@@ -2239,8 +2230,6 @@ def handle_renew_choice(call):
     user_first = chat_info.first_name if chat_info.first_name else ""
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
-
-    bot.answer_callback_query(call.id, "⏳ VPN Key ဆောင်ရွက်နေပါသည်...")
 
     vpn_key = None
     key_name = None
@@ -2306,7 +2295,6 @@ def handle_buy_with_wallet(call):
     chat_id = call.message.chat.id
     lock_key = f"buy_wallet_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
-        bot.answer_callback_query(call.id, "⚠️ စာရင်းလုပ်ဆောင်နေပါသည်...")
         return
 
     parts = call.data.split("_")
@@ -2315,7 +2303,6 @@ def handle_buy_with_wallet(call):
     plan = PLANS.get(plan_code)
 
     if not plan:
-        bot.answer_callback_query(call.id, "❌ Plan ရှာမတွေ့ပါ။")
         return
 
     amount = plan["price"]
@@ -2325,8 +2312,6 @@ def handle_buy_with_wallet(call):
     if not is_admin and balance < amount:
         bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။ ကျေးဇူးပြု၍ ငွေအရင်ဖြည့်ပေးပါ။", show_alert=True)
         return
-
-    bot.answer_callback_query(call.id, "⏳ VPN Key ထုတ်ပေးနေပါသည်...")
 
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
@@ -2360,7 +2345,7 @@ def handle_buy_with_wallet(call):
         user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
         user_msg = (
             f"🎉 <b>အော်ဒါမှာယူမှု အောင်မြင်ပါသည်!</b>\n\n"
-            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
+            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
             f"🛍️ <b>Plan:</b> {plan['name']}\n"
             f"💵 <b>ကျသင့်ငွေ:</b> -{amount:,} MMK\n"
             f"💳 <b>လက်ကျန်ငွေ:</b> {user_disp_bal}\n\n"
@@ -2444,7 +2429,6 @@ def handle_buy_with_wallet(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_plans")
 def handle_back_to_plans(call):
-    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     bot.edit_message_text(
         "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
@@ -2456,7 +2440,6 @@ def handle_back_to_plans(call):
 # 🔑 Admin Manual Key Send Callback
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ask_send_key_"))
 def handle_ask_send_key_callback(call):
-    bot.answer_callback_query(call.id)
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     
@@ -2484,7 +2467,6 @@ def handle_ask_send_key_callback(call):
 # 🎟️ Redeem Code Trigger Callback
 @bot.callback_query_handler(func=lambda call: call.data == "btn_open_redeem")
 def handle_btn_open_redeem(call):
-    bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
 
     is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
@@ -2662,9 +2644,7 @@ def fetch_key_from_server(api_url, input_value):
 # 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
-    lock_key = f"repl_{call.message.message_id}_{call.data}"
-    if is_callback_processed(lock_key):
-        bot.answer_callback_query(call.id, "⚠️ လုပ်ဆောင်ပြီးပါပြီ။")
+    if is_callback_processed(f"repl_{call.message.message_id}_{call.data}"):
         return
 
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -2718,9 +2698,8 @@ def handle_admin_replace_callback(call):
             )
             bot.send_message(target_chat_id, success_msg, parse_mode="HTML")
             bot.edit_message_text(call.message.text + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
-            bot.answer_callback_query(call.id, "✅ Key အသစ် အစားထိုး ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
     except Exception as e:
-        bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
+        print("Replacement error:", e)
 
 # ----------------- MAIN MESSAGE DISPATCHER -----------------
 
@@ -2946,7 +2925,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
-    # 📇 ဝယ်ယူမှုမှတ်တမ်း (Error ရှင်းပြီးသား အပိုင်း)
+    # 📇 ဝယ်ယူမှုမှတ်တမ်း
     if input_value in ["📇 ဝယ်ယူမှုမှတ်တမ်း", "ဝယ်ယူမှုမှတ်တမ်း"]:
         clear_all_states(chat_id)
         records = get_user_combined_purchase_records(chat_id)
@@ -2981,7 +2960,7 @@ def handle_all_messages(message):
             )
             bot.send_message(chat_id, item_txt, parse_mode="HTML")
 
-        bot.send_message(chat_id, "☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးယူနိုင်ပါသည်ခင်ဗျာ။</i>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        bot.send_message(chat_id, "☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။</i>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
     # ♻️ Key လဲရန်
