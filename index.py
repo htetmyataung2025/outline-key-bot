@@ -2190,7 +2190,7 @@ def handle_select_plan(call):
         markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
         markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
 
-        balance_disp = "♾️" if is_admin else f"{balance:,} MMK"
+        balance_disp = "♾️ Unlimited" if is_admin else f"{balance:,} MMK"
         balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
         
         server_notice = "\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် Server 1 မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
@@ -2284,7 +2284,7 @@ def handle_renew_choice(call):
     if apply_days:
         exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {apply_days} ရက် သက်တမ်း)</i>"
 
-    user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
+    user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
     success_text = (
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
@@ -2357,7 +2357,7 @@ def handle_buy_with_wallet(call):
             except:
                 pass
 
-        user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
+        user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
         user_msg = (
             f"🎉 <b>အော်ဒါမှာယူမှု အောင်မြင်ပါသည်!</b>\n\n"
             f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
@@ -2409,7 +2409,7 @@ def handle_buy_with_wallet(call):
     if apply_days:
         exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {apply_days} ရက် သက်တမ်း)</i>"
 
-    user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
+    user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
     success_text = (
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
@@ -2430,7 +2430,7 @@ def handle_buy_with_wallet(call):
         try:
             bot.send_message(
                 aid,
-                f"🛍️ <b>Custromer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
+                f"🛍️ <b>Instant Auto Purchase Alert</b>\n\n"
                 f"🧾 Order ID: <code>{order_id}</code>\n"
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
@@ -2909,8 +2909,8 @@ def handle_all_messages(message):
                 bonus_detail_str = "\n⏳ <b>ရက်စွဲပါ လက်ကျန်ငွေများ:</b>\n" + "\n".join(lines) + "\n"
 
         crown = " 👑" if is_admin else ""
-        main_bal_disp = "♾️" if is_admin else f"{main_bal:,} MMK"
-        total_bal_disp = "♾️" if is_admin else f"{total_bal:,} MMK"
+        main_bal_disp = "♾️ Unlimited" if is_admin else f"{main_bal:,} MMK"
+        total_bal_disp = "♾️ Unlimited" if is_admin else f"{total_bal:,} MMK"
 
         user_first = message.from_user.first_name if message.from_user.first_name else ""
         user_last = message.from_user.last_name if message.from_user.last_name else ""
@@ -3080,7 +3080,7 @@ def handle_all_messages(message):
 
                 user_name = message.from_user.first_name if message.from_user.first_name else "Winner"
                 crown_icon = " 👑" if is_admin else ""
-                disp_total_bal = "♾️" if is_admin else f"{new_balance:,} MMK"
+                disp_total_bal = "♾️ Unlimited" if is_admin else f"{new_balance:,} MMK"
 
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
@@ -3113,7 +3113,7 @@ def handle_all_messages(message):
                 new_balance, exp_disp = add_expiring_bonus_to_wallet(chat_id, amt_to_add, validity_days)
                 user_name = message.from_user.first_name if message.from_user.first_name else "Winner"
                 crown_icon = " 👑" if is_admin else ""
-                disp_total_bal = "♾️" if is_admin else f"{new_balance:,} MMK"
+                disp_total_bal = "♾️ Unlimited" if is_admin else f"{new_balance:,} MMK"
 
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
