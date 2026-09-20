@@ -1920,9 +1920,8 @@ def send_welcome(message):
         send_force_join_message(chat_id)
         return
 
-    # Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
-    user_first = message.from_user.first_name if message.from_user.first_name else ""
-    user_last = message.from_user.last_name if message.from_user.last_name else ""
+    user_first = getattr(message.from_user, 'first_name', '') or ""
+    user_last = getattr(message.from_user, 'last_name', '') or ""
     full_name = f"{user_first} {user_last}".strip() or "HMA User"
 
     welcome_text = (
@@ -2215,13 +2214,24 @@ def handle_select_plan(call):
 def handle_renew_choice(call):
     bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
-    parts = call.data.split("_")
-    plan_code = parts[2]
-    server_num = parts[3]
-    choice_val = parts[4]
+    
+    # ✅ FIX: plan_code, server_num, choice_val ကို rsplit နှစ်ဆင့်ဖြင့် တိကျစွာ ခွဲထုတ်ခြင်း
+    # callback format: renew_choice_{plan_code}_{server_num}_{choice_val}
+    # ဥပမာ: renew_choice_ultimate_1_new  သို့မဟုတ်  renew_choice_ultimate_1_abc123keyid
+    raw = call.data[len("renew_choice_"):]
+    tail = raw.rsplit("_", 1)
+    if len(tail) != 2:
+        return
+    choice_val = tail[1]
+    head = tail[0].rsplit("_", 1)
+    if len(head) != 2:
+        return
+    plan_code = head[0]
+    server_num = head[1]
 
     plan = PLANS.get(plan_code)
     if not plan:
+        bot.answer_callback_query(call.id, "❌ Plan ရှာမတွေ့ပါ။", show_alert=True)
         return
 
     amount = plan["price"]
@@ -2235,10 +2245,10 @@ def handle_renew_choice(call):
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
-    # ပြင်ဆင်ပြီး: bot.get_chat အစား call.message.chat ကိုသုံး၍ Error တက်ခြင်းမှ ကာကွယ်ရန်
+    # ✅ FIX: getattr ဖြင့် safe ဖြစ်အောင် ယူပါ
     chat_info = call.message.chat
-    user_first = chat_info.first_name if chat_info.first_name else ""
-    user_last = chat_info.last_name if chat_info.last_name else ""
+    user_first = getattr(chat_info, 'first_name', '') or ""
+    user_last = getattr(chat_info, 'last_name', '') or ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
     bot.answer_callback_query(call.id, "⏳ VPN Key ဆောင်ရွက်နေပါသည်...")
@@ -2302,7 +2312,7 @@ def handle_renew_choice(call):
     except Exception:
         bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
-# 🛠️ ပြင်ဆင်ပြီး: handle_buy_with_wallet တွင် bot.get_chat အစား call.message.chat ကို သုံး၍ Error တက်ခြင်းကို ဖြေရှင်းထားပါသည်[span_2](start_span)[span_2](end_span)
+# 🛠️ FIXED: handle_buy_with_wallet - plan_code မှာ underscore ပါနိုင်တဲ့အတွက် rsplit သုံးပါ
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
 def handle_buy_with_wallet(call):
     chat_id = call.message.chat.id
@@ -2311,9 +2321,14 @@ def handle_buy_with_wallet(call):
         bot.answer_callback_query(call.id, "⚠️ စာရင်းလုပ်ဆောင်နေပါသည်...")
         return
 
-    parts = call.data.split("_")
-    plan_code = parts[1]
-    server_num = parts[2]
+    # ✅ FIX: plan_code မှာ underscore ပါနိုင်တဲ့အတွက် rsplit သုံးပြီး နောက်ဆုံး part ကို server_num အဖြစ်ယူပါ
+    raw_data = call.data[len("buywallet_"):]
+    split_parts = raw_data.rsplit("_", 1)
+    if len(split_parts) != 2:
+        bot.answer_callback_query(call.id, "❌ Invalid callback data.")
+        return
+    plan_code = split_parts[0]
+    server_num = split_parts[1]
     plan = PLANS.get(plan_code)
 
     if not plan:
@@ -2333,10 +2348,10 @@ def handle_buy_with_wallet(call):
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
-    # ပြင်ဆင်ပြီး: bot.get_chat(chat_id) အစား call.message.chat ကို တိုက်ရိုက်ယူသုံးခြင်းဖြင့် အလွန် လုံခြုံစေပါသည်[span_3](start_span)[span_3](end_span)
+    # ✅ FIX: getattr ဖြင့် safe ဖြစ်အောင် ယူပါ
     chat_info = call.message.chat
-    user_first = chat_info.first_name if chat_info.first_name else ""
-    user_last = chat_info.last_name if chat_info.last_name else ""
+    user_first = getattr(chat_info, 'first_name', '') or ""
+    user_last = getattr(chat_info, 'last_name', '') or ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
     if plan.get("manual"):
@@ -2540,8 +2555,8 @@ def handle_photo_messages(message):
         return
 
     # Top-Up Slip Handler
-    user_first = message.from_user.first_name if message.from_user.first_name else ""
-    user_last = message.from_user.last_name if message.from_user.last_name else ""
+    user_first = getattr(message.from_user, 'first_name', '') or ""
+    user_last = getattr(message.from_user, 'last_name', '') or ""
     user_name = f"{user_first} {user_last}".strip() or "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
     
@@ -2700,8 +2715,8 @@ def handle_admin_replace_callback(call):
 
     try:
         chat_info = bot.get_chat(target_chat_id)
-        user_first = chat_info.first_name if chat_info.first_name else ""
-        user_last = chat_info.last_name if chat_info.last_name else ""
+        user_first = getattr(chat_info, 'first_name', '') or ""
+        user_last = getattr(chat_info, 'last_name', '') or ""
         user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
         new_key, _, expire_date = create_outline_key(
@@ -2764,7 +2779,6 @@ def handle_all_messages(message):
             step = deduct_state.get("step")
             dtype = deduct_state.get("type", "all")
             
-            # Step 1: Customer ID လက်ခံခြင်း
             if step == "ask_user":
                 target_user_id = input_value.strip()
                 if not target_user_id.isdigit():
@@ -2786,7 +2800,6 @@ def handle_all_messages(message):
                 )
                 return
 
-            # Step 2: ငွေပမာဏ လက်ခံပြီး အမှန်တကယ် နှုတ်ယူခြင်း
             elif step == "ask_amount":
                 clean_amt = re.sub(r'[^\d]', '', input_value)
                 if not clean_amt.isdigit() or int(clean_amt) <= 0:
@@ -2915,8 +2928,8 @@ def handle_all_messages(message):
         main_bal_disp = "♾️" if is_admin else f"{main_bal:,} MMK"
         total_bal_disp = "♾️" if is_admin else f"{total_bal:,} MMK"
 
-        user_first = message.from_user.first_name if message.from_user.first_name else ""
-        user_last = message.from_user.last_name if message.from_user.last_name else ""
+        user_first = getattr(message.from_user, 'first_name', '') or ""
+        user_last = getattr(message.from_user, 'last_name', '') or ""
         full_name = f"{user_first} {user_last}".strip() or "HMA User"
 
         wallet_text = (
@@ -3046,7 +3059,6 @@ def handle_all_messages(message):
             user_str_id = str(chat_id)
             claimed_users = code_info.get("claimed_users", [])
 
-            # လူအများခွဲသုံးစနစ်
             if mode == "shared":
                 if not is_admin and user_str_id in claimed_users:
                     bot.send_message(chat_id, "⚠️ <b>သင်သည် ဤ Code အား ရယူပြီးဖြစ်ပါသည်ခင်ဗျာ။</b>\n<i>(Code တစ်ခုလျှင် လူတစ်ဦး ၁ ကြိမ်သာ ရယူနိုင်ပါသည်)</i>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
@@ -3081,7 +3093,7 @@ def handle_all_messages(message):
                     
                 save_redeem_codes(codes)
 
-                user_name = message.from_user.first_name if message.from_user.first_name else "Winner"
+                user_name = getattr(message.from_user, 'first_name', '') or "Winner"
                 crown_icon = " 👑" if is_admin else ""
                 disp_total_bal = "♾️" if is_admin else f"{new_balance:,} MMK"
 
@@ -3107,14 +3119,13 @@ def handle_all_messages(message):
                         pass
                 return
 
-            # တစ်ဦးတည်းသုံးစနစ်
             else:
                 amt_to_add = int(code_info.get("amount", 1000))
                 del codes[matched_code_key]
                 save_redeem_codes(codes)
                 
                 new_balance, exp_disp = add_expiring_bonus_to_wallet(chat_id, amt_to_add, validity_days)
-                user_name = message.from_user.first_name if message.from_user.first_name else "Winner"
+                user_name = getattr(message.from_user, 'first_name', '') or "Winner"
                 crown_icon = " 👑" if is_admin else ""
                 disp_total_bal = "♾️" if is_admin else f"{new_balance:,} MMK"
 
@@ -3229,7 +3240,7 @@ def handle_all_messages(message):
 
             alert_text = (
                 f"♻️ <b>KEY REPLACEMENT REQUEST</b>\n\n"
-                f"👤 ဝယ်ယူသူ: {message.from_user.first_name}\n"
+                f"👤 ဝယ်ယူသူ: {getattr(message.from_user, 'first_name', '')}\n"
                 f"🆔 Chat ID: <code>{chat_id}</code>\n"
                 f"📡 Server: Server {server_num}\n"
                 f"🔑 Key အဟောင်း: {full_name}\n"
