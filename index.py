@@ -2331,9 +2331,9 @@ def handle_buy_with_wallet(call):
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
-    chat_info = bot.get_chat(chat_id)
-    user_first = chat_info.first_name if chat_info.first_name else ""
-    user_last = chat_info.last_name if chat_info.last_name else ""
+    # 🛠️ အမှန်ကန်ဆုံး ပြင်ဆင်ချက် (Error မတက်စေရန်)
+    user_first = call.from_user.first_name if call.from_user.first_name else ""
+    user_last = call.from_user.last_name if call.from_user.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
     if plan.get("manual"):
@@ -2430,7 +2430,7 @@ def handle_buy_with_wallet(call):
         try:
             bot.send_message(
                 aid,
-                f"🛍️ <b>Custromer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
+                f"🛍️ <b>Customer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
                 f"🧾 Order ID: <code>{order_id}</code>\n"
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
