@@ -2190,7 +2190,7 @@ def handle_select_plan(call):
         markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
         markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
 
-        balance_disp = "♾️ Unlimited" if is_admin else f"{balance:,} MMK"
+        balance_disp = "♾️" if is_admin else f"{balance:,} MMK"
         balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
         
         server_notice = "\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် Server 1 မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
@@ -2284,7 +2284,7 @@ def handle_renew_choice(call):
     if apply_days:
         exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {apply_days} ရက် သက်တမ်း)</i>"
 
-    user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
+    user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
     success_text = (
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
@@ -2357,7 +2357,7 @@ def handle_buy_with_wallet(call):
             except:
                 pass
 
-        user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
+        user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
         user_msg = (
             f"🎉 <b>အော်ဒါမှာယူမှု အောင်မြင်ပါသည်!</b>\n\n"
             f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
@@ -2409,7 +2409,7 @@ def handle_buy_with_wallet(call):
     if apply_days:
         exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {apply_days} ရက် သက်တမ်း)</i>"
 
-    user_disp_bal = "♾️ Unlimited" if is_admin else f"{new_bal:,} MMK"
+    user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
     success_text = (
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
@@ -2430,7 +2430,7 @@ def handle_buy_with_wallet(call):
         try:
             bot.send_message(
                 aid,
-                f"🛍️ <b>Instant Auto Purchase Alert</b>\n\n"
+                f"🛍️ <b>Custromer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
                 f"🧾 Order ID: <code>{order_id}</code>\n"
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
@@ -2909,8 +2909,8 @@ def handle_all_messages(message):
                 bonus_detail_str = "\n⏳ <b>ရက်စွဲပါ လက်ကျန်ငွေများ:</b>\n" + "\n".join(lines) + "\n"
 
         crown = " 👑" if is_admin else ""
-        main_bal_disp = "♾️ Unlimited" if is_admin else f"{main_bal:,} MMK"
-        total_bal_disp = "♾️ Unlimited" if is_admin else f"{total_bal:,} MMK"
+        main_bal_disp = "♾️" if is_admin else f"{main_bal:,} MMK"
+        total_bal_disp = "♾️" if is_admin else f"{total_bal:,} MMK"
 
         user_first = message.from_user.first_name if message.from_user.first_name else ""
         user_last = message.from_user.last_name if message.from_user.last_name else ""
@@ -3080,7 +3080,7 @@ def handle_all_messages(message):
 
                 user_name = message.from_user.first_name if message.from_user.first_name else "Winner"
                 crown_icon = " 👑" if is_admin else ""
-                disp_total_bal = "♾️ Unlimited" if is_admin else f"{new_balance:,} MMK"
+                disp_total_bal = "♾️" if is_admin else f"{new_balance:,} MMK"
 
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
@@ -3113,7 +3113,7 @@ def handle_all_messages(message):
                 new_balance, exp_disp = add_expiring_bonus_to_wallet(chat_id, amt_to_add, validity_days)
                 user_name = message.from_user.first_name if message.from_user.first_name else "Winner"
                 crown_icon = " 👑" if is_admin else ""
-                disp_total_bal = "♾️ Unlimited" if is_admin else f"{new_balance:,} MMK"
+                disp_total_bal = "♾️" if is_admin else f"{new_balance:,} MMK"
 
                 success_msg = (
                     f"🎉 <b>ဂုဏ်ယူပါတယ်ခင်ဗျာ! Redeem Code အောင်မြင်စွာ အသုံးပြုပြီးပါပြီ။</b>\n\n"
@@ -3351,43 +3351,20 @@ def handle_all_messages(message):
 
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
-    today = now.date()
+    today = (datetime.utcnow() + timedelta(hours=6, minutes=30)).date()
+    
     key_mappings = load_key_mappings()
     notified_count = 0
     deleted_count = 0
 
-    expiring_data = load_expiring_credits()
-    exp_changed = False
-    for uid, grants in list(expiring_data.items()):
-        valid_grants = []
-        expired_sum = 0
-        for g in grants:
-            try:
-                exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
-                if now > exp_dt:
-                    expired_sum += g.get("remaining", 0)
-                else:
-                    valid_grants.append(g)
-            except:
-                pass
-                
-        if expired_sum > 0:
-            exp_changed = True
-            expiring_data[uid] = valid_grants
-            try:
-                bot.send_message(uid, f"⚠️ <b>အသိပေးချက်:</b>\n\nလူကြီးမင်း၏ Wallet ထဲမှ ရက်သတ်မှတ်ချက်ပါ Redeem Bonus ငွေ (<b>-{expired_sum:,} MMK</b>) သည် သက်တမ်းစေ့သွားသဖြင့် ပျက်ပြယ်သွားပါပြီခင်ဗျာ။", parse_mode="HTML")
-            except:
-                pass
-                
-    if exp_changed:
-        save_expiring_credits(expiring_data)
-
+    # 🛠️ ပြင်ဆင်ချက်: Server 1, 2 နှင့် 3 သို့ အပြည့်အစုံ စစ်ဆေးပေးခြင်း
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
-            if keys_resp.status_code != 200: continue
+            
+            if keys_resp.status_code != 200:
+                continue
                 
             keys_data = keys_resp.json().get("accessKeys", [])
             bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
@@ -3398,11 +3375,15 @@ def cron_check():
                 limit_bytes = key.get("dataLimit", {}).get("bytes")
                 usage_bytes = bytes_transferred.get(key_id, 0)
                 
-                is_gb_full = limit_bytes and usage_bytes >= limit_bytes
+                is_gb_full = False
+                if limit_bytes and usage_bytes >= limit_bytes:
+                    is_gb_full = True
+
                 is_expired_today = False
                 should_delete = False
                 
                 date_matches = list(re.finditer(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name))
+                
                 if date_matches:
                     date_match = date_matches[-1]
                     try:
@@ -3410,57 +3391,90 @@ def cron_check():
                         k_month = int(date_match.group(2))
                         k_year_raw = date_match.group(3)
                         k_year = int("20" + k_year_raw) if len(k_year_raw) == 2 else int(k_year_raw)
+                        
                         key_expire_date = datetime(k_year, k_month, k_day).date()
                         
-                        if key_expire_date == today: is_expired_today = True
-                        elif today > key_expire_date: should_delete = True
+                        if key_expire_date == today:
+                            is_expired_today = True
+                        elif today > key_expire_date:
+                            should_delete = True
                     except:
                         pass
 
-                order_id_tag = get_order_id_for_key(full_name)
+                # 1️⃣ သက်တမ်းကုန်ဆုံးပြီး ကျော်လွန်သွားပါက ကီးကို အလိုအလျောက် ဖြတ်မည်[span_2](start_span)[span_2](end_span)
+                if should_delete:
+                    try:
+                        del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+                        if del_res.status_code in [200, 204]:
+                            deleted_count += 1
+                            for aid in ADMIN_CHAT_IDS:
+                                try:
+                                    bot.send_message(
+                                        aid, 
+                                        f"🗑️ <b>Customer Key Expired:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
+                                        parse_mode="HTML"
+                                    )
+                                except:
+                                    pass
+                    except:
+                        pass
+                    continue 
 
+                # 2️⃣ Data ပြည့်သွားတာ (သို့) ယနေ့ သက်တမ်းကုန်တာတွေအတွက် Noti ပို့မည်[span_3](start_span)[span_3](end_span)
                 if is_gb_full or is_expired_today:
                     target_chat_id = extract_chat_id_from_key_name(full_name)
                     if not target_chat_id:
                         id_match = re.search(r'\((\d{8,12})\)', full_name)
-                        if id_match: 
+                        if id_match:
                             target_chat_id = id_match.group(1)
-
-                    reason_text = "ဝယ်ယူထားသော Data GB ကုန်သွားပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ဆုံးသွားပါပြီ"
                     
-                    # 1️⃣ Customer ဆီသို့ Noti ပို့ရန်
+                    if not target_chat_id:
+                        clean_name = full_name
+                        if date_matches:
+                            clean_name = clean_name.replace(date_matches[-1].group(0), "")
+                        clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
+                        clean_name = clean_name.replace("[GW]", "").replace("[gw]", "")
+                        clean_name = clean_name.strip().lower()
+
+                        target_chat_id = key_mappings.get(clean_name)
+                        if not target_chat_id:
+                            for mapped_name, cid in key_mappings.items():
+                                if mapped_name in clean_name or clean_name in mapped_name:
+                                    target_chat_id = cid
+                                    break
+
+                    if is_gb_full:
+                        reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ"
+                        user_warning = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ ခင်ဗျာ။"
+                    else:
+                        reason_text = "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
+                        user_warning = "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ ခင်ဗျာ။ (မနက်ဖြန်တွင် အသုံးပြုခွင့် ပိတ်သိမ်းပါမည်)"
+
                     if target_chat_id:
                         try:
                             user_noti = (
                                 f"⚠️ <b>သတိပေးချက်:</b>\n\n"
-                                f"လူကြီးမင်း၏ VPN Key (<code>{full_name}</code>) သည် <b>{reason_text}</b> ပါခင်ဗျာ။\n\n"
-                                f"👇 ဆက်လက်အသုံးပြုလိုပါက Bot ထဲရှိ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် အလွယ်တကူ ပြန်လည်ဝယ်ယူနိုင်ပါပြီခင်ဗျာ။"
+                                f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် <b>{user_warning}</b>\n\n"
+                                f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
                             )
                             bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
                             notified_count += 1
-                        except Exception as e:
-                            print(f"User Noti Error: {e}")
-
-                    # 2️⃣ Admin ဆီသို့ အသိပေးရန် (Key ဖျက်ပြီးပါက)
-                    if should_delete:
-                        try:
-                            del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
-                            if del_res.status_code in [200, 204]:
-                                deleted_count += 1
-                                ord_txt = f"🧾 <b>Order ID:</b> <code>{order_id_tag}</code>\n" if order_id_tag != "N/A" else ""
-                                for aid in ADMIN_CHAT_IDS:
-                                    try: 
-                                        bot.send_message(
-                                            aid, 
-                                            f"🗑️ <b>Auto Delete & Noti:</b>\n\n{ord_txt}Key: <code>{full_name}</code> သည် <b>{reason_text}</b> သဖြင့် ဆာဗာမှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပြီဖြစ်ပြီး Customer ထံသို့လည်း Noti ပို့ပြီးပါပြီ။", 
-                                            parse_mode="HTML"
-                                        )
-                                    except: 
-                                        pass
-                        except: 
+                        except:
                             pass
-                        continue
-        except: 
+
+                    admin_noti = (
+                        f"📢 <b>Customer သိပေးချက်</b>\n"
+                        f"👤 အသုံးပြုသူ: {full_name}\n"
+                        f"⚠️ အခြေအနေ: {reason_text}\n"
+                        f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
+                    )
+                    
+                    for aid in ADMIN_CHAT_IDS:
+                        try:
+                            bot.send_message(aid, admin_noti, parse_mode="HTML")
+                        except:
+                            pass
+        except:
             pass
 
     return jsonify({"status": "cron completed", "notified": notified_count, "deleted": deleted_count}), 200
