@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 import re
+import base64
 import json
 import html
 from datetime import datetime, timedelta
@@ -13,131 +14,198 @@ from dateutil.relativedelta import relativedelta
 
 app = Flask(__name__)
 
+# Token & API Configuration
 TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
+
+# 📢 Force Join Channel Configuration
 REQUIRED_CHANNEL = "@hefeature"
+
+# 🌐 API Server ၁၊ ၂ နှင့် ၃ လင့်ခ်များ
 OUTLINE_API_URL_1 = "https://64.120.94.164:49429/YkDBSn3KwUaICBvzDQtvxQ"
 OUTLINE_API_URL_2 = "https://104.207.92.135:8443/o8a5SK1XlVXdrgXUX5Z24Q"
 OUTLINE_API_URL_3 = "https://vip.h-e-feature.store:33300/E_LfjCh3-9u_jEFyQnZUfA"
+
+# 🔑 Admin Telegram Chat IDs
 ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
+
+# 🔍 OCR Space API Key Configuration
 OCR_API_KEY = "K87641025188957"
 MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
+# 🌐 Vercel Upstash Redis REST API Setup
 KV_URL = os.environ.get("KV_REST_API_URL")
 KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
 
-# ========== REDIS HELPERS ==========
 def redis_get(key):
-    if not KV_URL or not KV_TOKEN: return None
+    if not KV_URL or not KV_TOKEN:
+        return None
     try:
         res = requests.get(f"{KV_URL}/get/{key}", headers={"Authorization": f"Bearer {KV_TOKEN}"}, timeout=5)
         if res.status_code == 200:
             val = res.json().get("result")
             return json.loads(val) if val else None
-    except: pass
+    except:
+        pass
     return None
 
 def redis_set(key, value):
-    if not KV_URL or not KV_TOKEN: return False
+    if not KV_URL or not KV_TOKEN:
+        return False
     try:
         val_str = json.dumps(value)
         res = requests.post(f"{KV_URL}/set/{key}", headers={"Authorization": f"Bearer {KV_TOKEN}"}, data=val_str, timeout=5)
         return res.status_code == 200
-    except: return False
+    except:
+        return False
 
-# ========== STATE MANAGEMENT (OPTIMIZED - 1 REDIS CALL) ==========
-def get_all_states():
-    return redis_get("global_states") or {}
-
-def save_all_states(states):
-    redis_set("global_states", states)
-
-def set_state(chat_id, key, value):
-    states = get_all_states()
-    cid = str(chat_id)
-    if cid not in states:
-        states[cid] = {}
-    states[cid][key] = value
-    save_all_states(states)
-
-def get_state(chat_id, key, default=None):
-    states = get_all_states()
-    return states.get(str(chat_id), {}).get(key, default)
-
-def clear_all_states(chat_id):
-    states = get_all_states()
-    states[str(chat_id)] = {}
-    save_all_states(states)
-
+# Temp Files & Redis Fallback Configs
+STATE_FILE = "/tmp/user_plans.json"
+MAPPING_FILE = "/tmp/key_mappings.json"
+REDEEM_FILE = "/tmp/redeem_codes.json"
+USED_REDEEMERS_FILE = "/tmp/used_redeemers.json"
+SEARCH_STATE_FILE = "/tmp/admin_search_state.json"
+REDEEM_STATE_FILE = "/tmp/user_redeem_state.json"
+REPLACEMENT_STATE_FILE = "/tmp/user_replacement_state.json"
+SALES_FILE = "/tmp/sales_history.json"
+ADMIN_MSG_MAP_FILE = "/tmp/admin_msg_map.json"
+REPLACEMENT_MSG_MAP_FILE = "/tmp/replacement_msg_map.json"
+BROADCAST_STATE_FILE = "/tmp/admin_broadcast_state.json"
+ALL_USERS_FILE = "/tmp/all_users.json"
+ORDERS_FILE = "/tmp/orders_data.json"
+KEY_ORDERS_FILE = "/tmp/key_orders.json"
+USER_HISTORY_FILE = "/tmp/user_purchases.json"
+PERSISTENT_KEYS_FILE = "/tmp/persistent_keys.json"
+WALLET_FILE = "/tmp/user_wallets.json"
+TOPUP_STATE_FILE = "/tmp/user_topup_state.json"
+CUSTOM_TOPUP_STATE_FILE = "/tmp/user_custom_topup.json"
+EXPIRING_CREDITS_FILE = "/tmp/expiring_credits.json"
+DEDUCT_STATE_FILE = "/tmp/admin_deduct_state.json"
+RENEW_CHOICE_STATE_FILE = "/tmp/user_renew_choice.json"
 PROCESSED_CALLBACKS = set()
-def is_callback_processed(key):
-    if key in PROCESSED_CALLBACKS: return True
-    PROCESSED_CALLBACKS.add(key)
-    if len(PROCESSED_CALLBACKS) > 500: PROCESSED_CALLBACKS.clear()
+
+def is_callback_processed(call_id):
+    if call_id in PROCESSED_CALLBACKS:
+        return True
+    PROCESSED_CALLBACKS.add(call_id)
+    if len(PROCESSED_CALLBACKS) > 1000:
+        PROCESSED_CALLBACKS.clear()
     return False
 
-# ========== WALLET SYSTEM ==========
+# 💳 Advanced Wallet System
 def load_all_wallets():
     data = redis_get("user_wallets_data")
-    return data if data is not None else {}
+    if data is not None:
+        return data
+    if os.path.exists(WALLET_FILE):
+        try:
+            with open(WALLET_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
 
 def load_expiring_credits():
     data = redis_get("user_expiring_credits")
-    return data if data is not None else {}
+    if data is not None:
+        return data
+    if os.path.exists(EXPIRING_CREDITS_FILE):
+        try:
+            with open(EXPIRING_CREDITS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
 
 def save_expiring_credits(data):
     redis_set("user_expiring_credits", data)
+    try:
+        with open(EXPIRING_CREDITS_FILE, 'w') as f:
+            json.dump(data, f)
+    except:
+        pass
 
 def load_claimed_redeem_users():
     data = redis_get("global_claimed_redeemers")
-    return data if data is not None else []
+    if data is not None:
+        return data
+    if os.path.exists(USED_REDEEMERS_FILE):
+        try:
+            with open(USED_REDEEMERS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
 
 def save_claimed_redeem_user(chat_id):
-    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]: return
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
     users = load_claimed_redeem_users()
     uid = str(chat_id)
     if uid not in users:
         users.append(uid)
         redis_set("global_claimed_redeemers", users)
+        try:
+            with open(USED_REDEEMERS_FILE, 'w') as f:
+                json.dump(users, f)
+        except:
+            pass
 
 def get_user_balance_breakdown(chat_id):
     uid = str(chat_id)
     wallets = load_all_wallets()
     main_bal = int(wallets.get(uid, 0))
+    
     expiring_data = load_expiring_credits()
     user_grants = expiring_data.get(uid, [])
+    
     now = datetime.utcnow() + timedelta(hours=6, minutes=30)
     valid_bonus = 0
     clean_grants = []
+    
     for g in user_grants:
         try:
             exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
             if exp_dt > now and g.get("remaining", 0) > 0:
                 valid_bonus += int(g["remaining"])
                 clean_grants.append(g)
-        except: pass
+        except:
+            pass
+            
     if len(clean_grants) != len(user_grants):
         expiring_data[uid] = clean_grants
         save_expiring_credits(expiring_data)
+        
     return main_bal, valid_bonus, (main_bal + valid_bonus)
 
 def get_user_balance(chat_id):
-    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]: return 999999999
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return 999999999
     _, _, total_bal = get_user_balance_breakdown(chat_id)
     return total_bal
 
 def update_user_balance(chat_id, amount_delta):
     uid = str(chat_id)
     wallets = load_all_wallets()
+    
     if amount_delta > 0:
-        wallets[uid] = int(wallets.get(uid, 0)) + amount_delta
+        curr = int(wallets.get(uid, 0))
+        new_bal = curr + amount_delta
+        wallets[uid] = new_bal
         redis_set("user_wallets_data", wallets)
+        try:
+            with open(WALLET_FILE, 'w') as f:
+                json.dump(wallets, f)
+        except:
+            pass
         return get_user_balance(chat_id), None
+
     needed_deduct = abs(amount_delta)
     expiring_data = load_expiring_credits()
     user_grants = expiring_data.get(uid, [])
+    
     now = datetime.utcnow() + timedelta(hours=6, minutes=30)
     sorted_grants = []
     for g in user_grants:
@@ -145,11 +213,15 @@ def update_user_balance(chat_id, amount_delta):
             exp_dt = datetime.strptime(g["expire_at"], "%Y-%m-%d %H:%M:%S")
             if exp_dt > now and g.get("remaining", 0) > 0:
                 sorted_grants.append(g)
-        except: pass
+        except:
+            pass
+            
     sorted_grants.sort(key=lambda x: x["expire_at"])
     used_bonus_days = []
+    
     for g in sorted_grants:
-        if needed_deduct <= 0: break
+        if needed_deduct <= 0:
+            break
         rem = g.get("remaining", 0)
         if rem <= needed_deduct:
             needed_deduct -= rem
@@ -159,11 +231,21 @@ def update_user_balance(chat_id, amount_delta):
             g["remaining"] -= needed_deduct
             needed_deduct = 0
             used_bonus_days.append(g.get("days", 1))
+            
     expiring_data[uid] = [g for g in sorted_grants if g.get("remaining", 0) > 0]
     save_expiring_credits(expiring_data)
+    
     if needed_deduct > 0:
-        wallets[uid] = max(0, int(wallets.get(uid, 0)) - needed_deduct)
+        curr_main = int(wallets.get(uid, 0))
+        new_main = max(0, curr_main - needed_deduct)
+        wallets[uid] = new_main
         redis_set("user_wallets_data", wallets)
+        try:
+            with open(WALLET_FILE, 'w') as f:
+                json.dump(wallets, f)
+        except:
+            pass
+            
     min_bonus_days = min(used_bonus_days) if used_bonus_days else None
     return get_user_balance(chat_id), min_bonus_days
 
@@ -171,10 +253,15 @@ def add_expiring_bonus_to_wallet(chat_id, amount, validity_days):
     uid = str(chat_id)
     now = datetime.utcnow() + timedelta(hours=6, minutes=30)
     exp_dt = now + timedelta(days=validity_days)
+    
     expiring_data = load_expiring_credits()
-    if uid not in expiring_data: expiring_data[uid] = []
+    if uid not in expiring_data:
+        expiring_data[uid] = []
+        
     grant = {
-        "amount": int(amount), "remaining": int(amount), "days": int(validity_days),
+        "amount": int(amount),
+        "remaining": int(amount),
+        "days": int(validity_days),
         "expire_at": exp_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "expire_disp": exp_dt.strftime("%d.%m.%Y")
     }
@@ -187,43 +274,119 @@ def admin_deduct_specific_funds(target_chat_id, amount_to_deduct, deduct_type="a
     uid = str(target_chat_id)
     needed = int(amount_to_deduct)
     deducted = 0
+    
     if deduct_type in ["bonus", "all"]:
         expiring_data = load_expiring_credits()
         user_grants = expiring_data.get(uid, [])
         for g in user_grants:
-            if needed <= 0: break
+            if needed <= 0:
+                break
             rem = g.get("remaining", 0)
             if rem <= needed:
-                needed -= rem; deducted += rem; g["remaining"] = 0
+                needed -= rem
+                deducted += rem
+                g["remaining"] = 0
             else:
-                g["remaining"] -= needed; deducted += needed; needed = 0
+                g["remaining"] -= needed
+                deducted += needed
+                needed = 0
         expiring_data[uid] = [g for g in user_grants if g.get("remaining", 0) > 0]
         save_expiring_credits(expiring_data)
+        
     if deduct_type in ["main", "all"]:
-        if deduct_type == "main": needed = int(amount_to_deduct)
+        if deduct_type == "main":
+            needed = int(amount_to_deduct)
         if needed > 0:
             wallets = load_all_wallets()
-            curr = int(wallets.get(uid, 0))
-            sub = min(curr, needed)
-            wallets[uid] = curr - sub
-            deducted += sub
+            curr_main = int(wallets.get(uid, 0))
+            to_sub = min(curr_main, needed)
+            wallets[uid] = curr_main - to_sub
+            deducted += to_sub
             redis_set("user_wallets_data", wallets)
-    m, b, t = get_user_balance_breakdown(uid)
-    return deducted, m, b, t
+            try:
+                with open(WALLET_FILE, 'w') as f:
+                    json.dump(wallets, f)
+            except:
+                pass
+                
+    m_bal, b_bal, f_total = get_user_balance_breakdown(uid)
+    return deducted, m_bal, b_bal, f_total
 
-# ========== PERSISTENT STORAGE ==========
+def set_admin_deduct_state(admin_id, state_dict=None):
+    states = redis_get("admin_deduct_state") or {}
+    if state_dict:
+        states[str(admin_id)] = state_dict
+    else:
+        if str(admin_id) in states:
+            del states[str(admin_id)]
+    redis_set("admin_deduct_state", states)
+
+def get_admin_deduct_state(admin_id):
+    states = redis_get("admin_deduct_state") or {}
+    return states.get(str(admin_id))
+
+def set_topup_state(chat_id, amount):
+    states = redis_get("user_topup_state") or {}
+    if amount is not None:
+        states[str(chat_id)] = amount
+    else:
+        if str(chat_id) in states:
+            del states[str(chat_id)]
+    redis_set("user_topup_state", states)
+
+def get_topup_state(chat_id):
+    states = redis_get("user_topup_state") or {}
+    return states.get(str(chat_id))
+
+def set_custom_topup_state(chat_id, is_waiting=True):
+    states = redis_get("user_custom_topup") or {}
+    states[str(chat_id)] = is_waiting
+    redis_set("user_custom_topup", states)
+
+def get_custom_topup_state(chat_id):
+    states = redis_get("user_custom_topup") or {}
+    return states.get(str(chat_id), False)
+
+def set_renew_choice_state(chat_id, data_dict=None):
+    states = redis_get("user_renew_choice") or {}
+    if data_dict:
+        states[str(chat_id)] = data_dict
+    else:
+        if str(chat_id) in states:
+            del states[str(chat_id)]
+    redis_set("user_renew_choice", states)
+
+def get_renew_choice_state(chat_id):
+    states = redis_get("user_renew_choice") or {}
+    return states.get(str(chat_id))
+
+# 💾 Persistent Key Storage System
 def load_persistent_keys():
-    return redis_get("persistent_keys_registry") or {}
+    data = redis_get("persistent_keys_registry")
+    if data is not None:
+        return data
+    if os.path.exists(PERSISTENT_KEYS_FILE):
+        try:
+            with open(PERSISTENT_KEYS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
 
 def save_persistent_key(server_num, key_id, name, access_url, limit_bytes=None, order_id=None, chat_id=None):
-    if not key_id or not server_num: return
+    if not key_id or not server_num:
+        return
     registry = load_persistent_keys()
     uid = f"{server_num}_{key_id}"
+    
     date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', name)
     exp_date = date_match.group(0) if date_match else "မသိရှိပါ"
+    
     existing = registry.get(uid, {})
     registry[uid] = {
-        "server": str(server_num), "key_id": str(key_id), "name": name,
+        "server": str(server_num),
+        "key_id": str(key_id),
+        "name": name,
         "access_url": access_url if access_url else existing.get("access_url", ""),
         "limit_bytes": limit_bytes if limit_bytes else existing.get("limit_bytes"),
         "expire_date": exp_date if exp_date != "မသိရှိပါ" else existing.get("expire_date", "မသိရှိပါ"),
@@ -231,11 +394,19 @@ def save_persistent_key(server_num, key_id, name, access_url, limit_bytes=None, 
         "chat_id": str(chat_id) if chat_id else existing.get("chat_id", "")
     }
     redis_set("persistent_keys_registry", registry)
+    try:
+        with open(PERSISTENT_KEYS_FILE, 'w') as f:
+            json.dump(registry, f)
+    except:
+        pass
 
 def sync_keys_to_persistent_registry(server_num, keys_data):
-    if not keys_data: return
+    if not keys_data:
+        return
     registry = load_persistent_keys()
     key_orders_map = load_key_orders()
+    changed = False
+
     for k in keys_data:
         k_id = str(k.get("id"))
         uid = f"{server_num}_{k_id}"
@@ -244,97 +415,296 @@ def sync_keys_to_persistent_registry(server_num, keys_data):
         full_url = f"{raw_url}#{k_name}" if k_name else raw_url
         l_bytes = k.get("dataLimit", {}).get("bytes")
         ord_id = key_orders_map.get(k_name.strip().lower(), "N/A")
+        
         cid_match = re.search(r'\((\d+)\)', k_name)
         cid = cid_match.group(1) if cid_match else ""
+
         date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', k_name)
         exp_date = date_match.group(0) if date_match else "မသိရှိပါ"
+
         registry[uid] = {
-            "server": str(server_num), "key_id": k_id, "name": k_name,
-            "access_url": full_url, "limit_bytes": l_bytes,
-            "expire_date": exp_date, "order_id": ord_id, "chat_id": cid
+            "server": str(server_num),
+            "key_id": k_id,
+            "name": k_name,
+            "access_url": full_url,
+            "limit_bytes": l_bytes,
+            "expire_date": exp_date,
+            "order_id": ord_id,
+            "chat_id": cid
         }
-    redis_set("persistent_keys_registry", registry)
+        changed = True
 
-def load_key_orders():
-    return redis_get("key_orders") or {}
+    if changed:
+        redis_set("persistent_keys_registry", registry)
+        try:
+            with open(PERSISTENT_KEYS_FILE, 'w') as f:
+                json.dump(registry, f)
+        except:
+            pass
 
-def map_key_to_order(key_name, order_id):
-    if not order_id or not key_name: return
-    data = load_key_orders()
-    data[key_name.strip().lower()] = str(order_id)
-    redis_set("key_orders", data)
-
-def get_order_id_for_key(key_name):
-    data = load_key_orders()
-    return data.get(key_name.strip().lower(), "N/A")
-
-def load_sales_history():
-    return redis_get("sales_history") or []
-
-def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int, order_id=None):
+def sync_legacy_redis_data_to_registry():
+    registry = load_persistent_keys()
+    changed = False
+    
     sales = load_sales_history()
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
-    sales.append({
-        "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
-        "date": now.strftime("%Y-%m-%d"), "year": now.year, "month": now.month,
-        "server": str(server_num), "chat_id": str(chat_id),
-        "plan_code": plan_code, "plan_name": plan_name,
-        "months": months_count, "price": int(price_int) if price_int else 0,
-        "order_id": order_id or "N/A"
-    })
-    redis_set("sales_history", sales)
+    for idx, s in enumerate(sales, 1):
+        s_cid = str(s.get("chat_id", ""))
+        s_srv = str(s.get("server", "1"))
+        s_ord = s.get("order_id", "N/A")
+        p_name = s.get("plan_name", "VPN Plan")
+        
+        uid = f"{s_srv}_sale_{s_ord if s_ord != 'N/A' else idx}"
+        if uid not in registry:
+            registry[uid] = {
+                "server": s_srv,
+                "key_id": f"sale_{idx}",
+                "name": f"{p_name} ({s_cid})" if s_cid else p_name,
+                "access_url": "N/A",
+                "limit_bytes": None,
+                "expire_date": s.get("date", "မသိရှိပါ"),
+                "order_id": s_ord,
+                "chat_id": s_cid
+            }
+            changed = True
 
+    orders = load_orders()
+    for o_id, o_data in orders.items():
+        o_cid = str(o_data.get("chat_id", ""))
+        u_name = o_data.get("user_name", "Customer")
+        uid = f"1_ord_{o_id}"
+        if uid not in registry:
+            registry[uid] = {
+                "server": "1",
+                "key_id": f"ord_{o_id}",
+                "name": f"{u_name} ({o_cid})",
+                "access_url": "N/A",
+                "limit_bytes": None,
+                "expire_date": o_data.get("date", "မသိရှိပါ"),
+                "order_id": o_id,
+                "chat_id": o_cid
+            }
+            changed = True
+
+    if changed:
+        redis_set("persistent_keys_registry", registry)
+        try:
+            with open(PERSISTENT_KEYS_FILE, 'w') as f:
+                json.dump(registry, f)
+        except:
+            pass
+
+# 📇 Customer Purchase History Storage Helpers
 def load_all_user_history():
-    return redis_get("user_purchases_data") or {}
+    data = redis_get("user_purchases_data")
+    if data is not None:
+        return data
+    if os.path.exists(USER_HISTORY_FILE):
+        try:
+            with open(USER_HISTORY_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
 
 def save_user_purchase_record(chat_id, order_id, plan_name, disp_gb, months_count, price_str, server_num, expire_date, vpn_key):
     history_data = load_all_user_history()
     uid = str(chat_id)
-    if uid not in history_data: history_data[uid] = []
+    if uid not in history_data:
+        history_data[uid] = []
+        
     now = datetime.utcnow() + timedelta(hours=6, minutes=30)
-    history_data[uid].append({
+    record = {
         "timestamp": now.strftime("%d/%m/%Y (%I:%M %p)"),
         "order_id": order_id if order_id else "N/A",
-        "plan_name": plan_name, "disp_gb": disp_gb, "months": months_count,
-        "price_str": price_str, "server": str(server_num),
-        "expire_date": expire_date, "vpn_key": vpn_key
-    })
+        "plan_name": plan_name,
+        "disp_gb": disp_gb,
+        "months": months_count,
+        "price_str": price_str,
+        "server": str(server_num),
+        "expire_date": expire_date,
+        "vpn_key": vpn_key
+    }
+    history_data[uid].append(record)
     redis_set("user_purchases_data", history_data)
+    try:
+        with open(USER_HISTORY_FILE, 'w') as f:
+            json.dump(history_data, f)
+    except:
+        pass
 
 def get_user_combined_purchase_records(chat_id):
     history_data = load_all_user_history()
     records = list(history_data.get(str(chat_id), []))
     known_orders = set(r.get("order_id") for r in records if r.get("order_id") and r.get("order_id") != "N/A")
+
     sales = load_sales_history()
     user_sales = [s for s in sales if str(s.get("chat_id")) == str(chat_id)]
     persistent_registry = load_persistent_keys()
+
     for s in user_sales:
         s_ord = s.get("order_id", "N/A")
-        if s_ord != "N/A" and s_ord in known_orders: continue
+        if s_ord != "N/A" and s_ord in known_orders:
+            continue
+            
         srv_num = str(s.get("server", "1"))
-        matched_link = "N/A"
-        exp_found = "မသိရှိပါ"
+        matched_key_link = "N/A"
+        exp_date_found = "မသိရှိပါ"
+        
         for k_data in persistent_registry.values():
             if str(k_data.get("chat_id")) == str(chat_id) and str(k_data.get("server")) == srv_num:
-                matched_link = k_data.get("access_url", "N/A")
-                exp_found = k_data.get("expire_date", "မသိရှိပါ")
+                matched_key_link = k_data.get("access_url", "N/A")
+                exp_date_found = k_data.get("expire_date", "မသိရှိပါ")
                 break
+
         p_info = PLANS.get(s.get("plan_code"), {})
-        records.append({
+        disp_gb = p_info.get("data", "N/A")
+
+        legacy_rec = {
             "timestamp": s.get("timestamp", s.get("date", "N/A")),
-            "order_id": s_ord, "plan_name": s.get("plan_name", "VPN Plan"),
-            "disp_gb": p_info.get("data", "N/A"), "months": s.get("months", 1),
+            "order_id": s_ord,
+            "plan_name": s.get("plan_name", "VPN Plan"),
+            "disp_gb": disp_gb,
+            "months": s.get("months", 1),
             "price_str": f"{s.get('price', 0):,} Ks",
-            "server": srv_num, "expire_date": exp_found, "vpn_key": matched_link
-        })
-        if s_ord != "N/A": known_orders.add(s_ord)
+            "server": srv_num,
+            "expire_date": exp_date_found,
+            "vpn_key": matched_key_link
+        }
+        records.append(legacy_rec)
+        if s_ord != "N/A":
+            known_orders.add(s_ord)
+            
     return records
 
-def load_redeem_codes():
-    return redis_get("redeem_codes") or {}
+# 🔍 OCR Space Helper Functions
+def parse_slip_ocr(file_path):
+    try:
+        file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
+        img_resp = requests.get(file_url, timeout=12)
+        if img_resp.status_code == 200:
+            files = {'file': ('slip.jpg', img_resp.content, 'image/jpeg')}
+            payload = {
+                'apikey': OCR_API_KEY,
+                'language': 'eng',
+                'isOverlayRequired': False,
+                'OCREngine': '2'
+            }
+            res = requests.post('https://api.ocr.space/parse/image', files=files, data=payload, timeout=20)
+            if res.status_code == 200:
+                result = res.json()
+                if result.get("IsErroredOnProcessing") == False:
+                    parsed_results = result.get("ParsedResults", [])
+                    if parsed_results:
+                        return parsed_results[0].get("ParsedText", "")
+    except Exception as e:
+        print("OCR API Error:", e)
+    return ""
 
-def save_redeem_codes(codes):
-    redis_set("redeem_codes", codes)
+def clean_ocr_text_thoroughly(text):
+    if not text:
+        return ""
+    mm_map = {
+        '၀': '0', '၁': '1', '၂': '2', '၃': '3', '၄': '4',
+        '၅': '5', '၆': '6', '၇': '7', '၈': '8', '၉': '9'
+    }
+    for mm_char, en_char in mm_map.items():
+        text = text.replace(mm_char, en_char)
+    return text
+
+def extract_transaction_last6(ocr_text):
+    if not ocr_text:
+        return None
+        
+    normalized_text = clean_ocr_text_thoroughly(ocr_text)
+    for ph in MY_PAYMENT_PHONES:
+        normalized_text = normalized_text.replace(ph, "")
+
+    lines = normalized_text.splitlines()
+    for i, line in enumerate(lines):
+        clean_l = line.replace(" ", "").replace("-", "")
+        if any(k in clean_l.lower() for k in ["transaction", "trx", "လုပ်ဆောင်ချက်", "လုပ်ဆောင်မှု", "အိုင်ဒီ", "အမှတ်"]):
+            digits = re.findall(r'\d{6,24}', clean_l)
+            if digits:
+                return digits[0][-6:]
+            if i + 1 < len(lines):
+                next_l = lines[i+1].replace(" ", "").replace("-", "")
+                next_digits = re.findall(r'\d{6,24}', next_l)
+                if next_digits:
+                    return next_digits[0][-6:]
+
+    kpay_match = re.search(r'\b(010\d{13,20})\b', normalized_text.replace(" ", ""))
+    if kpay_match:
+        return kpay_match.group(1)[-6:]
+
+    all_numbers = re.findall(r'\b\d{8,15}\b', normalized_text.replace("-", " "))
+    for num in all_numbers:
+        if not num.startswith("09") and not num.startswith("9699"):
+            return num[-6:]
+
+    return None
+
+def generate_order_id_from_slip(file_path=None):
+    if file_path:
+        ocr_text = parse_slip_ocr(file_path)
+        last6 = extract_transaction_last6(ocr_text)
+        if last6 and len(last6) == 6:
+            return f"#{last6}"
+            
+    chars = string.ascii_uppercase + string.digits
+    rand_part = ''.join(random.choices(chars, k=6))
+    return f"#{rand_part}"
+
+def load_orders():
+    data = redis_get("orders_data")
+    if data is not None:
+        return data
+    if os.path.exists(ORDERS_FILE):
+        try:
+            with open(ORDERS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_order(order_id, order_data):
+    orders = load_orders()
+    orders[str(order_id)] = order_data
+    redis_set("orders_data", orders)
+    try:
+        with open(ORDERS_FILE, 'w') as f:
+            json.dump(orders, f)
+    except:
+        pass
+
+def load_key_orders():
+    data = redis_get("key_orders")
+    if data is not None:
+        return data
+    if os.path.exists(KEY_ORDERS_FILE):
+        try:
+            with open(KEY_ORDERS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def map_key_to_order(key_name, order_id):
+    if not order_id or not key_name:
+        return
+    data = load_key_orders()
+    clean_k = key_name.strip().lower()
+    data[clean_k] = str(order_id)
+    redis_set("key_orders", data)
+    try:
+        with open(KEY_ORDERS_FILE, 'w') as f:
+            json.dump(data, f)
+    except:
+        pass
+
+def get_order_id_for_key(key_name):
+    data = load_key_orders()
+    clean_k = key_name.strip().lower()
+    return data.get(clean_k, "N/A")
 
 def save_user_id(chat_id):
     users = redis_get("all_users") or []
@@ -343,44 +713,284 @@ def save_user_id(chat_id):
         redis_set("all_users", users)
 
 def load_all_users():
-    return redis_get("all_users") or []
+    data = redis_get("all_users")
+    if data is not None:
+        return data
+    return []
+
+def set_broadcast_state(chat_id, is_waiting=True):
+    states = redis_get("admin_broadcast_state") or {}
+    states[str(chat_id)] = is_waiting
+    redis_set("admin_broadcast_state", states)
+
+def get_broadcast_state(chat_id):
+    states = redis_get("admin_broadcast_state") or {}
+    return states.get(str(chat_id), False)
+
+def set_manual_dispatch_state(admin_id, order_info_dict=None):
+    states = redis_get("admin_manual_dispatch_state") or {}
+    if order_info_dict:
+        states[str(admin_id)] = order_info_dict
+    else:
+        if str(admin_id) in states:
+            del states[str(admin_id)]
+    redis_set("admin_manual_dispatch_state", states)
+
+def get_manual_dispatch_state(admin_id):
+    states = redis_get("admin_manual_dispatch_state") or {}
+    return states.get(str(admin_id))
+
+def load_user_plans():
+    data = redis_get("user_plans")
+    if data is not None:
+        return data
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_user_plan(chat_id, plan_data):
+    plans = load_user_plans()
+    plans[str(chat_id)] = plan_data
+    redis_set("user_plans", plans)
+    try:
+        with open(STATE_FILE, 'w') as f:
+            json.dump(plans, f)
+    except:
+        pass
 
 def load_key_mappings():
-    return redis_get("key_mappings") or {}
+    data = redis_get("key_mappings")
+    if data is not None:
+        return data
+    if os.path.exists(MAPPING_FILE):
+        try:
+            with open(MAPPING_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
 
 def save_key_mapping(clean_name, chat_id):
     mappings = load_key_mappings()
     mappings[clean_name.strip().lower()] = str(chat_id)
     redis_set("key_mappings", mappings)
+    try:
+        with open(MAPPING_FILE, 'w') as f:
+            json.dump(mappings, f)
+    except:
+        pass
 
-# ========== PLAN CONFIG (CUSTOM REMOVED) ==========
+def load_sales_history():
+    data = redis_get("sales_history")
+    if data is not None:
+        return data
+    if os.path.exists(SALES_FILE):
+        try:
+            with open(SALES_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int, order_id=None):
+    sales = load_sales_history()
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    sale_data = {
+        "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "date": now.strftime("%Y-%m-%d"),
+        "year": now.year,
+        "month": now.month,
+        "server": str(server_num),
+        "chat_id": str(chat_id),
+        "plan_code": plan_code,
+        "plan_name": plan_name,
+        "months": months_count,
+        "price": int(price_int) if price_int else 0,
+        "order_id": order_id or "N/A"
+    }
+    sales.append(sale_data)
+    redis_set("sales_history", sales)
+    try:
+        with open(SALES_FILE, 'w') as f:
+            json.dump(sales, f)
+    except:
+        pass
+
+def save_admin_msg_map(target_chat_id, admin_msg_dict):
+    try:
+        data = redis_get("admin_msg_map") or {}
+        data[str(target_chat_id)] = admin_msg_dict
+        redis_set("admin_msg_map", data)
+    except:
+        pass
+
+def get_admin_msg_map(target_chat_id):
+    try:
+        data = redis_get("admin_msg_map") or {}
+        if not data and os.path.exists(ADMIN_MSG_MAP_FILE):
+            with open(ADMIN_MSG_MAP_FILE, 'r') as f:
+                data = json.load(f)
+        return data.get(str(target_chat_id), {})
+    except:
+        return {}
+
+def save_replacement_msg_map(request_key, admin_msg_dict):
+    try:
+        data = redis_get("replacement_msg_map") or {}
+        data[str(request_key)] = admin_msg_dict
+        redis_set("replacement_msg_map", data)
+    except:
+        pass
+
+def get_replacement_msg_map(request_key):
+    try:
+        data = redis_get("replacement_msg_map") or {}
+        if not data and os.path.exists(REPLACEMENT_MSG_MAP_FILE):
+            with open(REPLACEMENT_MSG_MAP_FILE, 'r') as f:
+                data = json.load(f)
+        return data.get(str(request_key), {})
+    except:
+        return {}
+
+# 🎟️ Wallet Amount Redeem Code Storage System
+def load_redeem_codes():
+    data = redis_get("redeem_codes")
+    if data is not None:
+        return data
+    if os.path.exists(REDEEM_FILE):
+        try:
+            with open(REDEEM_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_redeem_codes(codes):
+    redis_set("redeem_codes", codes)
+    try:
+        with open(REDEEM_FILE, 'w') as f:
+            json.dump(codes, f)
+    except:
+        pass
+
+def set_search_state(chat_id, is_searching=True):
+    states = redis_get("admin_search_state") or {}
+    states[str(chat_id)] = is_searching
+    redis_set("admin_search_state", states)
+
+def get_search_state(chat_id):
+    states = redis_get("admin_search_state") or {}
+    return states.get(str(chat_id), False)
+
+def set_redeem_state(chat_id, is_waiting=True):
+    states = redis_get("user_redeem_state") or {}
+    states[str(chat_id)] = is_waiting
+    redis_set("user_redeem_state", states)
+
+def get_redeem_state(chat_id):
+    states = redis_get("user_redeem_state") or {}
+    return states.get(str(chat_id), False)
+
+def set_replacement_state(chat_id, is_waiting=True):
+    states = redis_get("user_replacement_state") or {}
+    states[str(chat_id)] = is_waiting
+    redis_set("user_replacement_state", states)
+
+def get_replacement_state(chat_id):
+    states = redis_get("user_replacement_state") or {}
+    return states.get(str(chat_id), False)
+
+def clear_all_states(chat_id):
+    set_search_state(chat_id, False)
+    set_redeem_state(chat_id, False)
+    set_replacement_state(chat_id, False)
+    set_broadcast_state(chat_id, False)
+    set_manual_dispatch_state(chat_id, None)
+    set_topup_state(chat_id, None)
+    set_custom_topup_state(chat_id, False)
+    set_admin_deduct_state(chat_id, None)
+    set_renew_choice_state(chat_id, None)
+
+def is_user_subscribed(user_id):
+    if str(user_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return True
+    try:
+        member = bot.get_chat_member(REQUIRED_CHANNEL, user_id)
+        if member.status in ['creator', 'administrator', 'member']:
+            return True
+    except Exception as e:
+        print("Force Join Check Error:", e)
+        return True
+    return False
+
+def get_force_join_keyboard():
+    markup = InlineKeyboardMarkup()
+    channel_url = f"https://t.me/{REQUIRED_CHANNEL.replace('@', '')}"
+    markup.add(InlineKeyboardButton("📢 Channel သို့ Join ရန်", url=channel_url))
+    markup.add(InlineKeyboardButton("✅ Join ပြီးပါပြီ (Verify)", callback_data="verify_subscription"))
+    return markup
+
+def send_force_join_message(chat_id):
+    msg_text = (
+        f"⚠️ <b>သတိပေးချက်:</b>\n\n"
+        f"Bot အား စတင်အသုံးပြုရန်အတွက် အောက်ပါ ကျွန်တော်ရဲ့Telegram Channel ကို အရင်ဆုံး Join ပေးရန် လိုအပ်ပါသည်ခင်ဗျာ။\n\n"
+        f"👉 <b>Channel:</b> {REQUIRED_CHANNEL}\n\n"
+        f"Channel Join ပြီးပါက <b>'✅ Join ပြီးပါပြီ (Verify)'</b> ခလုတ်ကို နှိပ်၍ အသုံးပြုနိုင်ပါပြီ။"
+    )
+    bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=get_force_join_keyboard())
+
+# 🌟 Plan Configuration (Custom Plans များကို ဖယ်ရှားပြီးပါပြီ)
 PLANS = {
-    "starter":  {"name": "Starter Plan",      "data": "25 GB",  "bytes": 25 * 1000**3,  "price": 1000,  "months": 1},
-    "basic":    {"name": "Basic Plan",        "data": "50 GB",  "bytes": 50 * 1000**3,  "price": 2000,  "months": 1},
-    "standard": {"name": "Standard Plan",     "data": "75 GB",  "bytes": 75 * 1000**3,  "price": 3000,  "months": 1},
-    "premium":  {"name": "Premium Plan",      "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000,  "months": 1},
-    "vip":      {"name": "VIP Plan",          "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000,  "months": 1},
-    "pro":      {"name": "Pro Plan",          "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000,  "months": 1},
-    "ultimate": {"name": "Ultimate VIP Plan", "data": "500 GB", "bytes": 500 * 1000**3, "price": 10000, "months": 1},
+    "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": 1000, "manual": False, "months": 1},
+    "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": 2000, "manual": False, "months": 1},
+    "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": 3000, "manual": False, "months": 1},
+    "premium": {"name": "Premium Plan", "data": "100 GB", "bytes": 100 * 1000**3, "price": 4000, "manual": False, "months": 1},
+    "vip": {"name": "VIP Plan", "data": "150 GB", "bytes": 150 * 1000**3, "price": 5000, "manual": False, "months": 1},
+    "pro": {"name": "Pro Plan", "data": "200 GB", "bytes": 200 * 1000**3, "price": 7000, "manual": False, "months": 1},
+    "ultimate": {"name": "Ultimate VIP Plan", "data": "500 GB", "bytes": 500 * 1000**3, "price": 10000, "manual": False, "months": 1},
 }
 
-def bytes_to_gb(b): return round(b / (1000 ** 3), 2)
+def bytes_to_gb(bytes_value):
+    return round(bytes_value / (1000 ** 3), 2)
 
 def clean_ss_url(url_str):
-    if not url_str: return ""
-    return url_str.replace("ss://", "").split("#")[0].split("?")[0].strip()
+    if not url_str:
+        return ""
+    main_part = url_str.replace("ss://", "").split("#")[0].split("?")[0]
+    return main_part.strip()
 
-# ========== KEYBOARDS ==========
+# 📱 ပင်မ Menu Keyboard
 def get_main_menu_keyboard(chat_id=None):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(KeyboardButton("🛍️ Plan များဝယ်ရန်"), KeyboardButton("💰 ငွေဖြည့်ရန်"))
-    markup.add(KeyboardButton("💳 လက်ကျန်ငွေ"), KeyboardButton("📇 ဝယ်ယူမှုမှတ်တမ်း"))
-    markup.add(KeyboardButton("🧰 Data ပမာဏစစ်ရန်"), KeyboardButton("♻️ Key လဲရန်"))
-    markup.add(KeyboardButton("👨‍💻 Admin ဆက်သွယ်ရန်"), KeyboardButton("🤖 Bot Refresh"))
+    btn_buy = KeyboardButton("🛍️ Plan များဝယ်ရန်")
+    btn_topup = KeyboardButton("💰 ငွေဖြည့်ရန်")
+    btn_wallet = KeyboardButton("💳 လက်ကျန်ငွေ")
+    btn_check = KeyboardButton("🧰 Data ပမာဏစစ်ရန်")
+    btn_history = KeyboardButton("📇 ဝယ်ယူမှုမှတ်တမ်း")
+    btn_replace = KeyboardButton("♻️ Key လဲရန်")
+    btn_admin = KeyboardButton("👨‍💻 Admin ဆက်သွယ်ရန်")
+    btn_refresh = KeyboardButton("🤖 Bot Refresh")
+    
+    markup.add(btn_buy, btn_topup)
+    markup.add(btn_wallet, btn_history)
+    markup.add(btn_check, btn_replace)
+    markup.add(btn_admin, btn_refresh)
+    
     if chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
-        markup.add(KeyboardButton("📊 Total Data Usage"), KeyboardButton("🎟️ Gen RD Code"))
-        markup.add(KeyboardButton("💰 လစဉ် ဝင်ငွေ"), KeyboardButton("🔍 Cus ရှာရန်"))
-        markup.add(KeyboardButton("💸 ငွေနှုတ်ရန်"), KeyboardButton("📢 Broadcast စာပို့ရန်"))
+        btn_total_usage = KeyboardButton("📊 Total Data Usage")
+        btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
+        btn_gen_code = KeyboardButton("🎟️ Gen RD Code")
+        btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
+        btn_deduct = KeyboardButton("💸 ငွေနှုတ်ရန်")
+        btn_broadcast = KeyboardButton("📢 Broadcast စာပို့ရန်")
+        markup.add(btn_total_usage, btn_gen_code)
+        markup.add(btn_monthly_income, btn_search_user)
+        markup.add(btn_deduct, btn_broadcast)
+        
     return markup
 
 def get_back_inline_keyboard():
@@ -402,113 +1012,730 @@ def get_plan_keyboard():
 
 def get_topup_amounts_keyboard():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("💵 1,000 Ks", callback_data="topup_amt_1000"), InlineKeyboardButton("💵 2,000 Ks", callback_data="topup_amt_2000"))
-    markup.row(InlineKeyboardButton("💵 3,000 Ks", callback_data="topup_amt_3000"), InlineKeyboardButton("💵 5,000 Ks", callback_data="topup_amt_5000"))
-    markup.row(InlineKeyboardButton("💵 10,000 Ks", callback_data="topup_amt_10000"), InlineKeyboardButton("💵 20,000 Ks", callback_data="topup_amt_20000"))
-    markup.row(InlineKeyboardButton("✍️ စိတ်ကြိုက်ပမာဏ ရိုက်ထည့်မည်", callback_data="topup_amt_custom"))
+    markup.row(
+        InlineKeyboardButton("💵 1,000 Ks", callback_data="topup_amt_1000"),
+        InlineKeyboardButton("💵 2,000 Ks", callback_data="topup_amt_2000")
+    )
+    markup.row(
+        InlineKeyboardButton("💵 3,000 Ks", callback_data="topup_amt_3000"),
+        InlineKeyboardButton("💵 5,000 Ks", callback_data="topup_amt_5000")
+    )
+    markup.row(
+        InlineKeyboardButton("💵 10,000 Ks", callback_data="topup_amt_10000"),
+        InlineKeyboardButton("💵 20,000 Ks", callback_data="topup_amt_20000")
+    )
+    markup.row(
+        InlineKeyboardButton("✍️ စိတ်ကြိုက်ပမာဏ ရိုက်ထည့်မည်", callback_data="topup_amt_custom")
+    )
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
 def get_admin_rd_amounts_keyboard():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("💵 1,000 Ks", callback_data="adm_rdamt_1000"), InlineKeyboardButton("💵 3,000 Ks", callback_data="adm_rdamt_3000"))
-    markup.row(InlineKeyboardButton("💵 5,000 Ks", callback_data="adm_rdamt_5000"), InlineKeyboardButton("💵 10,000 Ks", callback_data="adm_rdamt_10000"))
+    markup.row(
+        InlineKeyboardButton("💵 1,000 Ks", callback_data="adm_rdamt_1000"),
+        InlineKeyboardButton("💵 3,000 Ks", callback_data="adm_rdamt_3000")
+    )
+    markup.row(
+        InlineKeyboardButton("💵 5,000 Ks", callback_data="adm_rdamt_5000"),
+        InlineKeyboardButton("💵 10,000 Ks", callback_data="adm_rdamt_10000")
+    )
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
 def get_admin_rd_mode_keyboard(amt):
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton(f"👤 တစ်ဦးတည်းသုံး ({int(amt):,} Ks)", callback_data=f"adm_rdmode_{amt}_single"))
-    markup.row(InlineKeyboardButton("👥 လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)", callback_data=f"adm_rdmode_{amt}_shared"))
+    markup.row(
+        InlineKeyboardButton(f"👤 တစ်ဦးတည်းသုံး ({int(amt):,} Ks)", callback_data=f"adm_rdmode_{amt}_single")
+    )
+    markup.row(
+        InlineKeyboardButton("👥 လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)", callback_data=f"adm_rdmode_{amt}_shared")
+    )
     markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="back_to_gen_rd"))
     return markup
 
 def get_admin_rd_days_keyboard(amt, mode):
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("📅 1 ရက်", callback_data=f"adm_rddur_{amt}_{mode}_1"), InlineKeyboardButton("📅 3 ရက်", callback_data=f"adm_rddur_{amt}_{mode}_3"))
-    markup.row(InlineKeyboardButton("📅 5 ရက်", callback_data=f"adm_rddur_{amt}_{mode}_5"), InlineKeyboardButton("📅 7 ရက်", callback_data=f"adm_rddur_{amt}_{mode}_7"))
-    markup.row(InlineKeyboardButton("🔙 နောက်သို့", callback_data="back_to_gen_rd"))
+    markup.row(
+        InlineKeyboardButton("📅 1 ရက် သက်တမ်း", callback_data=f"adm_rddur_{amt}_{mode}_1"),
+        InlineKeyboardButton("📅 3 ရက် သက်တမ်း", callback_data=f"adm_rddur_{amt}_{mode}_3")
+    )
+    markup.row(
+        InlineKeyboardButton("📅 5 ရက် သက်တမ်း", callback_data=f"adm_rddur_{amt}_{mode}_5"),
+        InlineKeyboardButton("📅 7 ရက် သက်တမ်း", callback_data=f"adm_rddur_{amt}_{mode}_7")
+    )
+    markup.row(InlineKeyboardButton("🔙 နောက်သို့ ပြန်သွားရန်", callback_data="back_to_gen_rd"))
     return markup
 
 def get_admin_rd_count_keyboard(amt, mode, days):
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("1 ခု", callback_data=f"adm_rdcnt_{amt}_{mode}_{days}_1"), InlineKeyboardButton("3 ခု", callback_data=f"adm_rdcnt_{amt}_{mode}_{days}_3"))
-    markup.row(InlineKeyboardButton("5 ခု", callback_data=f"adm_rdcnt_{amt}_{mode}_{days}_5"), InlineKeyboardButton("10 ခု", callback_data=f"adm_rdcnt_{amt}_{mode}_{days}_10"))
-    markup.row(InlineKeyboardButton("🔙 ရက်ပေါင်း", callback_data=f"adm_rdmode_{amt}_{mode}"))
+    markup.row(
+        InlineKeyboardButton("1 ခု", callback_data=f"adm_rdcnt_{amt}_{mode}_{days}_1"),
+        InlineKeyboardButton("3 ခု", callback_data=f"adm_rdcnt_{amt}_{mode}_{days}_3")
+    )
+    markup.row(
+        InlineKeyboardButton("5 ခု", callback_data=f"adm_rdcnt_{amt}_{mode}_{days}_5"),
+        InlineKeyboardButton("10 ခု", callback_data=f"adm_rdcnt_{amt}_{mode}_{days}_10")
+    )
+    markup.row(InlineKeyboardButton("🔙 ရက်ပေါင်း ပြန်ရွေးရန်", callback_data=f"adm_rdmode_{amt}_{mode}"))
     return markup
 
 def get_admin_deduct_type_keyboard():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("🎁 Redeem Bonus ငွေနှုတ်မည်", callback_data="adm_deduct_type_bonus"))
-    markup.row(InlineKeyboardButton("💵 လက်ကျန်ငွေ ပမာဏနှုတ်မည်", callback_data="adm_deduct_type_main"))
-    markup.row(InlineKeyboardButton("⚡ စုစုပေါင်း အကုန်နှုတ်မည်", callback_data="adm_deduct_type_all"))
-    markup.row(InlineKeyboardButton("🔙 မူလ Menu", callback_data="back_to_main"))
-    return markup
-
-# ========== FORCE JOIN ==========
-def is_user_subscribed(user_id):
-    if str(user_id) in [str(aid) for aid in ADMIN_CHAT_IDS]: return True
-    try:
-        member = bot.get_chat_member(REQUIRED_CHANNEL, user_id)
-        if member.status in ['creator', 'administrator', 'member']: return True
-    except Exception as e:
-        print("Force Join Check Error:", e)
-        return True
-    return False
-
-def get_force_join_keyboard():
-    markup = InlineKeyboardMarkup()
-    channel_url = f"https://t.me/{REQUIRED_CHANNEL.replace('@', '')}"
-    markup.add(InlineKeyboardButton("📢 Channel သို့ Join ရန်", url=channel_url))
-    markup.add(InlineKeyboardButton("✅ Join ပြီးပါပြီ (Verify)", callback_data="verify_subscription"))
-    return markup
-
-def send_force_join_message(chat_id):
-    bot.send_message(
-        chat_id,
-        f"⚠️ <b>သတိပေးချက်:</b>\n\nBot အား စတင်အသုံးပြုရန်အတွက် အောက်ပါ Channel ကို အရင်ဆုံး Join ပေးပါ။\n\n👉 <b>Channel:</b> {REQUIRED_CHANNEL}\n\nJoin ပြီးပါက Verify ခလုတ်ကို နှိပ်ပါ။",
-        parse_mode="HTML", reply_markup=get_force_join_keyboard()
+    markup.row(
+        InlineKeyboardButton("🎁 Redeem Bonus ငွေနှုတ်မည်", callback_data="adm_deduct_type_bonus")
     )
+    markup.row(
+        InlineKeyboardButton("💵 လက်ကျန်ငွေ ပမာဏနှုတ်မည်", callback_data="adm_deduct_type_main")
+    )
+    markup.row(
+        InlineKeyboardButton("⚡ စုစုပေါင်း လက်ကျန်ငွေမှ အကုန်နှုတ်မည်", callback_data="adm_deduct_type_all")
+    )
+    markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+    return markup
 
-# ========== OUTLINE KEY CREATION ==========
+def get_monthly_revenue_report():
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    now_str = now.strftime("%d/%m/%Y (%I:%M %p)")
+    current_year = now.year
+    current_month = now.month
+    today_str = now.strftime("%Y-%m-%d")
+
+    sales_history = load_sales_history()
+
+    s1_keys, s1_rev, s1_today_keys, s1_today_rev = 0, 0, 0, 0
+    s2_keys, s2_rev, s2_today_keys, s2_today_rev = 0, 0, 0, 0
+    s3_keys, s3_rev, s3_today_keys, s3_today_rev = 0, 0, 0, 0
+    vip_keys, vip_rev, vip_today_keys, vip_today_rev = 0, 0, 0, 0
+
+    today_plans = {}
+
+    for item in sales_history:
+        item_year = item.get("year")
+        item_month = item.get("month")
+        
+        if item_year == current_year and item_month == current_month:
+            srv = str(item.get("server", "1"))
+            price = int(item.get("price", 0))
+            p_name = item.get("plan_name", "Plan")
+            p_months = item.get("months", 1)
+            p_key_str = f"{p_name} [{p_months} လစာ]"
+            is_today = (item.get("date") == today_str)
+
+            if is_today:
+                today_plans[p_key_str] = today_plans.get(p_key_str, 0) + 1
+
+            if srv == "1":
+                s1_keys += 1
+                s1_rev += price
+                if is_today: s1_today_keys += 1; s1_today_rev += price
+            elif srv == "2":
+                s2_keys += 1
+                s2_rev += price
+                if is_today: s2_today_keys += 1; s2_today_rev += price
+            elif srv == "3":
+                s3_keys += 1
+                s3_rev += price
+                if is_today: s3_today_keys += 1; s3_today_rev += price
+            else:
+                vip_keys += 1
+                vip_rev += price
+                if is_today: vip_today_keys += 1; vip_today_rev += price
+
+    total_keys = s1_keys + s2_keys + s3_keys + vip_keys
+    total_rev = s1_rev + s2_rev + s3_rev + vip_rev
+    today_keys = s1_today_keys + s2_today_keys + s3_today_keys + vip_today_keys
+    today_rev = s1_today_rev + s2_today_rev + s3_today_rev + vip_today_rev
+
+    def format_sales_breakdown(plans_dict):
+        if not plans_dict:
+            return "   • <i>မရှိသေးပါ</i>"
+        lines = []
+        for k, v in plans_dict.items():
+            lines.append(f"   • {k}: <b>{v}</b> ခု")
+        return "\n".join(lines)
+
+    report = (
+        f"💵 <b>MONTHLY SALES REVENUE REPORT</b>\n"
+        f"📅 <b>စစ်ဆေးသည့် ရက်စွဲ:</b> <code>{now_str}</code>\n"
+        f"━━━━━━━━━━━━━━━━━\n\n"
+        f"🔥 <b>ဒီနေ့ ရောင်းရငွေ (Today's Sales)</b>\n"
+        f"🔑 ရောင်းရသော Key: <b>{today_keys} ခု</b>\n"
+        f"{format_sales_breakdown(today_plans)}\n"
+        f"💰 ဒီနေ့ ဝင်ငွေ: <b>{today_rev:,} Ks</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━\n\n"
+        f"📡 <b>Server 1 🇸🇬 :</b> <b>{s1_rev:,} Ks</b> ({s1_keys} ခု)\n"
+        f"📡 <b>Server 2 🇸🇬 :</b> <b>{s2_rev:,} Ks</b> ({s2_keys} ခု)\n"
+        f"📡 <b>Server 3 🇸🇬 :</b> <b>{s3_rev:,} Ks</b> ({s3_keys} ခု)\n"
+        f"⚡ <b>VIP (စိတ်ကြိုက်သုံး) :</b> <b>{vip_rev:,} Ks</b> ({vip_keys} ခု)\n\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"🌐 <b>Total This Month Paid Keys:</b> <b>{total_keys} ခု</b>\n"
+        f"💎 <b>ဒီလ စုစုပေါင်း ဝင်ငွေ:</b> <b>{total_rev:,} MMK</b>\n\n"
+    )
+    return report
+
+def get_servers_total_usage():
+    def get_server_stats(api_url):
+        total_keys = 0
+        total_bytes = 0
+
+        try:
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=6)
+
+            if keys_resp.status_code == 200:
+                keys_data = keys_resp.json().get("accessKeys", [])
+                total_keys = len(keys_data)
+
+            if metrics_resp.status_code == 200:
+                bytes_dict = metrics_resp.json().get("bytesTransferredByUserId", {})
+                total_bytes = sum(bytes_dict.values())
+        except:
+            pass
+
+        return total_keys, total_bytes
+
+    s1_total, s1_bytes = get_server_stats(OUTLINE_API_URL_1)
+    s2_total, s2_bytes = get_server_stats(OUTLINE_API_URL_2)
+    s3_total, s3_bytes = get_server_stats(OUTLINE_API_URL_3)
+
+    s1_gb = bytes_to_gb(s1_bytes)
+    s2_gb = bytes_to_gb(s2_bytes)
+    s3_gb = bytes_to_gb(s3_bytes)
+    
+    overall_bytes = s1_bytes + s2_bytes + s3_bytes
+    overall_gb = bytes_to_gb(overall_bytes)
+    overall_tb = round(overall_gb / 1000, 2)
+
+    report = (
+        f"📊 <b>SERVER DATA STATS REPORT</b>\n\n"
+        f"📡 <b>Server 1 🇸🇬</b>\n"
+        f"🔑 Total Keys: <b>{s1_total}</b>\n"
+        f"🧰 Total Usage: <b>{s1_gb} GB</b>\n\n"
+        f"📡 <b>Server 2 🇸🇬</b>\n"
+        f"🔑 Total Keys: <b>{s2_total}</b>\n"
+        f"🧰 Total Usage: <b>{s2_gb} GB</b>\n\n"
+        f"📡 <b>Server 3 🇸🇬</b>\n"
+        f"🔑 Total Keys: <b>{s3_total}</b>\n"
+        f"🧰 Total Usage: <b>{s3_gb} GB</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
+    )
+    return report
+
+def get_customer_summary_stats():
+    s1_users = set()
+    s2_users = set()
+    s3_users = set()
+    total_unique_users = set()
+
+    for srv_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
+        try:
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
+            if res.status_code == 200:
+                keys = res.json().get("accessKeys", [])
+                for k in keys:
+                    k_name = k.get("name", "").strip()
+                    cid_match = re.search(r'\((\d+)\)', k_name)
+                    identifier = cid_match.group(1) if cid_match else k_name.lower()
+                    if identifier:
+                        if srv_num == "1": s1_users.add(identifier)
+                        elif srv_num == "2": s2_users.add(identifier)
+                        elif srv_num == "3": s3_users.add(identifier)
+                        total_unique_users.add(identifier)
+        except:
+            pass
+
+    try:
+        sync_legacy_redis_data_to_registry()
+    except:
+        pass
+
+    persistent_registry = load_persistent_keys()
+    for k_data in persistent_registry.values():
+        cid = k_data.get("chat_id")
+        k_name = k_data.get("name", "").strip()
+        srv = str(k_data.get("server", "1"))
+        identifier = cid if cid else k_name.lower()
+        if identifier:
+            if srv == "1": s1_users.add(identifier)
+            elif srv == "2": s2_users.add(identifier)
+            elif srv == "3": s3_users.add(identifier)
+            total_unique_users.add(identifier)
+
+    summary_text = (
+        f"👥 <b>လက်ရှိ Customer စာရင်း အကျဉ်းချုပ်</b>\n\n"
+        f"📡 Server 1 🇸🇬 : <b>{len(s1_users)}</b> ယောက်\n"
+        f"📡 Server 2 🇸🇬 : <b>{len(s2_users)}</b> ယောက်\n"
+        f"📡 Server 3 🇸🇬 : <b>{len(s3_users)}</b> ယောက်\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"🌟 <b>စုစုပေါင်း Customer ဦးရေ:</b> <b>{len(total_unique_users)}</b> ယောက်\n\n"
+        f"👇 ရှာဖွေလိုသော <b>Cus နာမည်အစ စာလုံး (ဥပမာ - H, T, A) သို့မဟုတ် Chat ID / Order ID</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:"
+    )
+    return summary_text
+
+def search_users_by_query(query):
+    query_clean = query.strip().lower()
+    markup = InlineKeyboardMarkup()
+    found_matches = []
+    seen_identifiers = set()
+    key_orders_map = load_key_orders()
+
+    try:
+        sync_legacy_redis_data_to_registry()
+    except:
+        pass
+
+    for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
+        try:
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
+            if res.status_code == 200:
+                keys = res.json().get("accessKeys", [])
+                sync_keys_to_persistent_registry(server_num, keys)
+                for k in keys:
+                    k_name = k.get("name", "").strip()
+                    k_name_lower = k_name.lower()
+                    assigned_ord = key_orders_map.get(k_name_lower, "").lower()
+                    k_id = str(k.get("id"))
+                    uid = f"{server_num}_{k_id}"
+
+                    if len(query_clean) == 1:
+                        if k_name_lower.startswith(query_clean):
+                            found_matches.append((server_num, k_id, k_name))
+                            seen_identifiers.add(uid)
+                    else:
+                        if query_clean in k_name_lower or (assigned_ord and query_clean in assigned_ord):
+                            found_matches.append((server_num, k_id, k_name))
+                            seen_identifiers.add(uid)
+        except:
+            pass
+
+    persistent_registry = load_persistent_keys()
+    for uid, k_data in persistent_registry.items():
+        if uid in seen_identifiers:
+            continue
+            
+        k_name = k_data.get("name", "")
+        k_name_lower = k_name.lower()
+        k_ord = k_data.get("order_id", "").lower()
+        srv_num = k_data.get("server", "1")
+        k_id = k_data.get("key_id", "0")
+        k_cid = k_data.get("chat_id", "").lower()
+
+        if len(query_clean) == 1:
+            if k_name_lower.startswith(query_clean):
+                found_matches.append((srv_num, k_id, k_name))
+                seen_identifiers.add(uid)
+        else:
+            if query_clean in k_name_lower or (k_ord and query_clean in k_ord) or (k_cid and query_clean in k_cid):
+                found_matches.append((srv_num, k_id, k_name))
+                seen_identifiers.add(uid)
+
+    for server_num, key_id, k_name in found_matches[:30]:
+        srv_icon = f"📡 S{server_num}🇸🇬" if server_num != "VIP" else "⚡ VIP 🇸🇬"
+        btn_text = f"{srv_icon} | {k_name}"
+        markup.add(InlineKeyboardButton(btn_text, callback_data=f"viewkey_{server_num}_{key_id}"))
+
+    return found_matches, markup
+
+# 🔙 Back to Main Menu Callback Handler
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
+def handle_back_to_main_callback(call):
+    try:
+        bot.answer_callback_query(call.id, "🔙 မူလ Menu သို့ ပြန်သွားပါပြီ။")
+    except:
+        pass
+    chat_id = call.message.chat.id
+    clear_all_states(chat_id)
+    try:
+        bot.delete_message(chat_id, call.message.message_id)
+    except:
+        pass
+    welcome_text = (
+        "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
+    )
+    bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
+
+# 🔙 Admin Back to Gen RD Code Handler
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_gen_rd")
+def handle_back_to_gen_rd(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    try:
+        bot.edit_message_text(
+            "🎟️ <b>Wallet Amount Redeem Code ထုတ်ရန်:</b>\n\nကျေးဇူးပြု၍ မည်သည့် <b>ငွေပမာဏ</b> အတွက် Code ထုတ်ယူမည်ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+            reply_markup=get_admin_rd_amounts_keyboard()
+        )
+    except Exception:
+        bot.send_message(call.message.chat.id, "🎟️ <b>Wallet Amount Redeem Code ထုတ်ရန်:</b>", parse_mode="HTML", reply_markup=get_admin_rd_amounts_keyboard())
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdamt_"))
+def handle_admin_rd_amt_select(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    
+    amt = int(call.data.replace("adm_rdamt_", ""))
+    
+    try:
+        if amt in [5000, 10000]:
+            prompt = (
+                f"🎟️ <b>{amt:,} Ks Wallet Redeem Code</b>\n\n"
+                f"မည်သည့် ပုံစံဖြင့် ထုတ်ယူလိုပါသလဲ ရွေးချယ်ပေးပါခင်ဗျာ:"
+            )
+            bot.edit_message_text(
+                prompt,
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML",
+                reply_markup=get_admin_rd_mode_keyboard(amt)
+            )
+        else:
+            prompt = f"🎟️ <b>{amt:,} Ks (တစ်ဦးတည်းသုံး)</b> အတွက် ရရှိမည့် Wallet ငွေ၏ <b>သက်တမ်း (ရက်)</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
+            bot.edit_message_text(
+                prompt,
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML",
+                reply_markup=get_admin_rd_days_keyboard(amt, "single")
+            )
+    except Exception:
+        pass
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdmode_"))
+def handle_admin_rd_mode_select(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    
+    parts = call.data.split("_")
+    amt = parts[2]
+    mode = parts[3]
+    
+    mode_text = "တစ်ဦးတည်းသုံး" if mode == "single" else "လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)"
+    prompt = f"🎟️ <b>{int(amt):,} Ks ({mode_text})</b> အတွက် ရရှိမည့် Wallet ငွေ၏ <b>သက်တမ်း (ရက်)</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
+    try:
+        bot.edit_message_text(
+            prompt,
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+            reply_markup=get_admin_rd_days_keyboard(amt, mode)
+        )
+    except Exception:
+        pass
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rddur_"))
+def handle_admin_rd_days_select(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    
+    parts = call.data.split("_")
+    amt = parts[2]
+    mode = parts[3]
+    days = parts[4]
+    
+    mode_text = "တစ်ဦးတည်းသုံး" if mode == "single" else "လူအများခွဲသုံး"
+    prompt = f"🎟️ <b>{int(amt):,} Ks ({mode_text} - ငွေသက်တမ်း {days} ရက်)</b> အတွက် မည်မျှအရေအတွက် Code ထုတ်ယူလိုပါသလဲ?"
+    try:
+        bot.edit_message_text(
+            prompt,
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+            reply_markup=get_admin_rd_count_keyboard(amt, mode, days)
+        )
+    except Exception:
+        pass
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdcnt_"))
+def handle_admin_rd_generate(call):
+    try:
+        bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
+    except:
+        pass
+    if is_callback_processed(f"adm_rdgen_{call.message.message_id}_{call.data}"):
+        return
+
+    user_id = str(call.from_user.id)
+    chat_id = str(call.message.chat.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS] and chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    
+    parts = call.data.split("_")
+    amt = int(parts[2])
+    mode = parts[3]
+    days = int(parts[4])
+    count = int(parts[5])
+    
+    codes = load_redeem_codes()
+    generated_list = []
+    
+    for _ in range(count):
+        code = generate_random_redeem_code()
+        codes[code] = {
+            "type": "wallet",
+            "amount": amt,
+            "mode": mode,
+            "remaining": amt,
+            "validity_days": days,
+            "claimed_users": []
+        }
+        generated_list.append(f"<code>{code}</code>")
+        
+    save_redeem_codes(codes)
+    
+    if mode == "shared":
+        mode_desc = f"လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)"
+    else:
+        mode_desc = f"တစ်ဦးတည်းသုံး ({amt:,} Ks အပြည့်)"
+
+    reply_msg = (
+        f"🎉 <b>Wallet Amount Redeem Code ({count} ခု) အောင်မြင်စွာ ထုတ်ပြီးပါပြီ:</b>\n\n"
+        f"💵 သတ်မှတ်ငွေ: <b>{amt:,} MMK</b>\n"
+        f"📌 ပုံစံ: <b>{mode_desc}</b>\n"
+        f"⏰ Wallet ငွေ သက်တမ်း: <b>{days} ရက်</b>\n\n"
+        + "\n".join(generated_list) +
+        f"\n\n💡 <i>Customer များသည် Wallet Menu ထဲရှိ '🎟️ Redeem Code သုံးမည်' တွင် ထည့်သွင်းပြီး {days} ရက်အတွင်း အသုံးပြုနိုင်ပါပြီဗျာ။ (အဆိုပါငွေဖြင့် ဝယ်ယူသော Key သက်တမ်းသည်လည်း {days} ရက် ဖြစ်ပါမည်)</i>"
+    )
+    try:
+        bot.edit_message_text(reply_msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    except Exception:
+        bot.send_message(call.message.chat.id, reply_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_deduct_type_"))
+def handle_admin_deduct_type_select(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    user_id = str(call.from_user.id)
+    if user_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+
+    dtype = call.data.replace("adm_deduct_type_", "")
+    set_admin_deduct_state(call.message.chat.id, {"type": dtype, "step": "ask_user"})
+
+    type_name = "Redeem Bonus ငွေ" if dtype == "bonus" else ("လက်ကျန်ငွေ ပမာဏ" if dtype == "main" else "စုစုပေါင်း လက်ကျန်ငွေ")
+    prompt = (
+        f"💸 <b>{type_name} နှုတ်ယူရန်:</b>\n\n"
+        f"👇 ငွေနှုတ်လိုသော Customer ၏ <b>Telegram Chat ID</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:"
+    )
+    bot.edit_message_text(prompt, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
+def handle_view_key_detail(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    
+    parts = call.data.split("_")
+    server_num = parts[1]
+    key_id = parts[2]
+    
+    api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
+    api_url = api_url.rstrip('/')
+    
+    target_key = None
+    bytes_transferred = {}
+
+    try:
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
+        if keys_resp.status_code == 200:
+            keys_data = keys_resp.json().get("accessKeys", [])
+            for k in keys_data:
+                if str(k.get("id")) == str(key_id):
+                    target_key = k
+                    break
+                    
+            if target_key:
+                try:
+                    metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=4)
+                    if metrics_resp.status_code == 200:
+                        bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
+                except:
+                    pass
+    except Exception as e:
+        print("Live fetch error, switching to persistent cache:", e)
+
+    cached_info = None
+    if not target_key:
+        persistent_registry = load_persistent_keys()
+        cached_info = persistent_registry.get(f"{server_num}_{key_id}")
+        
+    if target_key or cached_info:
+        if target_key:
+            full_name = target_key.get("name", "Unnamed Key")
+            raw_access_url = target_key.get("accessUrl", "")
+            final_key = f"{raw_access_url}#{full_name}" if full_name else raw_access_url
+            limit_bytes = target_key.get("dataLimit", {}).get("bytes")
+            plan_gb = f"{bytes_to_gb(limit_bytes)} GB" if limit_bytes else "Unlimited"
+            
+            usage_bytes = bytes_transferred.get(str(key_id), 0)
+            usage_gb = f"{bytes_to_gb(usage_bytes)} GB" if bytes_transferred else "ဒေတာဖတ်မရပါ"
+            
+            date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
+            end_date = date_match.group(0) if date_match else "မသိရှိပါ"
+            order_id_disp = get_order_id_for_key(full_name)
+            server_name = f"Server {server_num} 🇸🇬"
+        else:
+            full_name = cached_info.get("name", "Unnamed Key")
+            final_key = cached_info.get("access_url", "N/A")
+            l_b = cached_info.get("limit_bytes")
+            plan_gb = f"{bytes_to_gb(l_b)} GB" if l_b else "Unlimited"
+            usage_gb = "ဆာဗာလိုင်းမရသဖြင့် မသိရှိနိုင်ပါ"
+            end_date = cached_info.get("expire_date", "မသိရှိပါ")
+            order_id_disp = cached_info.get("order_id", "N/A")
+            server_name = f"Server {server_num} 🇸🇬 <i>(⚠️ ဆာဗာ Offline ဖြစ်နေပါသည်)</i>"
+
+        order_line = f"🧾 <b>Order ID:</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("🗑️ Key ဖျက်ရန် (Delete)", callback_data=f"delkey_ask_{server_num}_{key_id}"))
+
+        detail_msg = (
+            f"👤 <b>Customer Information✅</b>\n\n"
+            f"🤖 <b>Name:</b> {html.escape(full_name)}\n"
+            f"{order_line}"
+            f"📡 <b>Server:</b> {server_name}\n"
+            f"🧰 <b>Data Usage :</b> <code>{usage_gb}</code> / <code>{plan_gb}</code>\n"
+            f"⏰ <b>Expired Date:</b> {end_date}\n"
+            f"🔑 <b>VPN Key Link:</b>\n\n"
+            f"<code>{final_key}</code>"
+        )
+        bot.send_message(call.message.chat.id, detail_msg, parse_mode="HTML", reply_markup=markup)
+    else:
+        bot.send_message(call.message.chat.id, "❌ အဆိုပါ Key ၏ အချက်အလက်များကို ဆာဗာနှင့် မှတ်တမ်းများထဲတွင် ရှာမတွေ့ပါခင်ဗျာ။")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("delkey_"))
+def handle_admin_del_key(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    if is_callback_processed(f"del_{call.message.message_id}_{call.data}"):
+        return
+
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+
+    parts = call.data.split("_")
+    action = parts[1]
+    server_num = parts[2]
+    key_id = parts[3]
+
+    if action == "ask":
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton("✅ Yes (ဖျက်မည်)", callback_data=f"delkey_confirm_{server_num}_{key_id}"),
+            InlineKeyboardButton("❌ No (မဖျက်တော့ပါ)", callback_data="delkey_cancel")
+        )
+        bot.send_message(call.message.chat.id, f"⚠️ <b>သတိပေးချက်:</b> Server {server_num} ပေါ်မှ ID ({key_id}) ရှိသော Key ကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?", parse_mode="HTML", reply_markup=markup)
+
+    elif action == "confirm":
+        persistent_registry = load_persistent_keys()
+        uid = f"{server_num}_{key_id}"
+        if uid in persistent_registry:
+            del persistent_registry[uid]
+            redis_set("persistent_keys_registry", persistent_registry)
+
+        api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
+        try:
+            del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+            bot.edit_message_text(f"✅ <b>Server {server_num} ပေါ်မှ Key (ID: {key_id}) အား အောင်မြင်စွာ ဖျက်ဆီးပြီးပါပြီဗျာ။</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
+        except:
+            bot.edit_message_text(f"✅ <b>မှတ်တမ်းများထဲမှ Key (ID: {key_id}) အား ဖျက်ဆီးပြီးပါပြီ။ (Server Down နေသဖြင့် Server ဘက်သို့ သီးသန့် အမိန့်မရောက်ခဲ့ပါ)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
+
+    elif action == "cancel":
+        bot.edit_message_text("❌ Key ဖျက်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီခင်ဗျာ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
+
 def get_user_next_key_number(user_name, target_chat_id=None):
     max_num = 0
     found_any = False
     clean_user = user_name.strip().lower()
+
     persistent_registry = load_persistent_keys()
     for k_data in persistent_registry.values():
         k_name = k_data.get("name", "")
         if (target_chat_id and f"({target_chat_id})" in k_name) or (clean_user in k_name.lower()):
             found_any = True
-            num_match = re.search(r'\((\d+)\)\s*\d{1,2}\.\d{1,2}\.', k_name) or re.search(r'\((\d+)\)', k_name)
+            num_match = re.search(r'\((\d+)\)\s*\d{1,2}\.\d{1,2}\.', k_name)
+            if not num_match:
+                num_match = re.search(r'\((\d+)\)', k_name)
+
             if num_match:
                 try:
                     val = int(num_match.group(1))
-                    if str(val) != str(target_chat_id) and val > max_num: max_num = val
-                except: pass
+                    if str(val) != str(target_chat_id) and val > max_num:
+                        max_num = val
+                except:
+                    pass
+
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
             if res.status_code == 200:
-                for k in res.json().get("accessKeys", []):
+                keys = res.json().get("accessKeys", [])
+                for k in keys:
                     k_name = k.get("name", "")
                     if (target_chat_id and f"({target_chat_id})" in k_name) or (clean_user in k_name.lower()):
                         found_any = True
-                        num_match = re.search(r'\((\d+)\)\s*\d{1,2}\.\d{1,2}\.', k_name) or re.search(r'\((\d+)\)', k_name)
+                        num_match = re.search(r'\((\d+)\)\s*\d{1,2}\.\d{1,2}\.', k_name)
+                        if not num_match:
+                            num_match = re.search(r'\((\d+)\)', k_name)
+
                         if num_match:
                             try:
                                 val = int(num_match.group(1))
-                                if str(val) != str(target_chat_id) and val > max_num: max_num = val
-                            except: pass
-        except: pass
-    if not found_any: return 0, 1
-    elif max_num == 0: return 1, 2
-    else: return max_num, max_num + 1
+                                if str(val) != str(target_chat_id) and val > max_num:
+                                    max_num = val
+                            except:
+                                pass
+        except:
+            pass
+
+    if not found_any:
+        return 0, 1
+    elif max_num == 0:
+        return 1, 2
+    else:
+        return max_num, max_num + 1
 
 def extract_chat_id_from_key_name(key_name):
-    if not key_name: return None
+    if not key_name:
+        return None
     match = re.search(r'\((\d{8,12})\)', key_name)
-    return match.group(1) if match else None
+    if match:
+        return match.group(1)
+    return None
 
 def get_user_ultimate_keys(chat_id, server_num="1"):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
@@ -516,45 +1743,66 @@ def get_user_ultimate_keys(chat_id, server_num="1"):
     try:
         res = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
         if res.status_code == 200:
-            for k in res.json().get("accessKeys", []):
+            keys_data = res.json().get("accessKeys", [])
+            for k in keys_data:
                 k_name = k.get("name", "")
-                cid = extract_chat_id_from_key_name(k_name)
-                if (cid and str(cid) == str(chat_id)) or (f"({chat_id})" in k_name):
-                    if "[gw]" not in k_name.lower():
-                        user_keys.append({"id": k.get("id"), "name": k_name, "server": str(server_num)})
-    except: pass
+                extracted_cid = extract_chat_id_from_key_name(k_name)
+                if (extracted_cid and str(extracted_cid) == str(chat_id)) or (f"({chat_id})" in k_name):
+                    if not "[gw]" in k_name.lower():
+                        user_keys.append({
+                            "id": k.get("id"),
+                            "name": k_name,
+                            "server": str(server_num)
+                        })
+    except:
+        pass
     return user_keys
 
-def create_outline_key(server_num, user_name, plan_info=None, target_chat_id=None, custom_days=None, months_count=1, order_id=None):
+def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days=None, order_id=None):
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     today = datetime.now()
     if custom_days:
-        expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
+        new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
     else:
-        expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
-    curr_max, next_number = get_user_next_key_number(user_name, target_chat_id)
-    id_str = f" ({target_chat_id})" if target_chat_id else ""
-    crown_str = " 👑" if str(target_chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] else ""
-    if curr_max == 0:
-        key_name = f"{user_name}{crown_str}{id_str} {expire_date}"
-    else:
-        key_name = f"{user_name}{crown_str}{id_str} ({next_number}) {expire_date}"
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+        new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+        
+    add_bytes = (500 * months_count) * 1000**3
+    
     try:
-        res = requests.post(f"{api_url}/access-keys", verify=False, timeout=10)
-        if res.status_code in [200, 201]:
-            key_data = res.json()
-            key_id = key_data.get("id")
-            requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": key_name}, verify=False, timeout=8)
-            limit_bytes = plan_info.get("bytes", 0) * months_count if plan_info else 0
-            if limit_bytes and limit_bytes > 0:
-                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
-            if order_id: map_key_to_order(key_name, order_id)
-            raw_url = key_data.get("accessUrl", "")
-            final_key = f"{raw_url}#{key_name}"
-            save_persistent_key(server_num, key_id, key_name, final_key, limit_bytes, order_id, target_chat_id)
-            return final_key, key_name, expire_date
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+        
+        if keys_resp.status_code == 200:
+            keys_data = keys_resp.json().get("accessKeys", [])
+            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
+            
+            target_key = None
+            for k in keys_data:
+                if str(k.get("id")) == str(key_id):
+                    target_key = k
+                    break
+            
+            if target_key:
+                target_key_name = target_key.get("name", "")
+                used_bytes = bytes_transferred.get(str(key_id), 0)
+                new_fup_limit = used_bytes + add_bytes
+
+                updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
+                if updated_name == target_key_name:
+                    updated_name = f"{target_key_name.split('(')[0].strip()} {new_expire_date}"
+                
+                requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
+                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=8)
+                
+                if order_id:
+                    map_key_to_order(updated_name, order_id)
+
+                raw_access_url = target_key.get("accessUrl", "")
+                final_key = f"{raw_access_url}#{updated_name}"
+                save_persistent_key(server_num, key_id, updated_name, final_key, new_fup_limit, order_id)
+                return final_key, updated_name, new_expire_date
     except Exception as e:
-        print("Key Generation Error:", e)
+        print("Specific Unlimited Renewal Error:", e)
     return None, None, None
 
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, custom_days=None, order_id=None):
@@ -564,1247 +1812,908 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
         new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
     else:
         new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+        
     add_bytes = (500 * months_count) * 1000**3
+    
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
         metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+        
         if keys_resp.status_code == 200:
             keys_data = keys_resp.json().get("accessKeys", [])
             bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
-            target_key_id = None; target_key_name = None
+            
+            target_key_id = None
+            target_key_name = None
+            
             for k in keys_data:
                 k_name = k.get("name", "")
-                cid = extract_chat_id_from_key_name(k_name)
-                if (cid and str(cid) == str(target_chat_id)) or (f"({target_chat_id})" in k_name):
-                    if "[gw]" not in k_name.lower():
-                        target_key_id = k.get("id"); target_key_name = k_name
+                extracted_cid = extract_chat_id_from_key_name(k_name)
+                if (extracted_cid and str(extracted_cid) == str(target_chat_id)) or (f"({target_chat_id})" in k_name):
+                    if not "[gw]" in k_name.lower():
+                        target_key_id = k.get("id")
+                        target_key_name = k_name
                         break
+            
             if target_key_id:
                 used_bytes = bytes_transferred.get(str(target_key_id), 0)
                 new_fup_limit = used_bytes + add_bytes
+
                 updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
                 if updated_name == target_key_name:
                     updated_name = f"{target_key_name.split('(')[0].strip()} ({target_chat_id}) {new_expire_date}"
+                
                 requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
                 requests.put(f"{api_url}/access-keys/{target_key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=8)
-                if order_id: map_key_to_order(updated_name, order_id)
-                raw_url = k.get("accessUrl", "")
-                final_key = f"{raw_url}#{updated_name}"
+                
+                if order_id:
+                    map_key_to_order(updated_name, order_id)
+
+                raw_access_url = k.get("accessUrl", "")
+                final_key = f"{raw_access_url}#{updated_name}"
                 save_persistent_key(server_num, target_key_id, updated_name, final_key, new_fup_limit, order_id, target_chat_id)
                 return final_key, updated_name, new_expire_date, True
     except Exception as e:
         print("Unlimited Renewal Error:", e)
-    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, custom_days=custom_days, months_count=months_count, order_id=order_id)
+
+    vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info={"bytes": add_bytes}, target_chat_id=target_chat_id, months_count=months_count, custom_days=custom_days, is_giveaway=False, order_id=order_id)
     return vpn_key, key_name, expire_date, False
 
+def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None, order_id=None):
+    today = datetime.now()
+    if custom_expire_date:
+        expire_date = custom_expire_date
+    elif custom_days:
+        expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
+    else:
+        expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+    
+    curr_max, next_number = get_user_next_key_number(user_name, target_chat_id)
+    id_str = f" ({target_chat_id})" if target_chat_id else ""
+    gw_str = " [GW]" if is_giveaway else ""
+    crown_str = " 👑" if str(target_chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] else ""
+    
+    if curr_max == 0:
+        key_name = f"{user_name}{crown_str}{id_str}{gw_str} {expire_date}"
+    else:
+        key_name = f"{user_name}{crown_str}{id_str}{gw_str} ({next_number}) {expire_date}"
+    
+    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    
+    try:
+        res = requests.post(f"{api_url}/access-keys", verify=False, timeout=10)
+        if res.status_code in [200, 201]:
+            key_data = res.json()
+            key_id = key_data.get("id")
+            
+            requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": key_name}, verify=False, timeout=8)
+            
+            limit_bytes = None
+            if custom_gb:
+                limit_bytes = int(custom_gb * 1000**3)
+            elif plan_info:
+                limit_bytes = plan_info.get("bytes", 0) * months_count
+
+            if limit_bytes and limit_bytes > 0:
+                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
+            
+            if order_id:
+                map_key_to_order(key_name, order_id)
+
+            raw_access_url = key_data.get("accessUrl", "")
+            final_key = f"{raw_access_url}#{key_name}"
+            
+            save_persistent_key(server_num, key_id, key_name, final_key, limit_bytes, order_id, target_chat_id)
+            return final_key, key_name, expire_date
+    except Exception as e:
+        print("Key Generation Error:", e)
+    return None, None, None
+
 def generate_random_redeem_code():
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+    chars = string.ascii_lowercase + string.digits
+    return ''.join(random.choices(chars, k=10))
 
-# ========== PAYMENT TEXT ==========
-def get_payment_instruction_text(amt):
-    return (
-        f"✅ <b>Wallet ထဲသို့ ငွေဖြည့်သွင်းရန်</b>\n"
-        f"💵 ဖြည့်သွင်းမည့် ပမာဏ: <b>{amt:,} Ks</b>\n\n"
-        f"━━━━━━━━━━━━━━━\n"
-        f"💰 <b>ငွေလွှဲရမည့် အကောင့်များ:</b>\n\n"
-        f"📱 <b>KBZ Pay</b> - <code>09699970092</code>\n👤 Htet Myat Aung\n\n"
-        f"📱 <b>Wave Pay</b> - <code>09699970092</code>\n👤 Htet Myat Aung\n\n"
-        f"📱 <b>AYA Pay</b> - <code>09699970092</code>\n👤 Htet Myat Aung\n\n"
-        f"📱 <b>Uab Pay</b> - <code>09699970092</code>\n👤 Htet Myat Aung\n\n"
-        f"📱 <b>CB Pay</b> - <code>09699970092</code>\n👤 Htet Myat Aung\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"👉 <b>{amt:,} Ks</b> တိတိကျကျ လွှဲပြီး 📸 Screenshot ပို့ပါ။"
-    )
-
-# ========== OCR HELPERS ==========
-def parse_slip_ocr(file_path):
-    try:
-        file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
-        img_resp = requests.get(file_url, timeout=12)
-        if img_resp.status_code == 200:
-            files = {'file': ('slip.jpg', img_resp.content, 'image/jpeg')}
-            payload = {'apikey': OCR_API_KEY, 'language': 'eng', 'isOverlayRequired': False, 'OCREngine': '2'}
-            res = requests.post('https://api.ocr.space/parse/image', files=files, data=payload, timeout=20)
-            if res.status_code == 200:
-                result = res.json()
-                if result.get("IsErroredOnProcessing") == False:
-                    pr = result.get("ParsedResults", [])
-                    if pr: return pr[0].get("ParsedText", "")
-    except Exception as e:
-        print("OCR API Error:", e)
-    return ""
-
-def clean_ocr_text_thoroughly(text):
-    if not text: return ""
-    for mm, en in {'၀':'0','၁':'1','၂':'2','၃':'3','၄':'4','၅':'5','၆':'6','၇':'7','၈':'8','၉':'9'}.items():
-        text = text.replace(mm, en)
-    return text
-
-def extract_transaction_last6(ocr_text):
-    if not ocr_text: return None
-    normalized = clean_ocr_text_thoroughly(ocr_text)
-    for ph in MY_PAYMENT_PHONES: normalized = normalized.replace(ph, "")
-    lines = normalized.splitlines()
-    for i, line in enumerate(lines):
-        clean_l = line.replace(" ", "").replace("-", "")
-        if any(k in clean_l.lower() for k in ["transaction", "trx", "လုပ်ဆောင်ချက်", "အိုင်ဒီ", "အမှတ်"]):
-            digits = re.findall(r'\d{6,24}', clean_l)
-            if digits: return digits[0][-6:]
-            if i + 1 < len(lines):
-                nd = re.findall(r'\d{6,24}', lines[i+1].replace(" ", ""))
-                if nd: return nd[0][-6:]
-    kpay = re.search(r'\b(010\d{13,20})\b', normalized.replace(" ", ""))
-    if kpay: return kpay.group(1)[-6:]
-    nums = re.findall(r'\b\d{8,15}\b', normalized.replace("-", " "))
-    for num in nums:
-        if not num.startswith("09") and not num.startswith("9699"): return num[-6:]
-    return None
-
-def generate_order_id_from_slip(file_path=None):
-    if file_path:
-        last6 = extract_transaction_last6(parse_slip_ocr(file_path))
-        if last6 and len(last6) == 6: return f"#{last6}"
-    return f"#{''.join(random.choices(string.ascii_uppercase + string.digits, k=6))}"
-
-# ========== CALLBACK: BACK TO MAIN ==========
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
-def handle_back_to_main(call):
-    try:
-        chat_id = call.message.chat.id
-        clear_all_states(chat_id)
-        bot.answer_callback_query(call.id, "🔙 Menu သို့ ပြန်သွားပါပြီ။")
-        try: bot.delete_message(chat_id, call.message.message_id)
-        except: pass
-        bot.send_message(chat_id, "👋 H & E FEATURE PREMIUM VPN Bot မှ ကြိုဆိုပါတယ်။\n\n👇 Menu ကို သုံးပြီး ရွေးချယ်ပါ။", reply_markup=get_main_menu_keyboard(chat_id))
-    except Exception as e:
-        print("back_to_main error:", e)
-
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_gen_rd")
-def handle_back_to_gen_rd(call):
-    try:
-        bot.answer_callback_query(call.id)
-        if str(call.from_user.id) not in [str(aid) for aid in ADMIN_CHAT_IDS] and str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-        bot.edit_message_text("🎟️ <b>Wallet Redeem Code ထုတ်ရန်:</b>\n\nငွေပမာဏ ရွေးပါ:", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_admin_rd_amounts_keyboard())
-    except:
-        try: bot.send_message(call.message.chat.id, "🎟️ ငွေပမာဏ ရွေးပါ:", reply_markup=get_admin_rd_amounts_keyboard())
-        except: pass
-
-# ========== ADMIN RD CODE GENERATION ==========
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdamt_"))
-def handle_admin_rd_amt(call):
-    try:
-        bot.answer_callback_query(call.id)
-        if str(call.from_user.id) not in [str(aid) for aid in ADMIN_CHAT_IDS] and str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-        amt = int(call.data.replace("adm_rdamt_", ""))
-        if amt in [5000, 10000]:
-            bot.edit_message_text(f"🎟️ <b>{amt:,} Ks Wallet Redeem Code</b>\n\nပုံစံ ရွေးပါ:", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_admin_rd_mode_keyboard(amt))
-        else:
-            bot.edit_message_text(f"🎟️ <b>{amt:,} Ks (တစ်ဦးတည်းသုံး)</b>\n\nသက်တမ်း (ရက်) ရွေးပါ:", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_admin_rd_days_keyboard(amt, "single"))
-    except Exception as e: print("adm_rdamt error:", e)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdmode_"))
-def handle_admin_rd_mode(call):
-    try:
-        bot.answer_callback_query(call.id)
-        parts = call.data.split("_")
-        amt, mode = parts[2], parts[3]
-        mode_text = "တစ်ဦးတည်းသုံး" if mode == "single" else "လူအများခွဲသုံး"
-        bot.edit_message_text(f"🎟️ <b>{int(amt):,} Ks ({mode_text})</b>\n\nသက်တမ်း (ရက်) ရွေးပါ:", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_admin_rd_days_keyboard(amt, mode))
-    except Exception as e: print("adm_rdmode error:", e)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rddur_"))
-def handle_admin_rd_days(call):
-    try:
-        bot.answer_callback_query(call.id)
-        parts = call.data.split("_")
-        amt, mode, days = parts[2], parts[3], parts[4]
-        mode_text = "တစ်ဦးတည်းသုံး" if mode == "single" else "လူအများခွဲသုံး"
-        bot.edit_message_text(f"🎟️ <b>{int(amt):,} Ks ({mode_text} - {days} ရက်)</b>\n\nCode အရေအတွက် ရွေးပါ:", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_admin_rd_count_keyboard(amt, mode, days))
-    except Exception as e: print("adm_rddur error:", e)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_rdcnt_"))
-def handle_admin_rd_gen(call):
-    try:
-        if is_callback_processed(f"rdgen_{call.message.message_id}_{call.data}"):
-            bot.answer_callback_query(call.id); return
-        bot.answer_callback_query(call.id, "✅ Code များထုတ်ပြီးပါပြီ!")
-        parts = call.data.split("_")
-        amt, mode, days, count = int(parts[2]), parts[3], int(parts[4]), int(parts[5])
-        codes = load_redeem_codes()
-        gen_list = []
-        for _ in range(count):
-            code = generate_random_redeem_code()
-            codes[code] = {"type": "wallet", "amount": amt, "mode": mode, "remaining": amt, "validity_days": days, "claimed_users": []}
-            gen_list.append(f"<code>{code}</code>")
-        save_redeem_codes(codes)
-        mode_desc = "လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)" if mode == "shared" else f"တစ်ဦးတည်းသုံး ({amt:,} Ks)"
-        reply = (
-            f"🎉 <b>Wallet Redeem Code ({count} ခု) ထုတ်ပြီးပါပြီ:</b>\n\n"
-            f"💵 ငွေ: <b>{amt:,} MMK</b>\n📌 ပုံစံ: <b>{mode_desc}</b>\n⏰ သက်တမ်း: <b>{days} ရက်</b>\n\n"
-            + "\n".join(gen_list) + f"\n\n💡 <i>{days} ရက်အတွင်း အသုံးပြုပါ။</i>"
-        )
-        bot.edit_message_text(reply, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-    except Exception as e: print("adm_rdcnt error:", e)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_deduct_type_"))
-def handle_admin_deduct_type(call):
-    try:
-        bot.answer_callback_query(call.id)
-        if str(call.from_user.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-        dtype = call.data.replace("adm_deduct_type_", "")
-        set_state(call.message.chat.id, "admin_deduct", {"type": dtype, "step": "ask_user"})
-        type_name = "Redeem Bonus ငွေ" if dtype == "bonus" else ("လက်ကျန်ငွေ ပမာဏ" if dtype == "main" else "စုစုပေါင်း လက်ကျန်ငွေ")
-        bot.edit_message_text(f"💸 <b>{type_name} နှုတ်ယူရန်:</b>\n\n👇 Customer ၏ Telegram Chat ID ရိုက်ပါ:", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-    except Exception as e: print("adm_deduct_type error:", e)
-
-# ========== VERIFY SUBSCRIPTION ==========
+# ----------------- FORCE JOIN CHANNEL CALLBACK HANDLER -----------------
 @bot.callback_query_handler(func=lambda call: call.data == "verify_subscription")
-def handle_verify_sub(call):
+def handle_verify_subscription(call):
     try:
-        chat_id = call.message.chat.id
-        if is_user_subscribed(chat_id):
-            save_user_id(chat_id)
-            bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
-            try: bot.delete_message(chat_id, call.message.message_id)
-            except: pass
-            bot.send_message(chat_id, "👋 H & E FEATURE PREMIUM VPN Bot မှ ကြိုဆိုပါတယ်။\n\n👇 Menu ကို သုံးပါ။", reply_markup=get_main_menu_keyboard(chat_id))
-        else:
-            bot.answer_callback_query(call.id, "❌ Channel ထဲ မဝင်ရသေးပါ။", show_alert=True)
-    except Exception as e: print("verify_sub error:", e)
-
-# ========== WALLET / TOPUP ==========
-@bot.callback_query_handler(func=lambda call: call.data == "btn_open_topup")
-def handle_btn_open_topup(call):
-    try:
-        bot.answer_callback_query(call.id)
-        set_state(call.message.chat.id, "custom_topup", False)
-        bot.edit_message_text("💰 <b>ငွေပမာဏ ရွေးပါ:</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_topup_amounts_keyboard())
-    except Exception as e: print("btn_open_topup error:", e)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("topup_amt_"))
-def handle_topup_amt(call):
-    try:
-        bot.answer_callback_query(call.id)
-        chat_id = call.message.chat.id
-        raw_val = call.data.replace("topup_amt_", "")
-        if raw_val == "custom":
-            set_state(chat_id, "custom_topup", True)
-            set_state(chat_id, "topup", None)
-            markup = InlineKeyboardMarkup()
-            markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
-            markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့", callback_data="back_to_main"))
-            bot.edit_message_text("✍️ <b>စိတ်ကြိုက်ငွေပမာဏ ရိုက်ထည့်ပါ:</b>\n\nဥပမာ- <code>15000</code>", chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
-            return
-        amt = int(raw_val)
-        set_state(chat_id, "topup", amt)
-        set_state(chat_id, "custom_topup", False)
-        markup = InlineKeyboardMarkup()
-        markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
-        markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့", callback_data="back_to_main"))
-        bot.edit_message_text(get_payment_instruction_text(amt), chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
-    except Exception as e: print("topup_amt error:", e)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_topup_"))
-def handle_approve_topup(call):
-    try:
-        if is_callback_processed(f"appr_{call.message.message_id}_{call.data}"):
-            bot.answer_callback_query(call.id, "⚠️ ပြီးပါပြီ။"); return
-        if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-        parts = call.data.split("_")
-        target_chat_id, amount, topup_id = parts[2], int(parts[3]), parts[4]
-        new_balance, _ = update_user_balance(target_chat_id, amount)
-        bot.answer_callback_query(call.id, f"✅ {amount:,} Ks ဖြည့်ပြီးပါပြီ။")
+        bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
+    except:
+        pass
+    chat_id = call.message.chat.id
+    if is_user_subscribed(chat_id):
+        save_user_id(chat_id)
         try:
-            bot.send_message(target_chat_id, f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n🧾 Top-Up ID: <code>{topup_id}</code>\n\n💵 ဖြည့်ငွေ: <b>+{amount:,} MMK</b>\n\n💳 လက်ကျန်ငွေ: <b>{new_balance:,} MMK</b>", parse_mode="HTML")
-        except: pass
-        try: bot.edit_message_caption(chat_id=call.message.chat.id, message_id=call.message.message_id, caption=(call.message.caption or "") + f"\n\n✅ <b>APPROVED (+{amount:,} MMK)</b>", parse_mode="HTML", reply_markup=None)
-        except: pass
-    except Exception as e: print("approve_topup error:", e)
-
-# ========== PLAN SELECTION (ROBUST) ==========
-@bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
-def handle_select_plan(call):
-    try:
-        chat_id = call.message.chat.id
-        plan_code = call.data.replace("selectplan_", "")
-        plan = PLANS.get(plan_code)
-        if not plan:
-            bot.answer_callback_query(call.id, "❌ Plan ရှာမတွေ့ပါ။", show_alert=True); return
-        
-        # Answer callback EARLY so user sees feedback
-        bot.answer_callback_query(call.id)
-        
-        amount = plan["price"]
-        balance = get_user_balance(chat_id)
-        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-        _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
-        has_redeem = (bonus_bal > 0) and not is_admin
-        
-        # Ultimate special: renew existing key
-        if plan_code == "ultimate" and not has_redeem:
-            user_keys = get_user_ultimate_keys(chat_id, "1")
-            if len(user_keys) > 0:
-                markup = InlineKeyboardMarkup()
-                for idx, uk in enumerate(user_keys, 1):
-                    markup.row(InlineKeyboardButton(f"♻️ Key #{idx} ({uk['name'][:25]}) တိုးမည်", callback_data=f"renew_choice_{plan_code}_1_{uk['id']}"))
-                markup.row(InlineKeyboardButton("➕ Key အသစ် ဝယ်မည်", callback_data=f"renew_choice_{plan_code}_1_new"))
-                markup.row(InlineKeyboardButton("🔙 Plan များ", callback_data="back_to_plans"))
-                markup.row(InlineKeyboardButton("🔙 မူလ Menu", callback_data="back_to_main"))
-                text = f"🌌 <b>Ultimate VIP Plan</b>\n\n💡 Active Key <b>{len(user_keys)} ခု</b> ရှိပါသည်။\n\n👇 သက်တမ်းတိုးမည့် Key ရွေးပါ (သို့) အသစ်ဝယ်ပါ:"
-                try: bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
-                except: bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
-                return
-        
-        # Build purchase markup
-        markup = InlineKeyboardMarkup()
-        if balance >= amount or is_admin:
-            if plan_code == "ultimate" or has_redeem:
-                label = "📡 Server 1 🇸🇬 (Redeem Credit)" if has_redeem else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
-                markup.row(InlineKeyboardButton(label, callback_data=f"buywallet_{plan_code}_1"))
-            else:
-                markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
-                markup.row(InlineKeyboardButton("📡 Server 2 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_2"))
-                markup.row(InlineKeyboardButton("📡 Server 3 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_3"))
-        else:
-            markup.row(InlineKeyboardButton(f"💰 ငွေ {amount - balance:,} Ks ထပ်ဖြည့်ရန်", callback_data="btn_open_topup"))
-        markup.row(InlineKeyboardButton("🔙 Plan များ", callback_data="back_to_plans"))
-        markup.row(InlineKeyboardButton("🔙 မူလ Menu", callback_data="back_to_main"))
-        
-        balance_disp = "♾️" if is_admin else f"{balance:,} MMK"
-        status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (+{amount-balance:,} Ks ဖြည့်ပါ)"
-        redeem_notice = "\n💡 <i>(Redeem ငွေ ရှိသဖြင့် Server 1 မှသာ ထုတ်ပေးမည်)</i>" if has_redeem else ""
-        
-        text = (
-            f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
-            f"📮 <b>Plan:</b> {plan['name']}\n"
-            f"🗃️ <b>Data:</b> {plan['data']} (၁လစာ)\n"
-            f"💵 <b>ကျသင့်ငွေ:</b> {amount:,} MMK\n\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"💳 <b>လက်ကျန်ငွေ:</b> <b>{balance_disp}</b>\n"
-            f"အခြေအနေ: <b>{status}</b>\n"
-            f"━━━━━━━━━━━━━━━\n{redeem_notice}\n"
-            f"👇 ဆာဗာ ရွေးပါ:"
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        welcome_text = (
+            "👋 မင်္ဂလာပါ! H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+            "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
         )
+        bot.send_message(chat_id, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
+    else:
         try:
-            bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
-        except Exception as edit_err:
-            print(f"Edit failed, trying send: {edit_err}")
-            try: bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
-            except Exception as send_err:
-                print(f"Send failed: {send_err}")
-    except Exception as e:
-        print(f"handle_select_plan FATAL: {e}")
-        try: bot.answer_callback_query(call.id, f"❌ Error: {str(e)[:80]}", show_alert=True)
-        except: pass
+            bot.answer_callback_query(call.id, "❌ Channel ထဲသို့ မဝင်ရောက်ရသေးပါခင်ဗျာ။ အရင်ဆုံး Join ပေးပါ။", show_alert=True)
+        except:
+            pass
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("renew_choice_"))
-def handle_renew_choice(call):
-    try:
-        bot.answer_callback_query(call.id)
-        chat_id = call.message.chat.id
-        raw = call.data[len("renew_choice_"):]
-        tail = raw.rsplit("_", 1)
-        choice_val = tail[1]
-        head = tail[0].rsplit("_", 1)
-        plan_code, server_num = head[0], head[1]
-        plan = PLANS.get(plan_code)
-        if not plan: return
-        amount = plan["price"]
-        balance = get_user_balance(chat_id)
-        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-        if not is_admin and balance < amount:
-            bot.answer_callback_query(call.id, "❌ ငွေမလုံလောက်ပါ။", show_alert=True); return
-        order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
-        chat_info = call.message.chat
-        uf = getattr(chat_info, 'first_name', '') or ""
-        ul = getattr(chat_info, 'last_name', '') or ""
-        user_name = f"{uf} {ul}".strip() or "HMA Customer"
-        bot.answer_callback_query(call.id, "⏳ VPN Key ဆောင်ရွက်နေပါသည်...")
-        apply_days = None if is_admin else used_bonus_days
-        if choice_val == "new":
-            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan, target_chat_id=chat_id, custom_days=apply_days, months_count=1, order_id=order_id)
-        else:
-            today = datetime.now()
-            expire_date = (today + (timedelta(days=apply_days) if apply_days else relativedelta(months=1))).strftime("%d.%m.%Y")
-            vpn_key, key_name, expire_date = None, None, expire_date
-            try:
-                api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
-                keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
-                metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
-                if keys_resp.status_code == 200:
-                    keys_data = keys_resp.json().get("accessKeys", [])
-                    bt = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
-                    for k in keys_data:
-                        if str(k.get("id")) == str(choice_val):
-                            tkn = k.get("name", "")
-                            used = bt.get(str(choice_val), 0)
-                            add_b = (500) * 1000**3
-                            nfl = used + add_b
-                            un = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', expire_date, tkn)
-                            if un == tkn: un = f"{tkn.split('(')[0].strip()} {expire_date}"
-                            requests.put(f"{api_url}/access-keys/{choice_val}/name", data={"name": un}, verify=False, timeout=8)
-                            requests.put(f"{api_url}/access-keys/{choice_val}/data-limit", json={"limit": {"bytes": nfl}}, verify=False, timeout=8)
-                            map_key_to_order(un, order_id)
-                            final = f"{k.get('accessUrl','')}#{un}"
-                            save_persistent_key(server_num, choice_val, un, final, nfl, order_id)
-                            vpn_key, key_name = final, un
-                            break
-            except Exception as e: print("renew err:", e)
-        if not vpn_key:
-            update_user_balance(chat_id, amount)
-            bot.send_message(chat_id, "❌ ဆာဗာလိုင်းမရပါ။ ငွေ ပြန်ထည့်ပြီးပါပြီ။", reply_markup=get_back_inline_keyboard())
-            return
-        save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
-        save_user_purchase_record(chat_id=chat_id, order_id=order_id, plan_name=plan['name'], disp_gb=plan["data"], months_count=1, price_str=f"{amount:,} Ks", server_num=server_num, expire_date=expire_date, vpn_key=vpn_key)
-        save_key_mapping(user_name.strip().lower(), chat_id)
-        udb = "♾️" if is_admin else f"{new_bal:,} MMK"
-        success = (
-            f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်!</b>\n\n"
-            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
-            f"🛍️ <b>Plan:</b> {plan['name']} ({plan['data']})\n"
-            f"📡 <b>Server:</b> Singapore {server_num} 🇸🇬\n"
-            f"⏰ <b>သက်တမ်းကုန်ရက်:</b> {expire_date}\n"
-            + (f"<i>(Redeem ငွေအလိုက် {apply_days} ရက်)</i>\n" if apply_days else "") +
-            f"\n💳 <b>လက်ကျန်ငွေ:</b> <code>{udb}</code>\n\n"
-            f"🔑 <b>VPN Key:</b>\n\n<code>{vpn_key}</code>\n\n"
-            f"☝️ Key ကို တစ်ချက်နှိပ် Auto Copy ကူးပါ။"
-        )
-        try: bot.edit_message_text(success, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-        except: bot.send_message(chat_id, success, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-    except Exception as e:
-        print(f"renew_choice FATAL: {e}")
-
-# ========== BUY WITH WALLET (MAIN PURCHASE FLOW) ==========
-@bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
-def handle_buy_with_wallet(call):
-    try:
-        chat_id = call.message.chat.id
-        lock_key = f"buy_{call.message.message_id}_{call.data}"
-        if is_callback_processed(lock_key):
-            bot.answer_callback_query(call.id, "⚠️ လုပ်ဆောင်နေပါသည်..."); return
-        
-        # FIXED: rsplit for plan_code with underscore
-        raw_data = call.data[len("buywallet_"):]
-        parts = raw_data.rsplit("_", 1)
-        if len(parts) != 2:
-            bot.answer_callback_query(call.id, "❌ Invalid data"); return
-        plan_code, server_num = parts[0], parts[1]
-        plan = PLANS.get(plan_code)
-        if not plan:
-            bot.answer_callback_query(call.id, "❌ Plan ရှာမတွေ့ပါ။"); return
-        
-        amount = plan["price"]
-        balance = get_user_balance(chat_id)
-        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-        if not is_admin and balance < amount:
-            bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။", show_alert=True); return
-        
-        bot.answer_callback_query(call.id, "⏳ VPN Key ထုတ်ပေးနေပါသည်...")
-        order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
-        
-        chat_info = call.message.chat
-        uf = getattr(chat_info, 'first_name', '') or ""
-        ul = getattr(chat_info, 'last_name', '') or ""
-        user_name = f"{uf} {ul}".strip() or "HMA Customer"
-        apply_days = None if is_admin else used_bonus_days
-        
-        vpn_key = None; key_name = None; expire_date = None
-        disp_gb = plan["data"]
-        
-        if plan_code == "ultimate":
-            vpn_key, key_name, expire_date, _ = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=1, custom_days=apply_days, order_id=order_id)
-        else:
-            vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan, target_chat_id=chat_id, custom_days=apply_days, months_count=1, order_id=order_id)
-        
-        if not vpn_key:
-            update_user_balance(chat_id, amount)
-            try: bot.send_message(chat_id, "❌ ဆာဗာလိုင်းမရပါ။ ငွေ ပြန်ထည့်ပြီးပါပြီ။", reply_markup=get_back_inline_keyboard())
-            except: pass
-            return
-        
-        save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
-        save_user_purchase_record(chat_id=chat_id, order_id=order_id, plan_name=plan['name'], disp_gb=disp_gb, months_count=1, price_str=f"{amount:,} Ks", server_num=server_num, expire_date=expire_date, vpn_key=vpn_key)
-        save_key_mapping(user_name.strip().lower(), chat_id)
-        
-        exp_info = f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}"
-        if apply_days:
-            exp_info += f" <i>(Redeem {apply_days} ရက်)</i>"
-        udb = "♾️" if is_admin else f"{new_bal:,} MMK"
-        
-        success_text = (
-            f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
-            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
-            f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n"
-            f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
-            f"{exp_info}\n\n"
-            f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{udb}</code>\n\n"
-            f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
-            f"<code>{vpn_key}</code>\n\n"
-            f"☝️ Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်။ V2BOX VPN App ထဲ ထည့်သုံးပါ။"
-        )
-        try:
-            bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-        except Exception as edit_e:
-            print(f"edit success failed: {edit_e}")
-            try: bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-            except Exception as send_e:
-                print(f"send success failed: {send_e}")
-        
-        for aid in ADMIN_CHAT_IDS:
-            try:
-                bot.send_message(aid, f"🛍️ <b>Customer ကီးဝယ်သွားပါပြီ။</b>\n\n🧾 Order: <code>{order_id}</code>\n👤 {user_name} (<code>{chat_id}</code>)\n🛍️ {plan['name']}\n📡 Server {server_num}\n💵 {amount:,} MMK\n⏰ {expire_date}", parse_mode="HTML")
-            except: pass
-    except Exception as e:
-        print(f"buywallet FATAL: {e}")
-        try: bot.answer_callback_query(call.id, f"❌ Error: {str(e)[:80]}", show_alert=True)
-        except: pass
-
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_plans")
-def handle_back_to_plans(call):
-    try:
-        bot.answer_callback_query(call.id)
-        bot.edit_message_text("🧸 ဝယ်ယူလိုသော Plan ရွေးပါ:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=get_plan_keyboard())
-    except Exception as e: print("back_to_plans error:", e)
-
-# ========== REDEEM CODE (USER) ==========
-@bot.callback_query_handler(func=lambda call: call.data == "btn_open_redeem")
-def handle_btn_open_redeem(call):
-    try:
-        bot.answer_callback_query(call.id)
-        chat_id = call.message.chat.id
-        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-        if not is_admin:
-            _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
-            if bonus_bal > 0:
-                bot.send_message(chat_id, f"⚠️ <b>Redeem Bonus {bonus_bal:,} MMK ရှိနေဆဲဖြစ်၍ Code အသစ် ထပ်မရယူနိုင်ပါ။</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-                return
-        set_state(chat_id, "redeem", True)
-        bot.send_message(chat_id, "🎟️ <b>Redeem Code ထည့်ရန်:</b>\n\nAdmin ထံမှ ရရှိသော Code ကို Chat ထဲ Paste ချပို့ပါ:", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-    except Exception as e: print("btn_open_redeem error:", e)
-
-# ========== MESSAGE HANDLERS ==========
+# ----------------- COMMAND HANDLERS -----------------
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    chat_id = message.chat.id
+    save_user_id(chat_id)
+    clear_all_states(chat_id)
+
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    # Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
+    user_first = message.from_user.first_name if message.from_user.first_name else ""
+    user_last = message.from_user.last_name if message.from_user.last_name else ""
+    full_name = f"{user_first} {user_last}".strip() or "HMA User"
+
+    welcome_text = (
+        f"👋 မင်္ဂလာပါ {full_name}!\n"
+        "H & E FEATURE PREMIUM VPN ဝန်ဆောင်မှု Bot မှ ကြိုဆိုပါတယ်။\n\n"
+        "👇 အောက်ခြေက Menu Button တွေကို အသုံးပြုပြီး မိမိတို့ အလိုရှိရာကို ရွေးချယ်နိုင်ပါတယ်ခင်ဗျာ။"
+    )
+    
     try:
-        chat_id = message.chat.id
-        save_user_id(chat_id)
-        clear_all_states(chat_id)
-        if not is_user_subscribed(chat_id):
-            send_force_join_message(chat_id); return
-        uf = getattr(message.from_user, 'first_name', '') or ""
-        ul = getattr(message.from_user, 'last_name', '') or ""
-        full_name = f"{uf} {ul}".strip() or "HMA User"
-        bot.reply_to(message, f"👋 မင်္ဂလာပါ {full_name}!\nH & E FEATURE PREMIUM VPN Bot မှ ကြိုဆိုပါတယ်။\n\n👇 Menu ကို သုံးပါ။", reply_markup=get_main_menu_keyboard(chat_id))
-        try:
-            bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(type="web_app", text="Main Website", web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io")))
-        except: pass
-    except Exception as e: print("start error:", e)
+        bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
+            type="web_app",
+            text="Main Website",
+            web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io"))
+        )
+    except:
+        pass
+        
+    bot.reply_to(message, welcome_text, reply_markup=get_main_menu_keyboard(chat_id))
 
 @bot.message_handler(commands=['buy'])
 def send_plans(message):
     chat_id = message.chat.id
     save_user_id(chat_id)
     if not is_user_subscribed(chat_id):
-        send_force_join_message(chat_id); return
-    clear_all_states(chat_id)
-    bot.reply_to(message, "🧸 Plan ရွေးပါ:", reply_markup=get_plan_keyboard())
+        send_force_join_message(chat_id)
+        return
 
+    clear_all_states(chat_id)
+    bot.reply_to(message, "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:", reply_markup=get_plan_keyboard())
+
+# 👮‍♂️ Admin Fund Deduction Command (/deduct <chat_id> <amount>)
 @bot.message_handler(commands=['deduct'])
-def handle_admin_deduct_cmd(message):
+def handle_admin_deduct_command(message):
     chat_id = str(message.chat.id)
-    if chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
+    if chat_id not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+
     parts = message.text.strip().split()
     if len(parts) < 3:
-        bot.reply_to(message, "⚠️ <code>/deduct &lt;Chat_ID&gt; &lt;Amount&gt;</code>", parse_mode="HTML"); return
-    target_id, amt_str = parts[1].strip(), parts[2].strip()
-    if not amt_str.isdigit():
-        bot.reply_to(message, "❌ ဂဏန်းသာ ရိုက်ပါ။"); return
-    amt = int(amt_str)
-    deducted, m, b, f = admin_deduct_specific_funds(target_id, amt, "all")
-    bot.reply_to(message, f"✅ <b>အောင်မြင်ပါသည်!</b>\n\n👤 ID: <code>{target_id}</code>\n💵 နှုတ်ငွေ: <b>-{deducted:,} MMK</b>\n💳 ကျန်ငွေ: <b>{f:,} MMK</b>", parse_mode="HTML")
-    try: bot.send_message(target_id, f"⚠️ Wallet ထဲမှ <b>-{deducted:,} MMK</b> Admin နှုတ်ယူလိုက်ပါသည်။\n💳 ကျန်ငွေ: <b>{f:,} MMK</b>", parse_mode="HTML")
-    except: pass
+        usage_msg = (
+            "⚠️ <b>ငွေပြန်နှုတ်ခြင်း Command အသုံးပြုပုံ:</b>\n\n"
+            "👉 <code>/deduct &lt;Chat_ID&gt; &lt;ငွေပမာဏ&gt;</code>\n"
+            "ဥပမာ- <code>/deduct 6818712501 2000</code>"
+        )
+        bot.reply_to(message, usage_msg, parse_mode="HTML")
+        return
 
+    target_id = parts[1].strip()
+    amt_str = parts[2].strip()
+
+    if not amt_str.isdigit():
+        bot.reply_to(message, "❌ ငွေပမာဏကို ဂဏန်းသီးသန့်သာ ရိုက်ထည့်ပါခင်ဗျာ။")
+        return
+
+    amt = int(amt_str)
+    deducted, m_bal, b_bal, final_bal = admin_deduct_specific_funds(target_id, amt, deduct_type="all")
+
+    bot.reply_to(
+        message,
+        f"✅ <b>ငွေပြန်နှုတ်ခြင်း အောင်မြင်ပါသည်!</b>\n\n"
+        f"👤 Target User ID: <code>{target_id}</code>\n"
+        f"💵 နှုတ်ယူငွေ: <b>-{deducted:,} MMK</b>\n"
+        f"💳 User ၏ လက်ရှိ ကျန်ငွေ: <b>{final_bal:,} MMK</b> (လက်ကျန်ငွေ ပမာဏ: {m_bal:,} Ks | Redeem: {b_bal:,} Ks)",
+        parse_mode="HTML"
+    )
+
+    try:
+        user_alert = (
+            f"⚠️ <b>အသိပေးချက်:</b>\n\n"
+            f"လူကြီးမင်း၏ Wallet ထဲမှ မမှန်ကန်သော နည်းလမ်းဖြင့် ရယူထားသော ပမာဏ (<b>-{deducted:,} MMK</b>) အား Admin မှ ပြန်လည်နှုတ်ယူလိုက်ပါသည်ခင်ဗျာ။\n\n"
+            f"💳 လက်ရှိ သုံးနိုင်သော စုစုပေါင်း လက်ကျန်ငွေ: <b>{final_bal:,} MMK</b>"
+        )
+        bot.send_message(target_id, user_alert, parse_mode="HTML")
+    except:
+        pass
+
+# 🎟️ Redeem Code Command
 @bot.message_handler(commands=['redeem'])
-def handle_redeem_cmd(message):
+def handle_redeem_command(message):
     chat_id = message.chat.id
     save_user_id(chat_id)
     clear_all_states(chat_id)
     if not is_user_subscribed(chat_id):
-        send_force_join_message(chat_id); return
+        send_force_join_message(chat_id)
+        return
+
     is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
     if not is_admin:
         _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
         if bonus_bal > 0:
-            bot.send_message(chat_id, f"⚠️ Redeem Bonus {bonus_bal:,} MMK ရှိနေဆဲပါ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-    set_state(chat_id, "redeem", True)
-    bot.send_message(chat_id, "🎟️ Redeem Code ကို Paste ချပို့ပါ:", reply_markup=get_back_inline_keyboard())
+            bot.send_message(
+                chat_id,
+                f"⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနိုင်သော Redeem Bonus လက်ကျန်ငွေ ({bonus_bal:,} MMK) ရှိနေဆဲ ဖြစ်ပါသဖြင့် နောက်ထပ် Code အသစ်ကို ထပ်မံ ရယူခွင့် မရှိသေးပါခင်ဗျာ။</b>\n\n"
+                f"💡 <i>အဆိုပါငွေဖြင့် Plan ဝယ်ယူအသုံးပြုပြီးမှ (သို့မဟုတ် ရက်စေ့ကုန်ဆုံးသွားမှ) သာ နောက်ထပ် Code ကို ထပ်မံ ရယူနိုင်ပါမည်။</i>",
+                parse_mode="HTML",
+                reply_markup=get_back_inline_keyboard()
+            )
+            return
 
-# ========== PHOTO HANDLER (TOPUP) ==========
-@bot.message_handler(content_types=['photo'])
-def handle_photo_messages(message):
+    set_redeem_state(chat_id, True)
+    bot.send_message(
+        chat_id,
+        "🎟️ <b>Wallet Redeem Code အသုံးပြုရန်:</b>\n\n"
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:",
+        parse_mode="HTML",
+        reply_markup=get_back_inline_keyboard()
+    )
+
+# ----------------- WALLET & DIRECT PURCHASE HANDLERS -----------------
+
+def get_payment_instruction_text(amt):
+    return (
+        f"✅ <b>Wallet ထဲသို့ ငွေဖြည့်သွင်းရန်</b>\n"
+        f"💵 ဖြည့်သွင်းမည့် ပမာဏ: <b>{amt:,} Ks</b>\n\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"💰 <b>ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:</b>\n\n"
+        f"📱 <b>KBZ Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"📱 <b>Wave Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"📱 <b>AYA Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"📱 <b>Uab Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"📱 <b>CB Pay</b> - <code>09699970092</code>\n"
+        f"👤 Htet Myat Aung\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"👉 အထက်ပါ အကောင့်တစ်ခုခုသို့ <b>{amt:,} Ks</b> တိတိကျကျ လွှဲပေးပါခင်ဗျာ။\n\n"
+        f"🙏🏻 ငွေလွှဲပြီး 📸 <b>Screenshot (ပြေစာ)</b> လေး ပို့ပေးပါခင်ဗျာ🥰\n\n"
+        f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်သွင်းပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("topup_amt_"))
+def handle_topup_amount_select(call):
     try:
-        chat_id = message.chat.id
-        save_user_id(chat_id)
-        if not is_user_subscribed(chat_id):
-            send_force_join_message(chat_id); return
-        if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_state(chat_id, "broadcast"):
-            set_state(chat_id, "broadcast", False)
-            all_users = load_all_users()
-            cnt = 0
-            photo_id = message.photo[-1].file_id
-            caption_text = message.caption or ""
-            bot.send_message(chat_id, f"⏳ Broadcast ({len(all_users)}) ဆီ ပို့နေသည်...")
-            for uid in all_users:
-                if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
-                try:
-                    bot.send_photo(uid, photo_id, caption=caption_text, parse_mode="HTML"); cnt += 1
-                except: pass
-            bot.send_message(chat_id, f"✅ ပို့ပြီး! {cnt}/{len(all_users)}", parse_mode="HTML"); return
-        
-        uf = getattr(message.from_user, 'first_name', '') or ""
-        ul = getattr(message.from_user, 'last_name', '') or ""
-        user_name = f"{uf} {ul}".strip() or "HMA User"
-        username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
-        topup_amt = get_state(chat_id, "topup") or 1000
-        set_state(chat_id, "topup", None)
-        set_state(chat_id, "custom_topup", False)
-        photo_file = bot.get_file(message.photo[-1].file_id)
-        topup_id = generate_order_id_from_slip(photo_file.file_path)
-        alert = f"💰 <b>Top-Up အသစ်</b>\n\n🧾 ID: <code>{topup_id}</code>\n👤 {user_name} ({username})\n💵 <b>{topup_amt:,} MMK</b>\n🆔 <code>{chat_id}</code>"
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    chat_id = call.message.chat.id
+    raw_val = call.data.replace("topup_amt_", "")
+    
+    if raw_val == "custom":
+        set_custom_topup_state(chat_id, True)
+        set_topup_state(chat_id, None)
+        custom_prompt = (
+            "✍️ <b>စိတ်ကြိုက်ငွေပမာဏ ရိုက်ထည့်ရန်:</b>\n\n"
+            "👇 ဖြည့်သွင်းလိုသော ငွေပမာဏကို ဂဏန်းသီးသန့် (ဥပမာ- <code>15000</code> သို့မဟုတ် <code>50000</code>) ရိုက်ပို့ပေးပါခင်ဗျာ:"
+        )
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton(f"✅ Approve (+{topup_amt:,})", callback_data=f"approve_topup_{chat_id}_{topup_amt}_{topup_id}"))
-        for aid in ADMIN_CHAT_IDS:
-            try: bot.send_photo(aid, message.photo[-1].file_id, caption=alert, parse_mode="HTML", reply_markup=markup)
-            except: pass
-        bot.reply_to(message, f"💌 ပြေစာ ရရှိပါသည်။\n🧾 ID: <code>{topup_id}</code>\n💵 {topup_amt:,} MMK\n\nAdmin စစ်ဆေးပြီး ချက်ချင်း ဖြည့်ပေးပါမည်။", parse_mode="HTML")
-    except Exception as e: print("photo error:", e)
+        markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
+        markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+        bot.edit_message_text(custom_prompt, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
+        return
 
-# ========== KEY FETCH ==========
-def fetch_key_from_server(api_url, input_value):
-    if not api_url or "dummyKey" in api_url: return None, None, None
-    api_url = api_url.rstrip('/')
-    server_num = "1" if api_url == OUTLINE_API_URL_1.rstrip('/') else ("2" if api_url == OUTLINE_API_URL_2.rstrip('/') else "3")
+    amt = int(raw_val)
+    set_topup_state(chat_id, amt)
+    set_custom_topup_state(chat_id, False)
+    
+    payment_text = get_payment_instruction_text(amt)
+    markup = InlineKeyboardMarkup()
+    markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ ပြန်ရွေးရန်", callback_data="btn_open_topup"))
+    markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+    bot.edit_message_text(payment_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "btn_open_topup")
+def handle_btn_open_topup(call):
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)
-        bt = {}
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    set_custom_topup_state(call.message.chat.id, False)
+    bot.edit_message_text(
+        "💰 <b>Wallet ထဲသို့ ဖြည့်သွင်းလိုသော ငွေပမာဏကို ရွေးချယ်ပေးပါ:</b>",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        parse_mode="HTML",
+        reply_markup=get_topup_amounts_keyboard()
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_topup_"))
+def handle_approve_topup(call):
+    lock_key = f"appr_topup_{call.message.message_id}_{call.data}"
+    if is_callback_processed(lock_key):
         try:
-            mr = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=4)
-            if mr.status_code == 200: bt = mr.json().get("bytesTransferredByUserId", {})
-        except: pass
-        if keys_resp.status_code == 200:
-            keys_data = keys_resp.json().get("accessKeys", [])
-            sync_keys_to_persistent_registry(server_num, keys_data)
-            tk = None; input_raw = input_value.strip()
-            if re.search(r'^\d+$', input_raw):
-                for k in keys_data:
-                    if str(k.get("id")) == input_raw: tk = k; break
-            if not tk and "#" in input_raw:
-                rh = input_raw.split("#")[-1].strip().lower()
-                for k in keys_data:
-                    kn = k.get("name", "").strip().lower()
-                    if rh and (rh in kn or kn in rh): tk = k; break
-            if not tk and input_raw.startswith("ss://"):
-                ci = input_raw.replace("ss://", "").split("?")[0].split("#")[0].strip()
-                for k in keys_data:
-                    su = k.get("accessUrl", "").replace("ss://", "").split("?")[0].split("#")[0].strip()
-                    if ci and (ci in su or su in ci): tk = k; break
-                    try:
-                        if ci.split("@")[0] == su.split("@")[0]: tk = k; break
-                    except: pass
-            if not tk:
-                for k in keys_data:
-                    if input_raw.lower() in k.get("name", "").strip().lower(): tk = k; break
-            if tk: return tk, bt, server_num
-    except Exception as e: print(f"Fetch {api_url}:", e)
-    pr = load_persistent_keys(); input_raw = input_value.strip().lower()
-    for uid, kd in pr.items():
-        if kd.get("server") == server_num:
-            kn = kd.get("name", "").lower()
-            au = kd.get("access_url", "").lower()
-            if (input_raw.startswith("ss://") and clean_ss_url(input_raw) in clean_ss_url(au)) or (input_raw in kn):
-                return {"id": kd.get("key_id"), "name": kd.get("name"), "accessUrl": kd.get("access_url", "").split("#")[0], "dataLimit": {"bytes": kd.get("limit_bytes")} if kd.get("limit_bytes") else {}}, {}, server_num
-    return None, None, None
+            bot.answer_callback_query(call.id, "⚠️ ငွေဖြည့်ပေးပြီးပါပြီ။")
+        except:
+            pass
+        return
 
-# ========== MAIN MESSAGE DISPATCHER ==========
-@bot.message_handler(func=lambda message: True)
-def handle_all_messages(message):
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+
+    parts = call.data.split("_")
+    target_chat_id = parts[2]
+    amount = int(parts[3])
+    topup_id = parts[4]
+
+    new_balance, _ = update_user_balance(target_chat_id, amount)
     try:
-        input_value = message.text.strip()
-        chat_id = message.chat.id
-        save_user_id(chat_id)
-        if not is_user_subscribed(chat_id):
-            send_force_join_message(chat_id); return
+        bot.answer_callback_query(call.id, f"✅ {amount:,} Ks ဖြည့်သွင်းပေးပြီးပါပြီ။")
+    except:
+        pass
+
+    user_noti = (
+        f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
+        f"🧾 Top-Up ID: <code>{topup_id}</code>\n\n"
+        f"💵 ဖြည့်သွင်းငွေ: <b>+{amount:,} MMK</b>\n\n"
+        f"💳 လက်ရှိ Wallet လက်ကျန်ငွေ: <b>{new_balance:,} MMK</b>\n\n"
+        f"'🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး စိတ်ကြိုက် ချက်ချင်း ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
+    )
+    try:
+        bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
+    except:
+        pass
+
+    updated_caption = call.message.caption + f"\n\n✅ <b>APPROVED (+{amount:,} MMK)</b>"
+    try:
+        bot.edit_message_caption(chat_id=call.message.chat.id, message_id=call.message.message_id, caption=updated_caption, parse_mode="HTML", reply_markup=None)
+    except:
+        pass
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
+def handle_select_plan(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    chat_id = call.message.chat.id
+    if not is_user_subscribed(chat_id):
+        send_force_join_message(chat_id)
+        return
+
+    plan_code = call.data.replace("selectplan_", "")
+    plan = PLANS.get(plan_code)
+
+    if plan:
+        amount = plan["price"]
+        balance = get_user_balance(chat_id)
+        is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
         
-        # Custom Topup Amount
-        if get_state(chat_id, "custom_topup"):
-            clean_amt = re.sub(r'[^\d]', '', input_value)
-            if clean_amt and clean_amt.isdigit():
-                amt = int(clean_amt)
-                if amt < 500:
-                    bot.reply_to(message, "⚠️ အနည်းဆုံး 500 Ks ပါ။"); return
-                set_state(chat_id, "custom_topup", False)
-                set_state(chat_id, "topup", amt)
+        _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
+        has_redeem_credit = (bonus_bal > 0) and not is_admin
+
+        if plan_code == "ultimate" and not has_redeem_credit:
+            user_keys = get_user_ultimate_keys(chat_id, "1")
+            if len(user_keys) > 0:
                 markup = InlineKeyboardMarkup()
-                markup.row(InlineKeyboardButton("🔙 ငွေပမာဏ", callback_data="btn_open_topup"))
-                markup.row(InlineKeyboardButton("🔙 မူလ Menu", callback_data="back_to_main"))
-                bot.send_message(chat_id, get_payment_instruction_text(amt), parse_mode="HTML", reply_markup=markup); return
-            else:
-                bot.reply_to(message, "❌ ဂဏန်းသာ ရိုက်ပါ။"); return
-        
-        # Admin Deduct Dialog
-        if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
-            ds = get_state(chat_id, "admin_deduct")
-            if ds:
-                step = ds.get("step"); dtype = ds.get("type", "all")
-                if step == "ask_user":
-                    tid = input_value.strip()
-                    if not tid.isdigit():
-                        bot.reply_to(message, "❌ Chat ID ဂဏန်းသာ ရိုက်ပါ။"); return
-                    ds["target_user_id"] = tid; ds["step"] = "ask_amount"
-                    set_state(chat_id, "admin_deduct", ds)
-                    m, b, t = get_user_balance_breakdown(tid)
-                    bot.reply_to(message, f"👤 ID: <code>{tid}</code>\n💵 လက်ကျန်: <b>{m:,} Ks</b>\n🎁 Redeem: <b>{b:,} Ks</b>\n💎 စုစုပေါင်း: <b>{t:,} Ks</b>\n\n👇 နှုတ်ယူမည့် ပမာဏ ရိုက်ပါ:", parse_mode="HTML"); return
-                elif step == "ask_amount":
-                    ca = re.sub(r'[^\d]', '', input_value)
-                    if not ca.isdigit() or int(ca) <= 0:
-                        bot.reply_to(message, "❌ ဂဏန်းသာ ရိုက်ပါ။"); return
-                    tid = ds.get("target_user_id"); amt = int(ca)
-                    set_state(chat_id, "admin_deduct", None)
-                    ded, m, b, f = admin_deduct_specific_funds(tid, amt, dtype)
-                    bot.reply_to(message, f"✅ <b>အောင်မြင်ပါသည်!</b>\n\n👤 ID: <code>{tid}</code>\n💵 နှုတ်: <b>-{ded:,} MMK</b>\n💳 ကျန်: <b>{f:,} MMK</b>", parse_mode="HTML")
-                    try: bot.send_message(tid, f"⚠️ Wallet ထဲမှ <b>-{ded:,} MMK</b> Admin နှုတ်လိုက်ပါသည်။\n💳 ကျန်: <b>{f:,} MMK</b>", parse_mode="HTML")
-                    except: pass
-                    return
-        
-        # Admin Broadcast
-        if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_state(chat_id, "broadcast"):
-            set_state(chat_id, "broadcast", False)
-            all_users = load_all_users()
-            cnt = 0
-            bot.send_message(chat_id, f"⏳ Broadcast ({len(all_users)}) ဆီ ပို့နေသည်...")
-            for uid in all_users:
-                if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
-                try: bot.send_message(uid, input_value, parse_mode="HTML"); cnt += 1
-                except: pass
-            bot.send_message(chat_id, f"✅ ပို့ပြီး! {cnt}/{len(all_users)}", parse_mode="HTML"); return
-        
-        # Main Menu Buttons
-        if input_value in ["🛍️ Plan များဝယ်ရန်", "Plan များဝယ်ရန်"]:
-            clear_all_states(chat_id)
-            bot.send_message(chat_id, "🧸 Plan ရွေးပါ:", reply_markup=get_plan_keyboard()); return
-        
-        if input_value in ["💰 ငွေဖြည့်ရန်", "ငွေဖြည့်ရန်"]:
-            clear_all_states(chat_id)
-            bot.send_message(chat_id, "💰 <b>ငွေပမာဏ ရွေးပါ:</b>", parse_mode="HTML", reply_markup=get_topup_amounts_keyboard()); return
-        
-        if input_value in ["💳 လက်ကျန်ငွေ", "လက်ကျန်ငွေ"]:
-            clear_all_states(chat_id)
-            is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-            m, b, t = get_user_balance_breakdown(chat_id)
-            bd = ""
-            if b > 0:
-                ed = load_expiring_credits().get(str(chat_id), [])
-                lines = [f"   • <b>+{g['remaining']:,} Ks</b> (ကုန်ရက်: <code>{g['expire_disp']}</code>)" for g in ed if g.get("remaining", 0) > 0]
-                if lines: bd = "\n⏳ <b>ရက်စွဲပါ လက်ကျန်ငွေများ:</b>\n" + "\n".join(lines) + "\n"
-            crown = " 👑" if is_admin else ""
-            mdisp = "♾️" if is_admin else f"{m:,} MMK"
-            tdisp = "♾️" if is_admin else f"{t:,} MMK"
-            uf = getattr(message.from_user, 'first_name', '') or ""
-            ul = getattr(message.from_user, 'last_name', '') or ""
-            full_name = f"{uf} {ul}".strip() or "HMA User"
-            text = f"💳 <b>Wallet အချက်အလက်</b>\n\n👤 {full_name}{crown}\n🆔 <code>{chat_id}</code>\n\n💵 လက်ကျန်: {mdisp}\n🎁 Redeem: {b:,} MMK\n{bd}━━━━━━━━━━━━━━━\n💎 စုစုပေါင်း: <b>{tdisp}</b>\n━━━━━━━━━━━━━━━"
-            markup = InlineKeyboardMarkup()
-            markup.row(InlineKeyboardButton("💰 ငွေဖြည့်", callback_data="btn_open_topup"), InlineKeyboardButton("🎟️ Redeem Code", callback_data="btn_open_redeem"))
-            markup.row(InlineKeyboardButton("🔙 မူလ Menu", callback_data="back_to_main"))
-            bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup); return
-        
-        if input_value in ["🧰 Data ပမာဏစစ်ရန်", "Data ပမာဏစစ်ရန်"]:
-            clear_all_states(chat_id)
-            bot.send_message(chat_id, "👇 VPN Key (<code>ss://...</code>) ကို Paste ချပို့ပါ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-        
-        if input_value in ["📇 ဝယ်ယူမှုမှတ်တမ်း", "ဝယ်ယူမှုမှတ်တမ်း"]:
-            clear_all_states(chat_id)
-            recs = get_user_combined_purchase_records(chat_id)
-            if not recs:
-                bot.send_message(chat_id, "📇 <i>မှတ်တမ်း မရှိသေးပါ။</i>", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-            texts = []
-            for idx, r in enumerate(reversed(recs), 1):
-                srv = f"S{r.get('server','1')} 🇸🇬" if r.get('server') != "VIP" else "VIP 🇸🇬"
-                vk = r.get('vpn_key', '')
-                kb = f"<code>{vk}</code>" if vk != "N/A" else "<i>(Key မရှိ)</i>"
-                texts.append(f"<b>#{idx}</b>\n🧾 <code>{r.get('order_id','N/A')}</code>\n📅 {r.get('timestamp','N/A')}\n🛍️ {r.get('plan_name','')} ({r.get('disp_gb','')})\n📡 {srv}\n⏰ {r.get('expire_date','N/A')}\n🔑\n{kb}")
-            final = f"📇 <b>ဝယ်ယူမှုမှတ်တမ်း ({len(recs)} ခု):</b>\n\n" + "\n\n━━━━━━━━━━\n\n".join(texts)
-            if len(final) > 4000:
-                for p in [final[i:i+4000] for i in range(0, len(final), 4000)]: bot.send_message(chat_id, p, parse_mode="HTML")
-            else:
-                bot.send_message(chat_id, final, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-            return
-        
-        if input_value in ["♻️ Key လဲရန်", "Key လဲရန်"]:
-            clear_all_states(chat_id)
-            set_state(chat_id, "replacement", True)
-            bot.send_message(chat_id, "♻️ အဆင်မပြေသော VPN Key (<code>ss://...</code>) ကို Paste ချပါ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-        
-        if input_value in ["👨‍💻 Admin ဆက်သွယ်ရန်", "Admin ဆက်သွယ်ရန်"]:
-            clear_all_states(chat_id)
-            markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("💬 Admin ထံ စာပို့ရန်", url="https://t.me/H_M_A_2026"))
-            markup.add(InlineKeyboardButton("🔙 မူလ Menu", callback_data="back_to_main"))
-            bot.send_message(chat_id, "👇 Admin ထံ ဆက်သွယ်ရန်:", reply_markup=markup); return
-        
-        # Redeem Code
-        if get_state(chat_id, "redeem"):
-            set_state(chat_id, "redeem", False)
-            is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
-            if not is_admin:
-                _, bb, _ = get_user_balance_breakdown(chat_id)
-                if bb > 0:
-                    bot.send_message(chat_id, f"⚠️ Redeem Bonus {bb:,} MMK ရှိနေဆဲပါ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-            codes = load_redeem_codes()
-            ci = input_value.strip().lower()
-            mk = None
-            for ck in codes.keys():
-                if ck.strip().lower() == ci: mk = ck; break
-            if mk:
-                info = codes[mk]
-                vd = int(info.get("validity_days", 1))
-                mode = info.get("mode", "single")
-                usid = str(chat_id)
-                claimed = info.get("claimed_users", [])
-                if mode == "shared":
-                    if not is_admin and usid in claimed:
-                        bot.send_message(chat_id, "⚠️ ဤ Code ရယူပြီးဖြစ်ပါသည်။", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-                    rem = int(info.get("remaining", 0))
-                    if rem < 500:
-                        del codes[mk]; save_redeem_codes(codes)
-                        bot.send_message(chat_id, "❌ Code ပြည့်သွားပါပြီ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-                    vopts = [o for o in [1000, 2000, 3000] if o <= rem]
-                    if not vopts: aw = rem
-                    else:
-                        w = [70, 20, 10][:len(vopts)]
-                        aw = random.choices(vopts, weights=w, k=1)[0]
-                    nb, ed = add_expiring_bonus_to_wallet(chat_id, aw, vd)
-                    rem -= aw; claimed.append(usid)
-                    info["remaining"] = rem; info["claimed_users"] = claimed
-                    if rem < 500: del codes[mk]
-                    else: codes[mk] = info
-                    save_redeem_codes(codes)
-                    un = getattr(message.from_user, 'first_name', '') or "Winner"
-                    ci_icon = " 👑" if is_admin else ""
-                    dtb = "♾️" if is_admin else f"{nb:,} MMK"
-                    bot.send_message(chat_id, f"🎉 <b>Redeem အောင်မြင်ပါသည်!</b>\n\n👤 {un}{ci_icon}\n🎟️ <code>{mk}</code>\n💵 <b>+{aw:,} MMK</b>\n⏰ {vd} ရက် ({ed} ကုန်)\n\n💳 စုစုပေါင်း: <b>{dtb}</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-                    for aid in ADMIN_CHAT_IDS:
-                        try: bot.send_message(aid, f"🎟️ <b>Shared Code:</b>\n{un} (<code>{chat_id}</code>) → <code>{mk}</code> = {aw:,} MMK ({vd} ရက်)\n(ကျန်: {rem:,} MMK)", parse_mode="HTML")
-                        except: pass
-                    return
-                else:
-                    ata = int(info.get("amount", 1000))
-                    del codes[mk]; save_redeem_codes(codes)
-                    nb, ed = add_expiring_bonus_to_wallet(chat_id, ata, vd)
-                    un = getattr(message.from_user, 'first_name', '') or "Winner"
-                    ci_icon = " 👑" if is_admin else ""
-                    dtb = "♾️" if is_admin else f"{nb:,} MMK"
-                    bot.send_message(chat_id, f"🎉 <b>Redeem အောင်မြင်ပါသည်!</b>\n\n👤 {un}{ci_icon}\n🎟️ <code>{mk}</code>\n💵 <b>+{ata:,} MMK</b>\n⏰ {vd} ရက် ({ed} ကုန်)\n\n💳 စုစုပေါင်း: <b>{dtb}</b>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-                    for aid in ADMIN_CHAT_IDS:
-                        try: bot.send_message(aid, f"🎟️ <b>Single Code:</b>\n{un} (<code>{chat_id}</code>) → <code>{mk}</code> = {ata:,} MMK ({vd} ရက်)", parse_mode="HTML")
-                        except: pass
-                    return
-            else:
-                bot.send_message(chat_id, "❌ Code မှားနေသည် (သို့) အသုံးပြုပြီးဖြစ်သည်။", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-        
-        # Admin: Search User
-        if input_value == "🔍 Cus ရှာရန်":
-            clear_all_states(chat_id)
-            if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
-                bot.reply_to(message, "❌ Admin သီးသန့်။"); return
-            bot.send_message(chat_id, "⏳ Customer စာရင်း တွက်ချက်နေသည်...")
-            # Summary
-            s1, s2, s3 = set(), set(), set()
-            tset = set()
-            for sn, au in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
-                try:
-                    r = requests.get(f"{au}/access-keys", verify=False, timeout=4)
-                    if r.status_code == 200:
-                        for k in r.json().get("accessKeys", []):
-                            kn = k.get("name", "").strip()
-                            cm = re.search(r'\((\d+)\)', kn)
-                            ident = cm.group(1) if cm else kn.lower()
-                            if ident:
-                                if sn == "1": s1.add(ident)
-                                elif sn == "2": s2.add(ident)
-                                elif sn == "3": s3.add(ident)
-                                tset.add(ident)
-                except: pass
-            pr = load_persistent_keys()
-            for kd in pr.values():
-                cid = kd.get("chat_id"); kn = kd.get("name", "").strip(); sv = str(kd.get("server", "1"))
-                ident = cid if cid else kn.lower()
-                if ident:
-                    if sv == "1": s1.add(ident)
-                    elif sv == "2": s2.add(ident)
-                    elif sv == "3": s3.add(ident)
-                    tset.add(ident)
-            summ = f"👥 <b>Customer စာရင်း</b>\n\n📡 S1: <b>{len(s1)}</b> ယောက်\n📡 S2: <b>{len(s2)}</b> ယောက်\n📡 S3: <b>{len(s3)}</b> ယောက်\n━━━━━━━━━━\n🌟 စုစုပေါင်း: <b>{len(tset)}</b> ယောက်\n\n👇 ရှာလိုသော နာမည်အစ / Chat ID / Order ID ရိုက်ပါ:"
-            set_state(chat_id, "search", True)
-            bot.send_message(chat_id, summ, parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-        
-        # Admin: Gen RD Code
-        if input_value == "🎟️ Gen RD Code":
-            clear_all_states(chat_id)
-            if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-            bot.send_message(chat_id, "🎟️ <b>Redeem Code ထုတ်ရန် ငွေပမာဏ ရွေးပါ:</b>", parse_mode="HTML", reply_markup=get_admin_rd_amounts_keyboard()); return
-        
-        # Admin: Deduct
-        if input_value == "💸 ငွေနှုတ်ရန်":
-            clear_all_states(chat_id)
-            if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-            bot.send_message(chat_id, "💸 <b>ငွေနှုတ်ယူရန် အမျိုးအစား ရွေးပါ:</b>", parse_mode="HTML", reply_markup=get_admin_deduct_type_keyboard()); return
-        
-        # Admin: Broadcast
-        if input_value == "📢 Broadcast စာပို့ရန်":
-            clear_all_states(chat_id)
-            if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-            au = load_all_users()
-            set_state(chat_id, "broadcast", True)
-            bot.send_message(chat_id, f"📢 <b>Broadcast ({len(au)} User):</b>\n\nစာသား / ဓာတ်ပုံ ပို့ပါ:", parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-        
-        # Admin: Search Input
-        if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_state(chat_id, "search"):
-            set_state(chat_id, "search", False)
-            q = input_value.strip().lower()
-            bot.send_message(chat_id, f"⏳ '{input_value}' ရှာနေသည်...")
-            matches = []; seen = set()
-            ko = load_key_orders()
-            for sn, au in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
-                try:
-                    r = requests.get(f"{au}/access-keys", verify=False, timeout=4)
-                    if r.status_code == 200:
-                        kdata = r.json().get("accessKeys", [])
-                        sync_keys_to_persistent_registry(sn, kdata)
-                        for k in kdata:
-                            kn = k.get("name", "").strip().lower()
-                            ao = ko.get(kn, "").lower()
-                            kid = str(k.get("id")); uid = f"{sn}_{kid}"
-                            if len(q) == 1:
-                                if kn.startswith(q): matches.append((sn, kid, k.get("name", ""))); seen.add(uid)
-                            else:
-                                if q in kn or (ao and q in ao): matches.append((sn, kid, k.get("name", ""))); seen.add(uid)
-                except: pass
-            pr = load_persistent_keys()
-            for uid, kd in pr.items():
-                if uid in seen: continue
-                kn = kd.get("name", "").lower(); ko2 = kd.get("order_id", "").lower()
-                sn = kd.get("server", "1"); kid = kd.get("key_id", "0"); cid = kd.get("chat_id", "").lower()
-                if len(q) == 1:
-                    if kn.startswith(q): matches.append((sn, kid, kd.get("name", ""))); seen.add(uid)
-                else:
-                    if q in kn or (ko2 and q in ko2) or (cid and q in cid): matches.append((sn, kid, kd.get("name", ""))); seen.add(uid)
-            if matches:
-                mk = InlineKeyboardMarkup()
-                for sn, kid, kn in matches[:30]:
-                    icon = f"📡 S{sn}🇸🇬" if sn != "VIP" else "⚡ VIP 🇸🇬"
-                    mk.add(InlineKeyboardButton(f"{icon} | {kn[:35]}", callback_data=f"viewkey_{sn}_{kid}"))
-                mk.add(InlineKeyboardButton("🔙 မူလ Menu", callback_data="back_to_main"))
-                bot.send_message(chat_id, f"🔎 <b>တွေ့ရှိ ({len(matches)} ခု):</b>", parse_mode="HTML", reply_markup=mk)
-            else:
-                bot.send_message(chat_id, f"❌ '{input_value}' ရှာမတွေ့ပါ။", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
-            return
-        
-        # Key Replacement
-        if get_state(chat_id, "replacement"):
-            set_state(chat_id, "replacement", False)
-            bot.send_message(chat_id, "⏳ Key စစ်ဆေးနေသည်...")
-            tk, bt, sn = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
-            if not tk: tk, bt, sn = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
-            if not tk: tk, bt, sn = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
-            if tk:
-                fn = tk.get("name", "HMA User"); kid = str(tk.get("id"))
-                dm = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', fn)
-                ed = dm.group(0) if dm else "30.09.2026"
-                lb = tk.get("dataLimit", {}).get("bytes", 0)
-                ub = bt.get(kid, 0)
-                tg = bytes_to_gb(lb) if lb else 500
-                ug = bytes_to_gb(ub)
-                rg = max(0, round(tg - ug, 2))
-                alert = f"♻️ <b>KEY REPLACEMENT</b>\n\n👤 {getattr(message.from_user, 'first_name', '')}\n🆔 <code>{chat_id}</code>\n📡 S{sn}\n🔑 {fn}\n🧰 ကျန်: <b>{rg} GB</b>/{tg} GB\n⏰ {ed}"
-                mk = InlineKeyboardMarkup()
-                mk.row(
-                    InlineKeyboardButton("📡 S1 သို့", callback_data=f"replace_srv1_{sn}_{kid}_{chat_id}_{rg}_{ed}"),
-                    InlineKeyboardButton("📡 S2 သို့", callback_data=f"replace_srv2_{sn}_{kid}_{chat_id}_{rg}_{ed}"),
-                    InlineKeyboardButton("📡 S3 သို့", callback_data=f"replace_srv3_{sn}_{kid}_{chat_id}_{rg}_{ed}")
+                for idx, uk in enumerate(user_keys, 1):
+                    markup.row(InlineKeyboardButton(f"♻️ Key #{idx} ({uk['name'][:25]}) သက်တမ်းတိုးမည်", callback_data=f"renew_choice_{plan_code}_1_{uk['id']}"))
+                markup.row(InlineKeyboardButton("➕ Key အသစ် ထပ်ဝယ်မည်", callback_data=f"renew_choice_{plan_code}_1_new"))
+                markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
+                markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+
+                choice_text = (
+                    f"🌌 <b>Ultimate VIP Plan ဝယ်ယူခြင်း</b>\n\n"
+                    f"💡 လူကြီးမင်းတွင် လက်ရှိ Active ဖြစ်နေသော Ultimate VIP Key <b>({len(user_keys)} ခု)</b> ရှိနေသည်ကို တွေ့ရှိရပါသည်။\n\n"
+                    f"👇 အောက်ပါတို့မှ <b>သက်တမ်းတိုးမည့် Key အဟောင်း</b> ကို ရွေးချယ်ပါ (သို့မဟုတ်) <b>ကီးအသစ် အစအဆုံး ဝယ်ယူရန်</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
                 )
-                mk.row(InlineKeyboardButton("❌ Reject", callback_data=f"replace_reject_{chat_id}_{kid}"))
-                for aid in ADMIN_CHAT_IDS:
-                    try: bot.send_message(aid, alert, parse_mode="HTML", reply_markup=mk)
-                    except: pass
-                bot.send_message(chat_id, "✅ Admin ထံ ပို့ပြီးပါပြီ။", reply_markup=get_back_inline_keyboard())
-            else:
-                bot.send_message(chat_id, "❌ Key ရှာမတွေ့ပါ။", reply_markup=get_back_inline_keyboard())
-            return
-        
-        # Admin: Total Data Usage
-        if input_value == "📊 Total Data Usage":
-            clear_all_states(chat_id)
-            if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-            bot.send_message(chat_id, "📡 တွက်ချက်နေသည်...")
-            def stats(au):
-                tk, tb = 0, 0
                 try:
-                    kr = requests.get(f"{au}/access-keys", verify=False, timeout=6)
-                    mr = requests.get(f"{au}/metrics/transfer", verify=False, timeout=6)
-                    if kr.status_code == 200: tk = len(kr.json().get("accessKeys", []))
-                    if mr.status_code == 200: tb = sum(mr.json().get("bytesTransferredByUserId", {}).values())
-                except: pass
-                return tk, tb
-            t1, b1 = stats(OUTLINE_API_URL_1); t2, b2 = stats(OUTLINE_API_URL_2); t3, b3 = stats(OUTLINE_API_URL_3)
-            ob = b1 + b2 + b3
-            rep = f"📊 <b>SERVER STATS</b>\n\n📡 S1: <b>{t1}</b> keys | <b>{bytes_to_gb(b1)} GB</b>\n📡 S2: <b>{t2}</b> keys | <b>{bytes_to_gb(b2)} GB</b>\n📡 S3: <b>{t3}</b> keys | <b>{bytes_to_gb(b3)} GB</b>\n━━━━━━━━━━\n🌟 Total: <b>{bytes_to_gb(ob)} GB</b>"
-            bot.send_message(chat_id, rep, parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-        
-        # Admin: Monthly Revenue
-        if input_value in ["💰 လစဉ် ဝင်ငွေ", "လစဉ် ဝင်ငွေ"]:
-            clear_all_states(chat_id)
-            if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-            now = datetime.utcnow() + timedelta(hours=6, minutes=30)
-            cy, cm = now.year, now.month
-            today = now.strftime("%Y-%m-%d")
-            sales = load_sales_history()
-            s1k=s1r=s2k=s2r=s3k=s3r=vk=vr=0
-            tk=today_k=tr=today_r=0
-            tp = {}
-            for it in sales:
-                if it.get("year") == cy and it.get("month") == cm:
-                    sv = str(it.get("server", "1")); pr = int(it.get("price", 0))
-                    pn = it.get("plan_name", "Plan"); pm = it.get("months", 1)
-                    pk = f"{pn} [{pm} လ]"
-                    ist = (it.get("date") == today)
-                    if ist: tp[pk] = tp.get(pk, 0) + 1
-                    if sv == "1": s1k += 1; s1r += pr; tk += 1; tr += pr
-                    elif sv == "2": s2k += 1; s2r += pr; tk += 1; tr += pr
-                    elif sv == "3": s3k += 1; s3r += pr; tk += 1; tr += pr
-                    else: vk += 1; vr += pr; tk += 1; tr += pr
-                    if ist: today_k += 1; today_r += pr
-            bd = "\n".join([f"   • {k}: <b>{v}</b> ခု" for k, v in tp.items()]) if tp else "   • <i>မရှိ</i>"
-            rep = f"💵 <b>REVENUE REPORT</b>\n📅 <code>{now.strftime('%d/%m/%Y %I:%M %p')}</code>\n━━━━━━━━━━\n🔥 <b>ဒီနေ့</b>\n🔑 {today_k} ခု\n{bd}\n💰 <b>{today_r:,} Ks</b>\n━━━━━━━━━━\n📡 S1: <b>{s1r:,} Ks</b> ({s1k})\n📡 S2: <b>{s2r:,} Ks</b> ({s2k})\n📡 S3: <b>{s3r:,} Ks</b> ({s3k})\n⚡ VIP: <b>{vr:,} Ks</b> ({vk})\n━━━━━━━━━━\n🌐 Total: <b>{tk} ခု</b>\n💎 <b>{tr:,} MMK</b>"
-            bot.send_message(chat_id, rep, parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-        
-        if input_value in ["🤖 Bot Refresh", "/refresh"]:
-            clear_all_states(chat_id)
-            bot.send_message(chat_id, "🤖 <b>Bot Refresh ပြီးပါပြီ!</b>", parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id)); return
-        
-        if input_value.startswith('/'): return
-        
-        # Data Check (Paste Key)
-        tk, bt, sn = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
-        if not tk: tk, bt, sn = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
-        if not tk: tk, bt, sn = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
-        if tk:
-            try:
-                fn = tk.get("name", "HMA User"); kid = str(tk.get("id"))
-                dn = fn; dm = None
-                for m in re.finditer(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', fn): dm = m.group(0)
-                if dm: dn = dn.replace(dm, "")
-                dn = dn.replace("[GW]", "").replace("[gw]", "").split("tg")[0].replace("_", " ").strip() or "HMA Customer"
-                hd = False
-                if dm:
-                    ep = dm.split('.'); d, mo, ys = int(ep[0]), int(ep[1]), ep[2]
-                    yr = int("20" + ys) if len(ys) == 2 else int(ys)
-                    ed = f"{d}.{mo}.{yr}"; hd = True
-                lb = tk.get("dataLimit", {}).get("bytes")
-                pgv = bytes_to_gb(lb) if lb else 500
-                pg = f"{pgv} GB" if lb else "Unlimited"
-                if bt:
-                    ub = bt.get(str(kid), 0); ug = bytes_to_gb(ub)
-                    ugs = f"{ug} GB"; rgs = f"{max(0, round(pgv - ug, 2))} GB" if lb else "Unlimited"
-                else:
-                    ugs = "Server offline"; rgs = pg
-                oid = get_order_id_for_key(fn)
-                ol = f"🧾 Order: <code>{oid}</code>\n\n" if oid != "N/A" else ""
-                sd = f"S{sn} 🇸🇬" if bt else f"S{sn} 🇸🇬 <i>(⚠️ Offline)</i>"
-                txt = f"👤 <b>{dn}</b>\n\n{ol}📡 {sd}\n🛍️ Plan: <b>{pg}</b>\n🧰 သုံးပြီး: <b>{ugs}</b>\n🗃️ ကျန်: <b>{rgs}</b>\n⏰ ကုန်ရက်: <b>{ed if hd else 'မသိ'}</b>"
-                bot.reply_to(message, txt, parse_mode="HTML", reply_markup=get_back_inline_keyboard()); return
-            except Exception as e:
-                bot.reply_to(message, f"❌ Error: {str(e)}"); return
-        
-        bot.reply_to(message, "❌ <b>တစ်ခုခုမှားနေပါသည်။</b>\n\nMenu ကို /start နှိပ်ပြီး Refresh လုပ်ပါ။", parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
-    except Exception as e:
-        print(f"handle_all FATAL: {e}")
+                    bot.edit_message_text(choice_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
+                except Exception:
+                    bot.send_message(chat_id, choice_text, parse_mode="HTML", reply_markup=markup)
+                return
 
-# ========== ADMIN KEY VIEW / DELETE ==========
-@bot.callback_query_handler(func=lambda call: call.data.startswith("viewkey_"))
-def handle_view_key(call):
-    try:
-        bot.answer_callback_query(call.id)
-        if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-        parts = call.data.split("_"); sn = parts[1]; kid = parts[2]
-        au = OUTLINE_API_URL_1 if sn == "1" else (OUTLINE_API_URL_2 if sn == "2" else OUTLINE_API_URL_3)
-        au = au.rstrip('/')
-        tk = None; bt = {}
-        try:
-            kr = requests.get(f"{au}/access-keys", verify=False, timeout=4)
-            if kr.status_code == 200:
-                for k in kr.json().get("accessKeys", []):
-                    if str(k.get("id")) == str(kid): tk = k; break
-                if tk:
-                    try:
-                        mr = requests.get(f"{au}/metrics/transfer", verify=False, timeout=4)
-                        if mr.status_code == 200: bt = mr.json().get("bytesTransferredByUserId", {})
-                    except: pass
-        except Exception as e: print("Live fetch err:", e)
-        ci = None
-        if not tk: ci = load_persistent_keys().get(f"{sn}_{kid}")
-        if tk or ci:
-            if tk:
-                fn = tk.get("name", "Unnamed"); rurl = tk.get("accessUrl", "")
-                fk = f"{rurl}#{fn}" if fn else rurl
-                lb = tk.get("dataLimit", {}).get("bytes")
-                pg = f"{bytes_to_gb(lb)} GB" if lb else "Unlimited"
-                ub = bt.get(str(kid), 0); ug = f"{bytes_to_gb(ub)} GB" if bt else "ဖတ်မရ"
-                dm = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', fn)
-                ed = dm.group(0) if dm else "မသိ"
-                oid = get_order_id_for_key(fn); sname = f"Server {sn} 🇸🇬"
+        markup = InlineKeyboardMarkup()
+        if balance >= amount or is_admin:
+            if plan.get("manual"):
+                markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
+            elif plan_code == "ultimate" or has_redeem_credit:
+                srv1_label = "📡 Server 1 🇸🇬 (Redeem Credit)" if has_redeem_credit else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
+                markup.row(InlineKeyboardButton(srv1_label, callback_data=f"buywallet_{plan_code}_1"))
             else:
-                fn = ci.get("name", "Unnamed"); fk = ci.get("access_url", "N/A")
-                lb2 = ci.get("limit_bytes"); pg = f"{bytes_to_gb(lb2)} GB" if lb2 else "Unlimited"
-                ug = "Server offline"; ed = ci.get("expire_date", "မသိ"); oid = ci.get("order_id", "N/A")
-                sname = f"Server {sn} 🇸🇬 <i>(⚠️ Offline)</i>"
-            ol = f"🧾 <b>Order:</b> <code>{oid}</code>\n" if oid != "N/A" else ""
-            mk = InlineKeyboardMarkup()
-            mk.add(InlineKeyboardButton("🗑️ Delete", callback_data=f"delkey_ask_{sn}_{kid}"))
-            msg = f"👤 <b>Customer Info</b>\n\n🤖 <b>{html.escape(fn)}</b>\n{ol}📡 {sname}\n🧰 {ug} / {pg}\n⏰ {ed}\n🔑 <b>Key:</b>\n\n<code>{fk}</code>"
-            bot.send_message(call.message.chat.id, msg, parse_mode="HTML", reply_markup=mk)
+                markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
+                markup.row(InlineKeyboardButton("📡 Server 2 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_2"))
+                markup.row(InlineKeyboardButton("📡 Server 3 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_3"))
         else:
-            bot.send_message(call.message.chat.id, "❌ Key ရှာမတွေ့ပါ။")
-    except Exception as e: print("viewkey err:", e)
+            shortfall = amount - balance
+            markup.row(InlineKeyboardButton(f"💰 ငွေ {shortfall:,} Ks ထပ်ဖြည့်ရန်", callback_data="btn_open_topup"))
+            
+        markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
+        markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("delkey_"))
-def handle_del_key(call):
+        balance_disp = "♾️" if is_admin else f"{balance:,} MMK"
+        balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
+        
+        server_notice = "\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် Server 1 မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
+
+        text = (
+            f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
+            f"📮 <b>Plan:</b> {plan['name']}\n\n"
+            f"🗃️ <b>Data:</b> {plan['data']} ( ၁လစာ )\n\n"
+            f"💵 <b>ကျသင့်ငွေ:</b> {amount:,} MMK\n\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💳 <b>လူကြီးမင်း၏ လက်ကျန်ငွေ:</b> <b>{balance_disp}</b>\n"
+            f"အခြေအနေ: <b>{balance_status}</b>\n"
+            f"━━━━━━━━━━━━━━━\n{server_notice}\n"
+            f"👇 ဝယ်ယူလိုပါက အောက်ပါ ဆာဗာခလုတ်များမှ မိမိနှစ်သက်ရာကို ရွေးချယ်နှိပ်ပါခင်ဗျာ:"
+        )
+        try:
+            bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=markup)
+        except Exception:
+            bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("renew_choice_"))
+def handle_renew_choice(call):
+    try:
+        bot.answer_callback_query(call.id, "⏳ ဆောင်ရွက်နေပါသည်...")
+    except:
+        pass
+    chat_id = call.message.chat.id
+    parts = call.data.split("_")
+    plan_code = parts[2]
+    server_num = parts[3]
+    choice_val = parts[4]
+
+    plan = PLANS.get(plan_code)
+    if not plan:
+        return
+
+    amount = plan["price"]
+    balance = get_user_balance(chat_id)
+    is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
+
+    if not is_admin and balance < amount:
+        try:
+            bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။", show_alert=True)
+        except:
+            pass
+        return
+
+    order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
+    
+    chat_info = call.message.chat
+    user_first = chat_info.first_name if chat_info.first_name else ""
+    user_last = chat_info.last_name if chat_info.last_name else ""
+    user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
+
+    vpn_key = None
+    key_name = None
+    expire_date = None
+    disp_gb = plan["data"]
+    apply_days = None if is_admin else used_bonus_days
+
+    if choice_val == "new":
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan, target_chat_id=chat_id, months_count=1, custom_days=apply_days, is_giveaway=False, order_id=order_id)
+    else:
+        today = datetime.now()
+        if apply_days:
+            expire_date = (today + timedelta(days=apply_days)).strftime("%d.%m.%Y")
+        else:
+            expire_date = (today + relativedelta(months=1)).strftime("%d.%m.%Y")
+        
+        vpn_key, key_name, expire_date = renew_specific_unlimited_key(server_num, choice_val, months_count=1, custom_days=apply_days, order_id=order_id)
+
+    if not vpn_key:
+        update_user_balance(chat_id, amount)
+        bot.send_message(chat_id, "❌ ဆာဗာလိုင်းမရသဖြင့် မဆောင်ရွက်နိုင်ပါ။ ငွေအား ပြန်လည်ထည့်သွင်းပေးထားပါသည်။", reply_markup=get_back_inline_keyboard())
+        return
+
+    save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
+    save_user_purchase_record(
+        chat_id=chat_id,
+        order_id=order_id,
+        plan_name=plan['name'],
+        disp_gb=disp_gb,
+        months_count=1,
+        price_str=f"{amount:,} Ks",
+        server_num=server_num,
+        expire_date=expire_date,
+        vpn_key=vpn_key
+    )
+
+    clean_name = user_name.strip().lower()
+    save_key_mapping(clean_name, chat_id)
+
+    exp_info_text = f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}"
+    if apply_days:
+        exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {apply_days} ရက် သက်တမ်း)</i>"
+
+    user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
+    success_text = (
+        f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
+        f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+        f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
+        f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
+        f"{exp_info_text}\n\n"
+        f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{user_disp_bal}</code>\n\n"
+        f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
+        f"<code>{vpn_key}</code>\n\n"
+        f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+    )
+    try:
+        bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    except Exception:
+        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
+def handle_buy_with_wallet(call):
+    try:
+        bot.answer_callback_query(call.id, "⏳ VPN Key ထုတ်ပေးနေပါသည်...")
+    except:
+        pass
+    chat_id = call.message.chat.id
+    lock_key = f"buy_wallet_{call.message.message_id}_{call.data}"
+    if is_callback_processed(lock_key):
+        try:
+            bot.answer_callback_query(call.id, "⚠️ စာရင်းလုပ်ဆောင်နေပါသည်...")
+        except:
+            pass
+        return
+
+    parts = call.data.split("_")
+    plan_code = parts[1]
+    server_num = parts[2]
+    plan = PLANS.get(plan_code)
+
+    if not plan:
+        try:
+            bot.answer_callback_query(call.id, "❌ Plan ရှာမတွေ့ပါ။")
+        except:
+            pass
+        return
+
+    amount = plan["price"]
+    balance = get_user_balance(chat_id)
+    is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
+
+    if not is_admin and balance < amount:
+        try:
+            bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။ ကျေးဇူးပြု၍ ငွေအရင်ဖြည့်ပေးပါ။", show_alert=True)
+        except:
+            pass
+        return
+
+    order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
+    
+    chat_info = call.message.chat
+    user_first = chat_info.first_name if chat_info.first_name else ""
+    user_last = chat_info.last_name if chat_info.last_name else ""
+    user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
+
+    if plan.get("manual"):
+        save_sale_transaction("VIP", chat_id, plan_code, plan["name"], plan.get("months", 1), amount, order_id=order_id)
+        
+        admin_alert = (
+            f"⚡ <b>စိတ်ကြိုက်သုံး 5 Device Plan အော်ဒါအသစ် (ငွေပေးချေပြီး)</b>\n\n"
+            f"🧾 Order ID: <code>{order_id}</code>\n"
+            f"👤 ဝယ်ယူသူ: {user_name}\n"
+            f"🆔 Chat ID: <code>{chat_id}</code>\n"
+            f"🛍️ Plan: <b>{plan['name']}</b>\n"
+            f"💵 ဖြတ်တောက်ပြီးငွေ: <b>{amount:,} MMK</b>\n\n"
+            f"👇 အောက်ပါခလုတ်ကိုနှိပ်၍ Key အား ပေးပို့ပေးပါခင်ဗျာ:"
+        )
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("🔑 Send Key to Customer", callback_data=f"ask_send_key_{chat_id}_{order_id}"))
+        
+        for aid in ADMIN_CHAT_IDS:
+            try:
+                bot.send_message(aid, admin_alert, parse_mode="HTML", reply_markup=markup)
+            except:
+                pass
+
+        user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
+        user_msg = (
+            f"🎉 <b>အော်ဒါမှာယူမှု အောင်မြင်ပါသည်!</b>\n\n"
+            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+            f"🛍️ <b>Plan:</b> {plan['name']}\n"
+            f"💵 <b>ကျသင့်ငွေ:</b> -{amount:,} MMK\n"
+            f"💳 <b>လက်ကျန်ငွေ:</b> {user_disp_bal}\n\n"
+            f"💡 <i>ဤ Plan သည် စိတ်ကြိုက်သုံး Plan ဖြစ်သဖြင့် Admin မှ ခေတ္တအတွင်း Key အား ပြင်ဆင်၍ ပို့ပေးပါမည်ခင်ဗျာ။ စောင့်ဆိုင်းပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။</i>"
+        )
+        try:
+            bot.edit_message_text(user_msg, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        except Exception:
+            bot.send_message(chat_id, user_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        return
+    
+    vpn_key = None
+    key_name = None
+    expire_date = None
+    disp_gb = plan["data"]
+
+    apply_days = None if is_admin else used_bonus_days
+
+    if plan_code == "ultimate":
+        vpn_key, key_name, expire_date, _ = renew_or_create_unlimited_key(server_num, user_name, chat_id, months_count=1, custom_days=apply_days, order_id=order_id)
+    else:
+        vpn_key, key_name, expire_date = create_outline_key(server_num, user_name, plan_info=plan, target_chat_id=chat_id, months_count=1, custom_days=apply_days, is_giveaway=False, order_id=order_id)
+
+    if not vpn_key:
+        update_user_balance(chat_id, amount)
+        bot.send_message(chat_id, "❌ ဆာဗာလိုင်းမရသဖြင့် Key မွေးမရပါ။ ကျသင့်ငွေအား Wallet ထဲသို့ ပြန်လည် ထည့်သွင်းပေးထားပါသည်။", reply_markup=get_back_inline_keyboard())
+        return
+
+    save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
+    save_user_purchase_record(
+        chat_id=chat_id,
+        order_id=order_id,
+        plan_name=plan['name'],
+        disp_gb=disp_gb,
+        months_count=1,
+        price_str=f"{amount:,} Ks",
+        server_num=server_num,
+        expire_date=expire_date,
+        vpn_key=vpn_key
+    )
+
+    clean_name = user_name.strip().lower()
+    save_key_mapping(clean_name, chat_id)
+
+    exp_info_text = f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}"
+    if apply_days:
+        exp_info_text += f" <i>(Redeem Wallet ငွေအလိုက် {apply_days} ရက် သက်တမ်း)</i>"
+
+    user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
+    success_text = (
+        f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
+        f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+        f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
+        f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
+        f"{exp_info_text}\n\n"
+        f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{user_disp_bal}</code>\n\n"
+        f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
+        f"<code>{vpn_key}</code>\n\n"
+        f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+    )
+    try:
+        bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+    except Exception:
+        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+
+    for aid in ADMIN_CHAT_IDS:
+        try:
+            bot.send_message(
+                aid,
+                f"🛍️ <b>Customer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
+                f"🧾 Order ID: <code>{order_id}</code>\n"
+                f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
+                f"🛍️ Plan: {plan['name']}\n"
+                f"📡 Server: Server {server_num}\n"
+                f"💵 ရရှိငွေ: {amount:,} MMK\n"
+                f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else '၁လစာ'})",
+                parse_mode="HTML"
+            )
+        except:
+            pass
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_plans")
+def handle_back_to_plans(call):
     try:
         bot.answer_callback_query(call.id)
-        if is_callback_processed(f"del_{call.message.message_id}_{call.data}"): return
-        if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-        parts = call.data.split("_"); action = parts[1]; sn = parts[2]; kid = parts[3]
-        if action == "ask":
-            mk = InlineKeyboardMarkup()
-            mk.row(InlineKeyboardButton("✅ Yes", callback_data=f"delkey_confirm_{sn}_{kid}"), InlineKeyboardButton("❌ No", callback_data="delkey_cancel"))
-            bot.send_message(call.message.chat.id, f"⚠️ S{sn} ပေါ်မှ Key ({kid}) ဖျက်မှာ သေချာပါသလား?", reply_markup=mk)
-        elif action == "confirm":
-            pr = load_persistent_keys(); uid = f"{sn}_{kid}"
-            if uid in pr: del pr[uid]; redis_set("persistent_keys_registry", pr)
-            au = OUTLINE_API_URL_1 if sn == "1" else (OUTLINE_API_URL_2 if sn == "2" else OUTLINE_API_URL_3)
-            try:
-                requests.delete(f"{au}/access-keys/{kid}", verify=False, timeout=8)
-                bot.edit_message_text(f"✅ Key ({kid}) ဖျက်ပြီးပါပြီ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
-            except:
-                bot.edit_message_text(f"✅ မှတ်တမ်းထဲမှ Key ({kid}) ဖျက်ပြီးပါပြီ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
-        elif action == "cancel":
-            bot.edit_message_text("❌ ဖျက်ခြင်း ပယ်ဖျက်ပါပြီ။", chat_id=call.message.chat.id, message_id=call.message.message_id)
-    except Exception as e: print("delkey err:", e)
+    except:
+        pass
+    chat_id = call.message.chat.id
+    bot.edit_message_text(
+        "🧸 ကျေးဇူးပြု၍ ဝယ်ယူလိုသော VPN Plan ကို ရွေးချယ်ပေးပါခင်ဗျာ:",
+        chat_id=chat_id,
+        message_id=call.message.message_id,
+        reply_markup=get_plan_keyboard()
+    )
 
-# ========== REPLACEMENT CALLBACK ==========
-@bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
-def handle_replace_cb(call):
+# 🔑 Admin Manual Key Send Callback
+@bot.callback_query_handler(func=lambda call: call.data.startswith("ask_send_key_"))
+def handle_ask_send_key_callback(call):
     try:
-        if is_callback_processed(f"repl_{call.message.message_id}_{call.data}"):
-            bot.answer_callback_query(call.id, "⚠️ ပြီးပါပြီ။"); return
-        if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]: return
-        parts = call.data.split("_"); action = parts[1]
-        if action == "reject":
-            tid = parts[2]
-            try: bot.send_message(tid, "❌ Key အစားထိုးခြင်းကို Admin မှ ငြင်းလိုက်ပါသည်။")
-            except: pass
-            bot.edit_message_text((call.message.text or "") + "\n\n❌ <b>REJECTED</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
-            return
-        new_sn = parts[1].replace("srv", ""); old_sn = parts[2]; old_kid = parts[3]
-        tid = parts[4]; rg = float(parts[5]); ed = parts[6]
-        au_old = OUTLINE_API_URL_1 if old_sn == "1" else (OUTLINE_API_URL_2 if old_sn == "2" else OUTLINE_API_URL_3)
-        try: requests.delete(f"{au_old}/access-keys/{old_kid}", verify=False, timeout=8)
-        except: pass
-        try:
-            ci = bot.get_chat(tid)
-            uf = getattr(ci, 'first_name', '') or ""; ul = getattr(ci, 'last_name', '') or ""
-            un = f"{uf} {ul}".strip() or "HMA Customer"
-            nk, _, ned = create_outline_key(new_sn, un, plan_info={"bytes": int(rg * 1000**3)}, target_chat_id=tid, months_count=1)
-            if nk:
-                bot.send_message(tid, f"🎉 <b>VPN Key အသစ် အစားထိုးပေးလိုက်ပါပြီ!</b>\n\n📡 Server {new_sn} 🇸🇬\n🧰 Data: {rg} GB\n⏰ {ed}\n\n🔑 <code>{nk}</code>", parse_mode="HTML")
-                bot.edit_message_text((call.message.text or "") + f"\n\n✅ <b>REPLACED (S{new_sn})</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
-                bot.answer_callback_query(call.id, "✅ ပြီးပါပြီ။")
-        except Exception as e:
-            bot.answer_callback_query(call.id, f"❌ {str(e)[:80]}", show_alert=True)
-    except Exception as e: print("replace err:", e)
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    
+    parts = call.data.split("_")
+    target_chat_id = parts[3]
+    order_id = parts[4]
+    
+    order_info = {
+        "target_chat_id": target_chat_id,
+        "order_id": order_id,
+        "plan_name": "စိတ်ကြိုက်သုံး Plan (5 Device)",
+        "disp_gb": "Unlimited Data (5 Device)",
+        "months": 1
+    }
+    set_manual_dispatch_state(call.message.chat.id, order_info)
+    
+    prompt_txt = (
+        f"🔑 <b>Customer ထံ ပို့ပေးမည့် Key Link (သို့မဟုတ် စာသား) အား ပေးပို့ပါ:</b>\n\n"
+        f"🧾 Order ID: <code>{order_id}</code>\n"
+        f"👤 Chat ID: <code>{target_chat_id}</code>\n\n"
+        f"👇 အောက်တွင် မိမိထုတ်ထားသော VPN Key Link အား Paste ချ၍ ပေးပို့ပေးပါခင်ဗျာ -"
+    )
+    bot.send_message(call.message.chat.id, prompt_txt, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
-# ========== CRON CHECK ==========
+# 🎟️ Redeem Code Trigger Callback
+@bot.callback_query_handler(func=lambda call: call.data == "btn_open_redeem")
+def handle_btn_open_redeem(call):
+    try:
+        bot.answer_callback_query(call.id)
+    except:
+        pass
+    chat_id = call.message.chat.id
+
+    is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
+    if not is_admin:
+        _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
+        if bonus_bal > 0:
+            bot.send_message(
+                chat_id,
+                f"⚠️ <b>ခွင့်လွှတ်ပါခင်ဗျာ၊ လူကြီးမင်းတွင် လက်ရှိ အသုံးပြုနိုင်သော Redeem Bonus လက်ကျန်ငွေ ({bonus_bal:,} MMK) ရှိနေဆဲ ဖြစ်ပါသဖြင့် နောက်ထပ် Code အသစ်ကို ထပ်မံ ရယူခွင့် မရှိသေးပါခင်ဗျာ။</b>\n\n"
+                f"💡 <i>အဆိုပါငွေဖြင့် Plan ဝယ်ယူအသုံးပြုပြီးမှ (သို့မဟုတ် ရက်စေ့ကုန်ဆုံးသွားမှ) သာ နောက်ထပ် Code အသစ်ကို ရယူနိုင်ပါမည်ခင်ဗျာ။</i>",
+                parse_mode="HTML",
+                reply_markup=get_back_inline_keyboard()
+            )
+            return
+
+    set_redeem_state(chat_id, True)
+    redeem_guide = (
+        "🎟️ <b>Wallet Redeem Code အသုံးပြုရန်:</b>\n\n"
+        "👇 Admin ထံမှ ရရှိထားသော Redeem Code (ဥပမာ- <code>a8k2m9x4p1</code>) ကို ဒီ Chat ထဲသို့ Paste ချပို့ပေးပါခင်ဗျာ:"
+    )
+    bot.send_message(chat_id, redeem_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+
 @app.route('/cron-check', methods=['GET', 'POST'])
 def cron_check():
     today = (datetime.utcnow() + timedelta(hours=6, minutes=30)).date()
-    km = load_key_mappings(); nc = 0; dc = 0
-    for au in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
+    
+    key_mappings = load_key_mappings()
+    notified_count = 0
+    deleted_count = 0
+
+    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
-            kr = requests.get(f"{au}/access-keys", verify=False, timeout=8)
-            mr = requests.get(f"{au}/metrics/transfer", verify=False, timeout=8)
-            if kr.status_code != 200: continue
-            kd = kr.json().get("accessKeys", [])
-            bt = mr.json().get("bytesTransferredByUserId", {}) if mr.status_code == 200 else {}
-            for k in kd:
-                fn = k.get("name", ""); kid = str(k.get("id"))
-                lb = k.get("dataLimit", {}).get("bytes"); ub = bt.get(kid, 0)
-                is_gb_full = lb and ub >= lb
-                is_today = False; should_del = False
-                dms = list(re.finditer(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', fn))
-                if dms:
-                    dm = dms[-1]
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
+            
+            if keys_resp.status_code != 200:
+                continue
+                
+            keys_data = keys_resp.json().get("accessKeys", [])
+            bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {}) if metrics_resp.status_code == 200 else {}
+
+            for key in keys_data:
+                full_name = key.get("name", "")
+                key_id = str(key.get("id"))
+                limit_bytes = key.get("dataLimit", {}).get("bytes")
+                usage_bytes = bytes_transferred.get(key_id, 0)
+                
+                is_gb_full = False
+                if limit_bytes and usage_bytes >= limit_bytes:
+                    is_gb_full = True
+
+                is_expired_today = False
+                should_delete = False
+                
+                date_matches = list(re.finditer(r'(\d{1,2})\.(\d{1,2})\.(\d{2,4})', full_name))
+                
+                if date_matches:
+                    date_match = date_matches[-1]
                     try:
-                        d, m, yr = int(dm.group(1)), int(dm.group(2)), dm.group(3)
-                        yr = int("20" + yr) if len(yr) == 2 else int(yr)
-                        kexp = datetime(yr, m, d).date()
-                        if kexp == today: is_today = True
-                        elif today > kexp: should_del = True
-                    except: pass
-                if should_del:
+                        k_day = int(date_match.group(1))
+                        k_month = int(date_match.group(2))
+                        k_year_raw = date_match.group(3)
+                        k_year = int("20" + k_year_raw) if len(k_year_raw) == 2 else int(k_year_raw)
+                        
+                        key_expire_date = datetime(k_year, k_month, k_day).date()
+                        
+                        if key_expire_date == today:
+                            is_expired_today = True
+                        elif today > key_expire_date:
+                            should_delete = True
+                    except:
+                        pass
+
+                if should_delete:
                     try:
-                        if requests.delete(f"{au}/access-keys/{kid}", verify=False, timeout=8).status_code in [200, 204]:
-                            dc += 1
+                        del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+                        if del_res.status_code in [200, 204]:
+                            deleted_count += 1
                             for aid in ADMIN_CHAT_IDS:
-                                try: bot.send_message(aid, f"🗑️ Key expired & deleted: <code>{fn}</code>", parse_mode="HTML")
-                                except: pass
-                    except: pass
-                    continue
-                if is_gb_full or is_today:
-                    tid = extract_chat_id_from_key_name(fn)
-                    if not tid:
-                        im = re.search(r'\((\d{8,12})\)', fn)
-                        if im: tid = im.group(1)
-                    if not tid:
-                        cn = fn
-                        if dms: cn = cn.replace(dms[-1].group(0), "")
-                        cn = re.sub(r'\b(tg|viber|mess|fb)\b', '', cn, flags=re.IGNORECASE).replace("[GW]", "").replace("[gw]", "").strip().lower()
-                        tid = km.get(cn)
-                        if not tid:
-                            for mn, cid in km.items():
-                                if mn in cn or cn in mn: tid = cid; break
-                    warn = "Data GB ပြည့်ပါပြီ" if is_gb_full else "ယနေ့ သက်တမ်းကုန်ပါပြီ"
-                    if tid:
+                                try:
+                                    bot.send_message(
+                                        aid, 
+                                        f"🗑️ <b>Customer Key Expired:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
+                                        parse_mode="HTML"
+                                    )
+                                except:
+                                    pass
+                    except:
+                        pass
+                    continue 
+
+                if is_gb_full or is_expired_today:
+                    target_chat_id = extract_chat_id_from_key_name(full_name)
+                    if not target_chat_id:
+                        id_match = re.search(r'\((\d{8,12})\)', full_name)
+                        if id_match:
+                            target_chat_id = id_match.group(1)
+                    
+                    if not target_chat_id:
+                        clean_name = full_name
+                        if date_matches:
+                            clean_name = clean_name.replace(date_matches[-1].group(0), "")
+                        clean_name = re.sub(r'\b(tg|viber|mess|fb)\b', '', clean_name, flags=re.IGNORECASE)
+                        clean_name = clean_name.replace("[GW]", "").replace("[gw]", "")
+                        clean_name = clean_name.strip().lower()
+
+                        target_chat_id = key_mappings.get(clean_name)
+                        if not target_chat_id:
+                            for mapped_name, cid in key_mappings.items():
+                                if mapped_name in clean_name or clean_name in mapped_name:
+                                    target_chat_id = cid
+                                    break
+
+                    if is_gb_full:
+                        reason_text = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ"
+                        user_warning = "ဝယ်ယူထားသော Data GB ပြည့်သွားပါပြီ ခင်ဗျာ။"
+                    else:
+                        reason_text = "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ"
+                        user_warning = "ယနေ့ သက်တမ်းကုန်ဆုံးပါပြီ ခင်ဗျာ။ (မနက်ဖြန်တွင် အသုံးပြုခွင့် ပိတ်သိမ်းပါမည်)"
+
+                    if target_chat_id:
                         try:
-                            bot.send_message(tid, f"⚠️ <b>သတိပေးချက်:</b>\n\nVPN Key ({fn}) <b>{warn}</b>\n\nဆက်သုံးလိုပါက Bot '🛍️ Plan များဝယ်ရန်' မှ ပြန်ဝယ်ပါ။", parse_mode="HTML")
-                            nc += 1
-                        except: pass
+                            user_noti = (
+                                f"⚠️ <b>သတိပေးချက်:</b>\n\n"
+                                f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် <b>{user_warning}</b>\n\n"
+                                f"ဆက်လက် အသုံးပြုလိုပါက Bot ၏ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
+                            )
+                            bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
+                            notified_count += 1
+                        except:
+                            pass
+
+                    admin_noti = (
+                        f"📢 <b>Customer သိပေးချက်</b>\n"
+                        f"👤 အသုံးပြုသူ: {full_name}\n"
+                        f"⚠️ အခြေအနေ: {reason_text}\n"
+                        f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
+                    )
+                    
                     for aid in ADMIN_CHAT_IDS:
-                        try: bot.send_message(aid, f"📢 <b>Customer:</b> {fn}\n⚠️ {warn}\n🆔 {tid or 'မသိ'}", parse_mode="HTML")
-                        except: pass
-        except: pass
-    return jsonify({"status": "ok", "notified": nc, "deleted": dc}), 200
+                        try:
+                            bot.send_message(aid, admin_noti, parse_mode="HTML")
+                        except:
+                            pass
+        except:
+            pass
+
+    return jsonify({"status": "cron completed", "notified": notified_count, "deleted": deleted_count}), 200
 
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
 @app.route('/<path:path>', methods=['POST', 'GET'])
 def index(path):
     if request.method == 'POST':
-        try:
-            update = telebot.types.Update.de_json(request.get_data().decode('utf-8'))
-            bot.process_new_updates([update])
-        except Exception as e:
-            print("Webhook error:", e)
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
         return jsonify({"status": "ok"}), 200
     return "Bot is running perfectly!", 200
+
+@app.route('/setWebhook', methods=['GET'])
+def set_webhook():
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url=https://{request.host}/"
+    res = requests.get(url)
+    return jsonify(res.json()), 200
