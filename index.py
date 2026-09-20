@@ -1345,9 +1345,9 @@ def search_users_by_query(query):
 # 🔙 Back to Main Menu Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
 def handle_back_to_main_callback(call):
+    bot.answer_callback_query(call.id, "🔙 မူလ Menu သို့ ပြန်သွားပါပြီ။")
     chat_id = call.message.chat.id
     clear_all_states(chat_id)
-    bot.answer_callback_query(call.id, "🔙 မူလ Menu သို့ ပြန်သွားပါပြီ။")
     try:
         bot.delete_message(chat_id, call.message.message_id)
     except:
@@ -1893,10 +1893,10 @@ def generate_random_redeem_code():
 # ----------------- FORCE JOIN CHANNEL CALLBACK HANDLER -----------------
 @bot.callback_query_handler(func=lambda call: call.data == "verify_subscription")
 def handle_verify_subscription(call):
+    bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
     chat_id = call.message.chat.id
     if is_user_subscribed(chat_id):
         save_user_id(chat_id)
-        bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
@@ -1920,7 +1920,6 @@ def send_welcome(message):
         send_force_join_message(chat_id)
         return
 
-    # Full Name (First Name + Last Name) အပြည့်အစုံ ယူသုံးခြင်း
     user_first = message.from_user.first_name if message.from_user.first_name else ""
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     full_name = f"{user_first} {user_last}".strip() or "HMA User"
@@ -2098,9 +2097,9 @@ def handle_btn_open_topup(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_topup_"))
 def handle_approve_topup(call):
+    bot.answer_callback_query(call.id)
     lock_key = f"appr_topup_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
-        bot.answer_callback_query(call.id, "⚠️ ငွေဖြည့်ပေးပြီးပါပြီ။")
         return
 
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -2112,7 +2111,6 @@ def handle_approve_topup(call):
     topup_id = parts[4]
 
     new_balance, _ = update_user_balance(target_chat_id, amount)
-    bot.answer_callback_query(call.id, f"✅ {amount:,} Ks ဖြည့်သွင်းပေးပြီးပါပြီ။")
 
     user_noti = (
         f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
@@ -2240,8 +2238,6 @@ def handle_renew_choice(call):
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
 
-    bot.answer_callback_query(call.id, "⏳ VPN Key ဆောင်ရွက်နေပါသည်...")
-
     vpn_key = None
     key_name = None
     expire_date = None
@@ -2303,19 +2299,18 @@ def handle_renew_choice(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
 def handle_buy_with_wallet(call):
-    chat_id = call.message.chat.id
+    bot.answer_callback_query(call.id)
     lock_key = f"buy_wallet_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
-        bot.answer_callback_query(call.id, "⚠️ စာရင်းလုပ်ဆောင်နေပါသည်...")
         return
 
     parts = call.data.split("_")
     plan_code = parts[1]
     server_num = parts[2]
     plan = PLANS.get(plan_code)
+    chat_id = call.message.chat.id
 
     if not plan:
-        bot.answer_callback_query(call.id, "❌ Plan ရှာမတွေ့ပါ။")
         return
 
     amount = plan["price"]
@@ -2325,8 +2320,6 @@ def handle_buy_with_wallet(call):
     if not is_admin and balance < amount:
         bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။ ကျေးဇူးပြု၍ ငွေအရင်ဖြည့်ပေးပါ။", show_alert=True)
         return
-
-    bot.answer_callback_query(call.id, "⏳ VPN Key ထုတ်ပေးနေပါသည်...")
 
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
@@ -2360,7 +2353,7 @@ def handle_buy_with_wallet(call):
         user_disp_bal = "♾️" if is_admin else f"{new_bal:,} MMK"
         user_msg = (
             f"🎉 <b>အော်ဒါမှာယူမှု အောင်မြင်ပါသည်!</b>\n\n"
-            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n"
+            f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
             f"🛍️ <b>Plan:</b> {plan['name']}\n"
             f"💵 <b>ကျသင့်ငွေ:</b> -{amount:,} MMK\n"
             f"💳 <b>လက်ကျန်ငွေ:</b> {user_disp_bal}\n\n"
@@ -2662,9 +2655,9 @@ def fetch_key_from_server(api_url, input_value):
 # 🔄 Admin Key Replacement Approval Callback Handler
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
 def handle_admin_replace_callback(call):
+    bot.answer_callback_query(call.id)
     lock_key = f"repl_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):
-        bot.answer_callback_query(call.id, "⚠️ လုပ်ဆောင်ပြီးပါပြီ။")
         return
 
     if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
@@ -3272,15 +3265,6 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "🤖 <b>Bot စနစ်အား Refresh ပြုလုပ်ပြီးပါပြီခင်ဗျာ!</b>", parse_mode="HTML", reply_markup=get_main_menu_keyboard(chat_id))
         return
 
-    # Admin Reply Key Send Flow
-    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and message.reply_to_message:
-        reply_caption = message.reply_to_message.caption or message.reply_to_message.text or ""
-        if "User Chat ID:" in reply_caption:
-            try:
-                target_user_id = re.search(r'User Chat ID:\s*(?:<code>)?(\d+)(?:`)/?', reply_caption).group(1)
-            except:
-                pass
-
     if input_value.startswith('/'):
         return
 
@@ -3357,7 +3341,6 @@ def cron_check():
     notified_count = 0
     deleted_count = 0
 
-    # 🛠️ ပြင်ဆင်ချက်: Server 1, 2 နှင့် 3 သို့ အပြည့်အစုံ စစ်ဆေးပေးခြင်း
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -3401,7 +3384,6 @@ def cron_check():
                     except:
                         pass
 
-                # 1️⃣ သက်တမ်းကုန်ဆုံးပြီး ကျော်လွန်သွားပါက ကီးကို အလိုအလျောက် ဖြတ်မည်[span_2](start_span)[span_2](end_span)
                 if should_delete:
                     try:
                         del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
@@ -3420,7 +3402,6 @@ def cron_check():
                         pass
                     continue 
 
-                # 2️⃣ Data ပြည့်သွားတာ (သို့) ယနေ့ သက်တမ်းကုန်တာတွေအတွက် Noti ပို့မည်[span_3](start_span)[span_3](end_span)
                 if is_gb_full or is_expired_today:
                     target_chat_id = extract_chat_id_from_key_name(full_name)
                     if not target_chat_id:
@@ -3483,8 +3464,12 @@ def cron_check():
 @app.route('/<path:path>', methods=['POST', 'GET'])
 def index(path):
     if request.method == 'POST':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
+        try:
+            json_string = request.get_data().decode('utf-8')
+            update = telebot.types.Update.de_json(json_string)
+            if update:
+                bot.process_new_updates([update])
+        except Exception as e:
+            print("Webhook Processing Error:", e)
         return jsonify({"status": "ok"}), 200
     return "Bot is running perfectly!", 200
