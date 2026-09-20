@@ -1,4 +1,3 @@
-မနေ့ညကအရေးကြီး Bot code အဟောင်း🤍
 import os
 import requests
 import random
