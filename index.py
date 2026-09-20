@@ -2946,7 +2946,7 @@ def handle_all_messages(message):
         bot.send_message(chat_id, check_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
-    # 📇 ဝယ်ယူမှုမှတ်တမ်း
+    # 📇 ဝယ်ယူမှုမှတ်တမ်း (Error ရှင်းပြီးသား အပိုင်း)
     if input_value in ["📇 ဝယ်ယူမှုမှတ်တမ်း", "ဝယ်ယူမှုမှတ်တမ်း"]:
         clear_all_states(chat_id)
         records = get_user_combined_purchase_records(chat_id)
@@ -2958,35 +2958,30 @@ def handle_all_messages(message):
             bot.send_message(chat_id, empty_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
             return
 
-        history_texts = []
         for idx, rec in enumerate(reversed(records), 1):
             srv_name = f"Singapore Server {rec.get('server', '1')} 🇸🇬" if rec.get('server') != "VIP" else "VIP Server 🇸🇬"
-            vpn_k = rec.get('vpn_key', '')
-            key_block = f"<code>{vpn_k}</code>" if vpn_k != "N/A" else "<i>(Key လဲလှယ်ရန် Menu ရှိ '♻️ Key လဲရန်' အသုံးပြုနိုင်ပါသည်)</i>"
+            vpn_k = html.escape(rec.get('vpn_key', ''))
+            key_block = f"<code>{vpn_k}</code>" if rec.get('vpn_key', '') != "N/A" else "<i>(Key လဲလှယ်ရန် Menu ရှိ '♻️ Key လဲရန်' အသုံးပြုနိုင်ပါသည်)</i>"
             
+            plan_name_esc = html.escape(rec.get('plan_name', ''))
+            disp_gb_esc = html.escape(rec.get('disp_gb', ''))
+            order_id_esc = html.escape(rec.get('order_id', 'N/A'))
+            timestamp_esc = html.escape(rec.get('timestamp', 'N/A'))
+            expire_date_esc = html.escape(rec.get('expire_date', 'N/A'))
+
             item_txt = (
                 f"<b>#{idx} | ဝယ်ယူမှု အချက်အလက်</b>\n\n"
-                f"🧾 <b>Order ID:</b> <code>{rec.get('order_id', 'N/A')}</code>\n\n"
-                f"📅 <b>အချိန်:</b> <code>{rec.get('timestamp', 'N/A')}</code>\n\n"
-                f"🛍️ <b>Plan:</b> {rec.get('plan_name', '')} ({rec.get('disp_gb', '')})\n\n"
+                f"🧾 <b>Order ID:</b> <code>{order_id_esc}</code>\n\n"
+                f"📅 <b>အချိန်:</b> <code>{timestamp_esc}</code>\n\n"
+                f"🛍️ <b>Plan:</b> {plan_name_esc} ({disp_gb_esc})\n\n"
                 f"📡 <b>Server:</b> {srv_name}\n\n"
-                f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{rec.get('expire_date', 'N/A')}</code>\n\n"
+                f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{expire_date_esc}</code>\n\n"
                 f"🔑 <b>VPN Key:</b>\n\n"
                 f"{key_block}"
             )
-            history_texts.append(item_txt)
+            bot.send_message(chat_id, item_txt, parse_mode="HTML")
 
-        final_history_msg = (
-            f"📇 <b>လူကြီးမင်း ဝယ်ယူခဲ့သော VPN Key များ ({len(records)} ခု):</b>\n\n" +
-            "\n\n━━━━━━━━━━━━━━━━━\n\n".join(history_texts) +
-            "\n\n☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးယူနိုင်ပါသည်ခင်ဗျာ။</i>"
-        )
-        
-        if len(final_history_msg) > 4000:
-            for piece in [final_history_msg[i:i+4000] for i in range(0, len(final_history_msg), 4000)]:
-                bot.send_message(chat_id, piece, parse_mode="HTML")
-        else:
-            bot.send_message(chat_id, final_history_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        bot.send_message(chat_id, "☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးယူနိုင်ပါသည်ခင်ဗျာ။</i>", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
     # ♻️ Key လဲရန်
@@ -3357,7 +3352,6 @@ def cron_check():
     notified_count = 0
     deleted_count = 0
 
-    # 🛠️ ပြင်ဆင်ချက်: Server 1, 2 နှင့် 3 သို့ အပြည့်အစုံ စစ်ဆေးပေးခြင်း
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -3401,7 +3395,6 @@ def cron_check():
                     except:
                         pass
 
-                # 1️⃣ သက်တမ်းကုန်ဆုံးပြီး ကျော်လွန်သွားပါက ကီးကို အလိုအလျောက် ဖြတ်မည်[span_2](start_span)[span_2](end_span)
                 if should_delete:
                     try:
                         del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
@@ -3420,7 +3413,6 @@ def cron_check():
                         pass
                     continue 
 
-                # 2️⃣ Data ပြည့်သွားတာ (သို့) ယနေ့ သက်တမ်းကုန်တာတွေအတွက် Noti ပို့မည်[span_3](start_span)[span_3](end_span)
                 if is_gb_full or is_expired_today:
                     target_chat_id = extract_chat_id_from_key_name(full_name)
                     if not target_chat_id:
