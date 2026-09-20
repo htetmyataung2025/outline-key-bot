@@ -2235,7 +2235,8 @@ def handle_renew_choice(call):
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
-    chat_info = bot.get_chat(chat_id)
+    # ပြင်ဆင်ပြီး: bot.get_chat အစား call.message.chat ကိုသုံး၍ Error တက်ခြင်းမှ ကာကွယ်ရန်
+    chat_info = call.message.chat
     user_first = chat_info.first_name if chat_info.first_name else ""
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
@@ -2301,6 +2302,7 @@ def handle_renew_choice(call):
     except Exception:
         bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
+# 🛠️ ပြင်ဆင်ပြီး: handle_buy_with_wallet တွင် bot.get_chat အစား call.message.chat ကို သုံး၍ Error တက်ခြင်းကို ဖြေရှင်းထားပါသည်[span_2](start_span)[span_2](end_span)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
 def handle_buy_with_wallet(call):
     chat_id = call.message.chat.id
@@ -2331,7 +2333,8 @@ def handle_buy_with_wallet(call):
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
-    chat_info = bot.get_chat(chat_id)
+    # ပြင်ဆင်ပြီး: bot.get_chat(chat_id) အစား call.message.chat ကို တိုက်ရိုက်ယူသုံးခြင်းဖြင့် အလွန် လုံခြုံစေပါသည်[span_3](start_span)[span_3](end_span)
+    chat_info = call.message.chat
     user_first = chat_info.first_name if chat_info.first_name else ""
     user_last = chat_info.last_name if chat_info.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA Customer"
@@ -2430,7 +2433,7 @@ def handle_buy_with_wallet(call):
         try:
             bot.send_message(
                 aid,
-                f"🛍️ <b>Custromer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
+                f"🛍️ <b>Customer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
                 f"🧾 Order ID: <code>{order_id}</code>\n"
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
@@ -3357,7 +3360,6 @@ def cron_check():
     notified_count = 0
     deleted_count = 0
 
-    # 🛠️ ပြင်ဆင်ချက်: Server 1, 2 နှင့် 3 သို့ အပြည့်အစုံ စစ်ဆေးပေးခြင်း
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -3401,7 +3403,6 @@ def cron_check():
                     except:
                         pass
 
-                # 1️⃣ သက်တမ်းကုန်ဆုံးပြီး ကျော်လွန်သွားပါက ကီးကို အလိုအလျောက် ဖြတ်မည်[span_2](start_span)[span_2](end_span)
                 if should_delete:
                     try:
                         del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
@@ -3420,7 +3421,6 @@ def cron_check():
                         pass
                     continue 
 
-                # 2️⃣ Data ပြည့်သွားတာ (သို့) ယနေ့ သက်တမ်းကုန်တာတွေအတွက် Noti ပို့မည်[span_3](start_span)[span_3](end_span)
                 if is_gb_full or is_expired_today:
                     target_chat_id = extract_chat_id_from_key_name(full_name)
                     if not target_chat_id:
