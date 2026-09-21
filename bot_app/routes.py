@@ -65,6 +65,37 @@ def _is_diag_request():
 
 def _diag_payload():
     """Secret-safe config snapshot (no ids/tokens in full, booleans + counts)."""
+    urls = outline_api_urls()
+    connectivity = {}
+    import requests as _requests
+
+    for i, url in enumerate(urls, 1):
+        label = f"s{i}"
+        get_ok = post_ok = False
+        try:
+            gr = _requests.get(f"{url}/access-keys", verify=False, timeout=6)
+            get_ok = 200 <= gr.status_code < 400
+        except Exception:
+            get_ok = False
+        try:
+            pr = _requests.post(f"{url}/access-keys", verify=False, timeout=8)
+            post_ok = 200 <= pr.status_code < 400
+            # remove the test key so the diag doesn't leave stray keys on the server
+            if post_ok:
+                try:
+                    kid = pr.json().get("id")
+                    if kid:
+                        _requests.delete(f"{url}/access-keys/{kid}", verify=False, timeout=8)
+                except Exception:
+                    pass
+        except Exception:
+            post_ok = False
+        connectivity[label] = {
+            "url": url if url else None,
+            "get": get_ok,
+            "post": post_ok,
+        }
+
     return {
         "status": "ok",
         "platform": "vercel" if os.environ.get("VERCEL") else "local",
@@ -74,7 +105,8 @@ def _diag_payload():
         "admins": len(admin_chat_ids()),
         "admin_ids_masked": admin_ids_masked(),
         "admin_env_sources": admin_env_sources(),
-        "outline_servers": len(outline_api_urls()),
+        "outline_servers": len(urls),
+        "outline_connectivity": connectivity,
         "kv": bool(os.environ.get("KV_REST_API_URL")),
         "ocr": bool(OCR_API_KEY),
         "payment_phones": len(MY_PAYMENT_PHONES),
