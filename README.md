@@ -28,7 +28,21 @@ redeem codes, expiry cron, admin reports).
 **Ops**
 - Nightly cron (`/cron-check`, 23:30 UTC): expiry/GB-full သတိပေးချက် +
   သက်တမ်းကုန်သော key များ အလိုအလျောက် ဖျက်ခြင်း
-- Routes: `/webhook` (POST), `/health`, `/cron-check` (`POST /` လည်း webhook အဖြစ် လက်ခံသည်)
+- Universal entry route (see "Vercel routing" note below)
+
+> ⚠️ **Vercel routing သတိပြုရန်** — ဒီ project ရဲ့ `vercel.json` က request
+> တိုင်းကို `/api/index.py` ဆီ rewrite လုပ်တာမို့ **Flask ဆီ PATH_INFO အနေနဲ့
+> `/api/index.py` ကိုသာ ရောက်လာပါတယ်** (client ရဲ့ တကယ့် path မဟုတ်)။
+> ဒါကြောင့် `bot_app/routes.py` က path-agnostic ဖြစ်အောင် ရေးထားပါတယ်:
+> - **POST** (path ဘယ်ဟာဖြစ်ဖြစ်) → Telegram update (webhook)
+> - **GET + `User-Agent: vercel-cron/*`** → expiry cron run
+> - အခြား **GET** တိုင်း → `Bot is running perfectly!` (200)
+>
+> Cron ကို လက်ဖြင့် run လိုပါက:
+> ```bash
+> curl -H 'User-Agent: vercel-cron/1.0' https://<your-app>.vercel.app/cron-check
+> ```
+
 
 ## 📁 Project Structure
 
@@ -90,7 +104,9 @@ Local တွင် `KV_REST_API_URL/TOKEN` မထည့်ထားပါက sta
    rewrite အားလုံး, daily cron ပြီးသား)။
 2. **Upstash Redis** (Vercel Marketplace သို့မဟုတ် Upstash console) ချိတ်ပါ —
    `KV_REST_API_URL` + `KV_REST_API_TOKEN` env vars အလိုအလျောက် ရသည်။
-3. **Environment Variables** တင်ပါ:
+3. **Environment Variables** တင်ပါ (**မဖြစ်မနေ** — code ထဲမှာ hardcoded
+   fallback မရှိတော့ပါ။ မထည့်ထားရင် bot က dummy token နဲ့ run နေပြီး
+   စာတွေကို တုံ့ပြန်မှာ မဟုတ်ပါ):
 
    | Variable | ရှင်းလင်းချက် |
    |---|---|
@@ -102,6 +118,10 @@ Local တွင် `KV_REST_API_URL/TOKEN` မထည့်ထားပါက sta
    | `MY_PAYMENT_PHONES` | ကိုယ်ပိုင်အကောင့်ဖုန်းနံပါတ်များ (OCR filter) |
    | `KV_REST_API_URL/TOKEN` | Upstash Redis (Vercel KV integration နဲ့ auto) |
    | `BOT_MODE`, `PORT`, `WEBHOOK_URL` | local run အတွက်သာ |
+
+   > 💡 Env var တင်ပြီးတိုင်း **Redeploy** လုပ်ရပါမယ် (Vercel က env အသစ်ကို
+   > deployment အသစ်မှာသာ ထည့်ပေးတာမို့) — Dashboard → Deployments →
+   > ⋯ → Redeploy။
 
 4. Webhook ချိတ်ပါ (domain deploy ပြီးမှ):
 

@@ -43,7 +43,7 @@ def _fake_outline(monkeypatch, keys):
 
 def test_cron_with_no_keys(client, mock_bot, monkeypatch):
     calls = _fake_outline(monkeypatch, [])
-    resp = client.get("/cron-check")
+    resp = client.get("/cron-check", headers={"User-Agent": "vercel-cron/1.0"})
     assert resp.status_code == 200
     assert resp.get_json() == {"status": "cron completed", "notified": 0, "deleted": 0}
     assert calls["delete"] == []
@@ -55,7 +55,7 @@ def test_cron_deletes_yesterday_expired_key(client, mock_bot, monkeypatch):
     keys = [{"id": "7", "name": f"Aung (555666777) {day}"}]
     calls = _fake_outline(monkeypatch, keys)
 
-    resp = client.get("/cron-check")
+    resp = client.get("/cron-check", headers={"User-Agent": "vercel-cron/1.0"})
     assert resp.status_code == 200
     body = resp.get_json()
     # 3 Outline servers are scanned; the expired key lives on each mock.
