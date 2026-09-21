@@ -43,7 +43,7 @@ def redis_get(key):
     if not KV_URL or not KV_TOKEN:
         return None
     try:
-        res = requests.get(f"{KV_URL}/get/{key}", headers={"Authorization": f"Bearer {KV_TOKEN}"}, timeout=15)
+        res = requests.get(f"{KV_URL}/get/{key}", headers={"Authorization": f"Bearer {KV_TOKEN}"}, timeout=5)
         if res.status_code == 200:
             val = res.json().get("result")
             return json.loads(val) if val else None
@@ -56,7 +56,7 @@ def redis_set(key, value):
         return False
     try:
         val_str = json.dumps(value)
-        res = requests.post(f"{KV_URL}/set/{key}", headers={"Authorization": f"Bearer {KV_TOKEN}"}, data=val_str, timeout=15)
+        res = requests.post(f"{KV_URL}/set/{key}", headers={"Authorization": f"Bearer {KV_TOKEN}"}, data=val_str, timeout=5)
         return res.status_code == 200
     except:
         return False
@@ -580,7 +580,7 @@ def get_user_combined_purchase_records(chat_id):
 def parse_slip_ocr(file_path):
     try:
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
-        img_resp = requests.get(file_url, timeout=15)
+        img_resp = requests.get(file_url, timeout=12)
         if img_resp.status_code == 200:
             files = {'file': ('slip.jpg', img_resp.content, 'image/jpeg')}
             payload = {
@@ -589,7 +589,7 @@ def parse_slip_ocr(file_path):
                 'isOverlayRequired': False,
                 'OCREngine': '2'
             }
-            res = requests.post('https://api.ocr.space/parse/image', files=files, data=payload, timeout=15)
+            res = requests.post('https://api.ocr.space/parse/image', files=files, data=payload, timeout=20)
             if res.status_code == 200:
                 result = res.json()
                 if result.get("IsErroredOnProcessing") == False:
@@ -1184,8 +1184,8 @@ def get_servers_total_usage():
         total_bytes = 0
 
         try:
-            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
-            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=15)
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=6)
 
             if keys_resp.status_code == 200:
                 keys_data = keys_resp.json().get("accessKeys", [])
@@ -1235,7 +1235,7 @@ def get_customer_summary_stats():
 
     for srv_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
         try:
-            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
             if res.status_code == 200:
                 keys = res.json().get("accessKeys", [])
                 for k in keys:
@@ -1292,7 +1292,7 @@ def search_users_by_query(query):
 
     for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
         try:
-            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
             if res.status_code == 200:
                 keys = res.json().get("accessKeys", [])
                 sync_keys_to_persistent_registry(server_num, keys)
@@ -1549,7 +1549,7 @@ def handle_view_key_detail(call):
     bytes_transferred = {}
 
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
         if keys_resp.status_code == 200:
             keys_data = keys_resp.json().get("accessKeys", [])
             for k in keys_data:
@@ -1559,7 +1559,7 @@ def handle_view_key_detail(call):
                     
             if target_key:
                 try:
-                    metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=15)
+                    metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=4)
                     if metrics_resp.status_code == 200:
                         bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
                 except:
@@ -1646,7 +1646,7 @@ def handle_admin_del_key(call):
 
         api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
         try:
-            del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=15)
+            del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
             bot.edit_message_text(f"✅ <b>Server {server_num} ပေါ်မှ Key (ID: {key_id}) အား အောင်မြင်စွာ ဖျက်ဆီးပြီးပါပြီဗျာ။</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
         except:
             bot.edit_message_text(f"✅ <b>မှတ်တမ်းများထဲမှ Key (ID: {key_id}) အား ဖျက်ဆီးပြီးပါပြီ။ (Server Down နေသဖြင့် Server ဘက်သို့ သီးသန့် အမိန့်မရောက်ခဲ့ပါ)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
@@ -1678,7 +1678,7 @@ def get_user_next_key_number(user_name, target_chat_id=None):
 
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
-            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
+            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
             if res.status_code == 200:
                 keys = res.json().get("accessKeys", [])
                 for k in keys:
@@ -1718,7 +1718,7 @@ def get_user_ultimate_keys(chat_id, server_num="1"):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     user_keys = []
     try:
-        res = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
+        res = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
         if res.status_code == 200:
             keys_data = res.json().get("accessKeys", [])
             for k in keys_data:
@@ -1746,8 +1746,8 @@ def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days
     add_bytes = (500 * months_count) * 1000**3
     
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
-        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=15)
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
         
         if keys_resp.status_code == 200:
             keys_data = keys_resp.json().get("accessKeys", [])
@@ -1768,8 +1768,8 @@ def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days
                 if updated_name == target_key_name:
                     updated_name = f"{target_key_name.split('(')[0].strip()} {new_expire_date}"
                 
-                requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": updated_name}, verify=False, timeout=15)
-                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=15)
+                requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
+                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=8)
                 
                 if order_id:
                     map_key_to_order(updated_name, order_id)
@@ -1793,8 +1793,8 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     add_bytes = (500 * months_count) * 1000**3
     
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
-        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=15)
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
         
         if keys_resp.status_code == 200:
             keys_data = keys_resp.json().get("accessKeys", [])
@@ -1820,8 +1820,8 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
                 if updated_name == target_key_name:
                     updated_name = f"{target_key_name.split('(')[0].strip()} ({target_chat_id}) {new_expire_date}"
                 
-                requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=15)
-                requests.put(f"{api_url}/access-keys/{target_key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=15)
+                requests.put(f"{api_url}/access-keys/{target_key_id}/name", data={"name": updated_name}, verify=False, timeout=8)
+                requests.put(f"{api_url}/access-keys/{target_key_id}/data-limit", json={"limit": {"bytes": new_fup_limit}}, verify=False, timeout=8)
                 
                 if order_id:
                     map_key_to_order(updated_name, order_id)
@@ -1858,12 +1858,12 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
     
     try:
-        res = requests.post(f"{api_url}/access-keys", verify=False, timeout=15)
+        res = requests.post(f"{api_url}/access-keys", verify=False, timeout=10)
         if res.status_code in [200, 201]:
             key_data = res.json()
             key_id = key_data.get("id")
             
-            requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": key_name}, verify=False, timeout=15)
+            requests.put(f"{api_url}/access-keys/{key_id}/name", data={"name": key_name}, verify=False, timeout=8)
             
             limit_bytes = None
             if custom_gb:
@@ -1872,7 +1872,7 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
                 limit_bytes = plan_info.get("bytes", 0) * months_count
 
             if limit_bytes and limit_bytes > 0:
-                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=15)
+                requests.put(f"{api_url}/access-keys/{key_id}/data-limit", json={"limit": {"bytes": limit_bytes}}, verify=False, timeout=8)
             
             if order_id:
                 map_key_to_order(key_name, order_id)
@@ -2577,10 +2577,10 @@ def fetch_key_from_server(api_url, input_value):
     server_num = "1" if api_url == OUTLINE_API_URL_1.rstrip('/') else ("2" if api_url == OUTLINE_API_URL_2.rstrip('/') else "3")
     
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)
         bytes_transferred = {}
         try:
-            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=15)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=4)
             if metrics_resp.status_code == 200:
                 bytes_transferred = metrics_resp.json().get("bytesTransferredByUserId", {})
         except:
@@ -2684,7 +2684,7 @@ def handle_admin_replace_callback(call):
 
     api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else (OUTLINE_API_URL_2 if old_server_num == "2" else OUTLINE_API_URL_3)
     try:
-        requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=15)
+        requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=8)
     except:
         pass
 
@@ -3343,8 +3343,8 @@ def cron_check():
 
     for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
         try:
-            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=15)
-            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=15)
+            keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
+            metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)
             
             if keys_resp.status_code != 200:
                 continue
@@ -3386,7 +3386,7 @@ def cron_check():
 
                 if should_delete:
                     try:
-                        del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=15)
+                        del_res = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
                         if del_res.status_code in [200, 204]:
                             deleted_count += 1
                             for aid in ADMIN_CHAT_IDS:
