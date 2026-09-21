@@ -74,6 +74,8 @@ def main() -> None:
     """Local / VPS runner: polling (default) or Flask webhook server."""
     import argparse
 
+    from bot_app.helpers.webhook_guard import polling_conflict
+
     parser = argparse.ArgumentParser(description="Outline Key Bot runner")
     parser.add_argument("--mode", choices=["polling", "webhook"],
                         default=os.environ.get("BOT_MODE", "polling"),
@@ -83,10 +85,26 @@ def main() -> None:
     parser.add_argument("--webhook-url", default=os.environ.get("WEBHOOK_URL", ""),
                         help="webhook mode မှာ Telegram ကို setWebhook လုပ်မည့် public URL "
                              "(ဥပမာ https://yourdomain.com/webhook)")
+    parser.add_argument("--remove-webhook", action="store_true",
+                        help="polling မှာ လက်ရှိ webhook ကို ဖျက်ရန် အတိအလင်း ခွင့်ပြုချက် "
+                             "(production bot ရဲ့ webhook ဖြစ်နိုင်လို့ default က ငြင်းထားတယ်)")
     args = parser.parse_args()
 
     if args.mode == "polling":
+        allowed, active_url = polling_conflict(bot, allow_remove=args.remove_webhook)
+        if not allowed:
+            print("⚠️  ဒီ bot မှာ webhook အလုပ်လုပ်နေပါတယ်:")
+            print(f"    {active_url}")
+            print("    polling run လုပ်ရင် အဲဒီ webhook ကို ဖျက်ရပါမယ် — production bot")
+            print("    ဖြစ်နေရင် production delivery လုံးဝ ရပ်သွားပါမယ်။")
+            print()
+            print("    သေချာပြီဆိုရင်:  python index.py --mode polling --remove-webhook")
+            print("    production ကို မထိခိုက်စေချင်ရင် စမ်းသပ် bot (test token) သုံးပါ။")
+            return
+
         print("🤖 Polling mode ဖြင့် Bot စတင်နေသည်... (Ctrl+C ဖြင့် ရပ်ရန်)")
+        if active_url:
+            print(f"   (webhook ဖျက်လိုက်ပါပြီ: {active_url})")
         try:
             bot.remove_webhook()
         except Exception as e:
@@ -102,6 +120,7 @@ def main() -> None:
                 print(f"⚠️ setWebhook မအောင်မြင်ပါ: {e}")
         print(f"🌐 Webhook Flask server on port {args.port} ...")
         app.run(host="0.0.0.0", port=args.port, debug=False)
+
 
 
 if __name__ == "__main__":

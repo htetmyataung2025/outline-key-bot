@@ -93,10 +93,18 @@ python index.py --mode webhook --port 5000 --webhook-url https://<public-url>/we
 ```
 
 Options: `--mode polling|webhook` (default ကို `BOT_MODE` env ဖြင့်လည်း ထိန်းနိုင်),
-`--port` (default `PORT`, 5000), `--webhook-url`.
+`--port` (default `PORT`, 5000), `--webhook-url`, `--remove-webhook`.
+
+> 🛡️ **Production webhook ကို ကာကွယ်ချက်** — polling mode က Telegram webhook ကို
+> ဖျက်ရပါတယ် (မဖျက်ရင် `409 Conflict` တက်တယ်)။ ဒါကြောင့် **webhook အလုပ်လုပ်နေတဲ့
+> bot** နဲ့ polling run လုပ်ရင် runner က ငြင်းပြီး ရပ်လိုက်ပါတယ်။ production bot
+> ရဲ့ delivery ရပ်မသွားစေရန် local စမ်းသပ်မှုအတွက် **စမ်းသပ် bot token** သုံးပါ
+> (ဥပမာ `.env` မှာ `TELEGRAM_TOKEN=<test bot token>`); တကယ်ဖျက်ချင်ရင်
+> `--remove-webhook` ကို အတိအလင်း ထည့်ပါ။
 
 Local တွင် `KV_REST_API_URL/TOKEN` မထည့်ထားပါက state များ `/tmp/*.json` တွင်
 သိမ်းသည် (serverless filesystem မဟုတ်သောကြောင့် Vercel တွင် Redis မဖြစ်မနေလိုအပ်)။
+
 
 ## ☁️ Vercel Deployment
 
