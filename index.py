@@ -32,7 +32,7 @@ ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
 OCR_API_KEY = "K87641025188957"
 MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
 
-bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=True)
+bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
 
 # 🌐 Vercel Upstash Redis REST API Setup
