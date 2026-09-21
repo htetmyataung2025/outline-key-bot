@@ -1,14 +1,16 @@
 """Nightly expiry cron: notify expiring/GB-full keys, delete overdue ones."""
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
+
+from bot_app.timeutil import myanmar_today
 
 import requests
 
-from app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
-from app.extensions import bot
-from app.services.orders import load_key_mappings
-from app.utils import extract_chat_id_from_key_name
+from bot_app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
+from bot_app.extensions import bot
+from bot_app.services.orders import load_key_mappings
+from bot_app.utils import extract_chat_id_from_key_name
 
 
 def run_expiry_cron():
@@ -16,7 +18,7 @@ def run_expiry_cron():
 
     Returns {"notified": int, "deleted": int}.
     """
-    today = (datetime.utcnow() + timedelta(hours=6, minutes=30)).date()
+    today = myanmar_today()
 
     key_mappings = load_key_mappings()
     notified_count = 0

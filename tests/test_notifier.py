@@ -1,8 +1,10 @@
 """Expiry cron route with Outline HTTP + Telegram sends mocked."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-import index
+from bot_app.config import ADMIN_CHAT_IDS
+from bot_app.extensions import bot
+from bot_app.services import notifier
 
 
 class FakeResp:
@@ -15,7 +17,8 @@ class FakeResp:
 
 
 def _yesterday_myanmar():
-    return (datetime.utcnow() + timedelta(hours=6, minutes=30) - timedelta(days=1))
+    from bot_app.timeutil import myanmar_now
+    return myanmar_now() - timedelta(days=1)
 
 
 def _fake_outline(monkeypatch, keys):
@@ -33,8 +36,8 @@ def _fake_outline(monkeypatch, keys):
         calls["delete"].append(url)
         return FakeResp({}, status=204)
 
-    monkeypatch.setattr(index.requests, "get", fake_get)
-    monkeypatch.setattr(index.requests, "delete", fake_delete)
+    monkeypatch.setattr(notifier.requests, "get", fake_get)
+    monkeypatch.setattr(notifier.requests, "delete", fake_delete)
     return calls
 
 
@@ -60,4 +63,6 @@ def test_cron_deletes_yesterday_expired_key(client, mock_bot, monkeypatch):
     assert len(calls["delete"]) == 3
     assert all(u.endswith("/access-keys/7") for u in calls["delete"])
     # Admins are notified about every deletion.
-    assert len(mock_bot.calls["send_message"]) == 3 * len(index.ADMIN_CHAT_IDS)
+    assert len(mock_bot.calls["send_message"]) == 3 * len(ADMIN_CHAT_IDS)
+    assert bot is not None  # same bot instance used across app
+

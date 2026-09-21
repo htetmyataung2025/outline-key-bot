@@ -1,18 +1,19 @@
 """Outline VPN server client: keys, usage, search, renew/create."""
 
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import requests
 from dateutil.relativedelta import relativedelta
+from bot_app.timeutil import myanmar_now
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
-from app.services.orders import load_key_orders, map_key_to_order
-from app.services.registry import (load_persistent_keys, save_persistent_key,
+from bot_app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
+from bot_app.services.orders import load_key_orders, map_key_to_order
+from bot_app.services.registry import (load_persistent_keys, save_persistent_key,
                                  sync_keys_to_persistent_registry,
                                  sync_legacy_redis_data_to_registry)
-from app.utils import bytes_to_gb, clean_ss_url, extract_chat_id_from_key_name
+from bot_app.utils import bytes_to_gb, clean_ss_url, extract_chat_id_from_key_name
 
 
 def get_servers_total_usage():
@@ -256,7 +257,7 @@ def get_user_ultimate_keys(chat_id, server_num="1"):
 
 def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days=None, order_id=None):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
-    today = datetime.now()
+    today = myanmar_now()
     if custom_days:
         new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
     else:
@@ -303,7 +304,7 @@ def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days
 
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, custom_days=None, order_id=None):
     api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
-    today = datetime.now()
+    today = myanmar_now()
     if custom_days:
         new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
     else:
@@ -321,6 +322,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
             
             target_key_id = None
             target_key_name = None
+            target_access_url = None
             
             for k in keys_data:
                 k_name = k.get("name", "")
@@ -329,6 +331,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
                     if not "[gw]" in k_name.lower():
                         target_key_id = k.get("id")
                         target_key_name = k_name
+                        target_access_url = k.get("accessUrl", "")
                         break
             
             if target_key_id:
@@ -345,7 +348,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
                 if order_id:
                     map_key_to_order(updated_name, order_id)
 
-                raw_access_url = k.get("accessUrl", "")
+                raw_access_url = target_access_url
                 final_key = f"{raw_access_url}#{updated_name}"
                 save_persistent_key(server_num, target_key_id, updated_name, final_key, new_fup_limit, order_id, target_chat_id)
                 return final_key, updated_name, new_expire_date, True
@@ -356,7 +359,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     return vpn_key, key_name, expire_date, False
 
 def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, target_chat_id=None, custom_days=None, months_count=1, is_giveaway=False, custom_expire_date=None, order_id=None):
-    today = datetime.now()
+    today = myanmar_now()
     if custom_expire_date:
         expire_date = custom_expire_date
     elif custom_days:

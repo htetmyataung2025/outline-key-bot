@@ -1,35 +1,47 @@
-"""Phase 0 shared fixtures.
+"""Shared fixtures.
 
 Safety rules for the whole suite:
 - Upstash/Redis is DISABLED (env vars removed) so storage falls back to files.
-- All ``*_FILE`` state paths inside ``index`` are redirected to a per-test
-  tmp dir, so tests never touch real ``/tmp/*.json`` dev state.
+- All ``*_FILE`` state paths are redirected to a per-test tmp dir, so tests
+  never touch real ``/tmp/*.json`` dev state.
 - No test may touch the network: Telegram Bot API + Outline HTTP calls
   must be mocked (see ``mock_bot`` and per-test ``monkeypatch``).
+- CI has no secrets: minimal env defaults are set BEFORE importing bot_app
+  (its config module reads these at import time).
 """
 
 import os
 
-# --- Must run BEFORE importing index (it reads these at import time) ---
-for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN"):
+# --- Must run BEFORE importing bot_app (config reads these at import time) ---
+for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN"):
     os.environ.pop(_var, None)
+os.environ.setdefault("ADMIN_CHAT_IDS", "111000111,222000222")
+os.environ.setdefault("MY_PAYMENT_PHONES", "0999999999,9699999999")
+os.environ.setdefault("REQUIRED_CHANNEL", "@test_channel")
 
 import pytest  # noqa: E402
 
-import index  # noqa: E402
+
+@pytest.fixture(autouse=True, scope="session")
+def registered_app():
+    """Import the app package once: registers Telegram handlers + Flask routes."""
+    import bot_app
+
+    return bot_app
 
 
 @pytest.fixture()
 def isolated_state(tmp_path, monkeypatch):
     """Redirect every ``*_FILE`` constant to an empty tmp dir.
 
-    State constants now live in ``app.storage.paths`` but are re-exported
-    through ``index`` and used inside ``app.services.*`` — patch all homes.
+    State constants live in ``bot_app.storage.paths`` and are imported by
+    ``bot_app.services.*`` — patch every home so file I/O stays sandboxed.
     """
     import sys as _sys
 
     modules = [m for n, m in _sys.modules.items()
-               if n == "index" or n.startswith(("app.services", "app.storage"))]
+               if n == "index" or n.startswith(("bot_app.", "bot_app.handlers",
+                                                "bot_app.services", "bot_app.storage"))]
     targets = {}
     for mod in modules:
         for name in [n for n in dir(mod) if n.endswith("_FILE")]:
@@ -57,16 +69,25 @@ class BotMock:
 
     def __init__(self, monkeypatch):
         self.calls = {"send_message": [], "reply_to": [], "answer_callback": [],
-                      "delete_message": [], "menu_button": [], "get_chat_member": []}
+                      "delete_message": [], "menu_button": [], "get_chat_member": [],
+                      "send_photo": [], "get_file": [], "edit_message_text": [],
+                      "edit_message_caption": [], "get_chat": []}
         self.member_status = "member"
         self.member_error = None
 
-        monkeypatch.setattr(index.bot, "get_chat_member", self._get_chat_member)
-        monkeypatch.setattr(index.bot, "send_message", self._send_message)
-        monkeypatch.setattr(index.bot, "reply_to", self._reply_to)
-        monkeypatch.setattr(index.bot, "answer_callback_query", self._answer_callback)
-        monkeypatch.setattr(index.bot, "delete_message", self._delete_message)
-        monkeypatch.setattr(index.bot, "set_chat_menu_button", self._menu_button)
+        from bot_app.extensions import bot as _bot
+        for target in (_bot,):
+            monkeypatch.setattr(target, "get_chat_member", self._get_chat_member)
+            monkeypatch.setattr(target, "send_message", self._send_message)
+            monkeypatch.setattr(target, "reply_to", self._reply_to)
+            monkeypatch.setattr(target, "answer_callback_query", self._answer_callback)
+            monkeypatch.setattr(target, "delete_message", self._delete_message)
+            monkeypatch.setattr(target, "set_chat_menu_button", self._menu_button)
+            monkeypatch.setattr(target, "send_photo", self._send_photo)
+            monkeypatch.setattr(target, "get_file", self._get_file)
+            monkeypatch.setattr(target, "edit_message_text", self._edit_message_text)
+            monkeypatch.setattr(target, "edit_message_caption", self._edit_message_caption)
+            monkeypatch.setattr(target, "get_chat", self._get_chat)
 
     def _get_chat_member(self, chat, user):
         self.calls["get_chat_member"].append((chat, user))
@@ -94,6 +115,33 @@ class BotMock:
         self.calls["menu_button"].append((args, kwargs))
         return None
 
+    def _send_photo(self, chat_id, photo, *args, **kwargs):
+        self.calls["send_photo"].append((chat_id, photo))
+        return None
+
+    def _get_file(self, file_id):
+        self.calls["get_file"].append(file_id)
+
+        class _F:
+            file_path = "photos/test.jpg"
+        return _F()
+
+    def _edit_message_text(self, *args, **kwargs):
+        self.calls["edit_message_text"].append((args, kwargs))
+        return None
+
+    def _edit_message_caption(self, *args, **kwargs):
+        self.calls["edit_message_caption"].append((args, kwargs))
+        return None
+
+    def _get_chat(self, chat_id):
+        self.calls["get_chat"].append(chat_id)
+
+        class _C:
+            first_name = "Test"
+            last_name = "User"
+        return _C()
+
 
 @pytest.fixture()
 def mock_bot(monkeypatch):
@@ -102,5 +150,7 @@ def mock_bot(monkeypatch):
 
 @pytest.fixture()
 def client(isolated_state):
-    index.app.config["TESTING"] = True
-    return index.app.test_client()
+    from bot_app.extensions import flask_app
+    flask_app.config["TESTING"] = True
+    return flask_app.test_client()
+

@@ -1,12 +1,12 @@
 """Admin sales/revenue reports."""
 
-from datetime import datetime, timedelta
+from bot_app.timeutil import myanmar_now
 
-from app.services.orders import load_sales_history
+from bot_app.services.orders import load_sales_history
 
 
 def get_monthly_revenue_report():
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    now = myanmar_now()
     now_str = now.strftime("%d/%m/%Y (%I:%M %p)")
     current_year = now.year
     current_month = now.month

@@ -1,5 +1,10 @@
-"""Central settings. Env vars win; hardcoded fallbacks keep the current
-Vercel deployment working until secrets are rotated into env vars."""
+"""Central settings. Env-first; safe dummy defaults for import/tests.
+
+Production must set real secrets via environment (.env / Vercel env vars).
+Hardcoded production secrets were removed on purpose (they leaked in git
+history). Missing values degrade gracefully: bot features that need them
+return friendly errors instead of crashing at import time.
+"""
 
 import os
 
@@ -9,32 +14,37 @@ try:
 except ImportError:  # pragma: no cover - production always has python-dotenv
     pass
 
-# Token & API Configuration (Env var ဦးစားပေး, မရှိရင် fallback)
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU")
+# Dummy token keeps `import bot_app.*` working in CI without secrets.
+# Real deployments MUST set TELEGRAM_TOKEN env var.
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "0000000000:AAADummyTokenForTestsOnly00000000000")
 
-# 📢 Force Join Channel Configuration
 REQUIRED_CHANNEL = os.environ.get("REQUIRED_CHANNEL", "@hefeature")
 
-# 🌐 API Server ၁၊ ၂ နှင့် ၃ လင့်ခ်များ
-OUTLINE_API_URL_1 = os.environ.get("OUTLINE_API_URL_1", "https://64.120.94.164:49429/YkDBSn3KwUaICBvzDQtvxQ")
-OUTLINE_API_URL_2 = os.environ.get("OUTLINE_API_URL_2", "https://104.207.92.135:8443/o8a5SK1XlVXdrgXUX5Z24Q")
-OUTLINE_API_URL_3 = os.environ.get("OUTLINE_API_URL_3", "https://vip.h-e-feature.store:33300/E_LfjCh3-9u_jEFyQnZUfA")
+OUTLINE_API_URL_1 = os.environ.get("OUTLINE_API_URL_1", "")
+OUTLINE_API_URL_2 = os.environ.get("OUTLINE_API_URL_2", "")
+OUTLINE_API_URL_3 = os.environ.get("OUTLINE_API_URL_3", "")
 
-# 🔑 Admin Telegram Chat IDs (comma-separated env ကိုလည်း လက်ခံတယ်)
+
 def _load_admin_ids():
-    raw = os.environ.get("ADMIN_CHAT_IDS")
+    raw = os.environ.get("ADMIN_CHAT_IDS", "")
     if raw:
         return [x.strip() for x in raw.split(",") if x.strip()]
-    return ["8778394176", "6297145771"]
+    return []
+
 
 ADMIN_CHAT_IDS = _load_admin_ids()
 
-# 🔍 OCR Space API Key Configuration
-OCR_API_KEY = os.environ.get("OCR_API_KEY", "K87641025188957")
-MY_PAYMENT_PHONES = [p.strip() for p in os.environ.get("MY_PAYMENT_PHONES", "09699970092,9699970092,699970092").split(",") if p.strip()]
+OCR_API_KEY = os.environ.get("OCR_API_KEY", "")
+MY_PAYMENT_PHONES = [p.strip() for p in os.environ.get("MY_PAYMENT_PHONES", "").split(",") if p.strip()]
 
-if not TELEGRAM_TOKEN or ":" not in TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_TOKEN မမှန်ပါ။ .env / Environment Variable မှာ TELEGRAM_TOKEN ထည့်ပေးပါ။")
+
+def outline_api_urls():
+    """Configured Outline servers only (skip unconfigured slots)."""
+    return [u.rstrip("/") for u in (OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3) if u]
+
+
+def is_telegram_configured():
+    return bool(os.environ.get("TELEGRAM_TOKEN") and ":" in TELEGRAM_TOKEN and "Dummy" not in TELEGRAM_TOKEN)
 
 # 🌟 Plan Configuration
 PLANS = {

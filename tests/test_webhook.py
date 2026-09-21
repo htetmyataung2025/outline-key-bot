@@ -2,6 +2,8 @@
 
 USER = 4242424242
 
+WEBHOOK = "/webhook"
+
 
 def _message_update(text="/start"):
     return {
@@ -46,20 +48,26 @@ def test_health(client):
     assert resp.get_json()["status"] == "ok"
 
 
-def test_unknown_get_currently_returns_200(client):
-    # TODO Phase 3: return 404 for unknown paths so scanners probing
-    # /.env etc. don't get a 200. Locks CURRENT catch-all behavior.
-    assert client.get("/.env").status_code == 200
+def test_unknown_get_returns_404(client):
+    # Scanners probing /.env etc. must not get a 200 (Phase-3 fix).
+    assert client.get("/.env").status_code == 404
 
 
 def test_post_garbage_still_acks(client):
+    resp = client.post(WEBHOOK, data="not-json{{{", content_type="application/json")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"status": "ok"}
+
+
+def test_post_garbage_on_root_still_acks(client):
+    # Backward compat: webhook URLs pointing at the bare domain POST to "/".
     resp = client.post("/", data="not-json{{{", content_type="application/json")
     assert resp.status_code == 200
     assert resp.get_json() == {"status": "ok"}
 
 
 def test_start_reaches_welcome(client, mock_bot):
-    resp = client.post("/", json=_message_update("/start"))
+    resp = client.post(WEBHOOK, json=_message_update("/start"))
     assert resp.status_code == 200
     assert mock_bot.calls["reply_to"], "welcome message was not sent"
     chat_id, text = mock_bot.calls["reply_to"][0]
@@ -67,20 +75,18 @@ def test_start_reaches_welcome(client, mock_bot):
 
 
 def test_verify_callback_opens_menu(client, mock_bot):
-    resp = client.post("/", json=_callback_update("verify_subscription"))
+    resp = client.post(WEBHOOK, json=_callback_update("verify_subscription"))
     assert resp.status_code == 200
     assert mock_bot.calls["send_message"], "verify did not open the menu"
     chat_id, text = mock_bot.calls["send_message"][0]
     assert chat_id == USER
 
 
-def test_verify_callback_answers_twice_when_not_subscribed(client, mock_bot):
-    # TODO Phase 1: handler answers the callback TWICE on the fail path
-    # (success toast first, then the "not joined" alert). Telegram rejects
-    # the second answer, so the user sees a misleading success toast and
-    # no guidance. Keep a single answer. Locks CURRENT behavior.
+def test_verify_callback_answers_once_when_not_subscribed(client, mock_bot):
+    # Fixed: single answer_callback_query on the fail path (no misleading toast).
     mock_bot.member_status = "left"
-    resp = client.post("/", json=_callback_update("verify_subscription"))
+    resp = client.post(WEBHOOK, json=_callback_update("verify_subscription"))
     assert resp.status_code == 200
-    assert len(mock_bot.calls["answer_callback"]) == 2
+    assert len(mock_bot.calls["answer_callback"]) == 1
     assert mock_bot.calls["send_message"] == []
+

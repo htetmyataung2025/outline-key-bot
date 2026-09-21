@@ -1,6 +1,6 @@
 """User-facing message builders (pure strings; sending lives in handlers)."""
 
-from app.config import REQUIRED_CHANNEL
+from bot_app.config import REQUIRED_CHANNEL
 
 
 def force_join_text():

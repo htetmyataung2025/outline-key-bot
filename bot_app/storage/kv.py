@@ -1,0 +1,64 @@
+"""Vercel Upstash Redis REST API client.
+
+When KV env vars are absent (local dev / tests) both helpers degrade
+gracefully: reads return None, writes return False, and callers fall
+back to the /tmp JSON files.
+"""
+
+import json
+import os
+import urllib.parse
+
+import requests
+
+
+def _kv_config():
+    url = os.environ.get("KV_REST_API_URL", "").rstrip("/")
+    token = os.environ.get("KV_REST_API_TOKEN", "")
+    # Vercel KV_* aliases (Upstash integration exposes KV_* names)
+    if not url:
+        url = os.environ.get("KV_URL", "").rstrip("/")
+    if not token:
+        token = os.environ.get("KV_REST_API_TOKEN", "") or os.environ.get("KV_TOKEN", "")
+        if not token:
+            raw = os.environ.get("KV_URL", "")
+            if "://" in raw and "@" in raw:
+                token = raw.split("://", 1)[1].split("@", 1)[0]
+    return url, token
+
+
+def redis_get(key):
+    url, token = _kv_config()
+    if not url or not token:
+        return None
+    try:
+        encoded = urllib.parse.quote(json.dumps(key))
+        res = requests.get(
+            f"{url}/get/{encoded}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        if res.status_code == 200:
+            val = res.json().get("result")
+            return json.loads(val) if val else None
+    except Exception:
+        pass
+    return None
+
+
+def redis_set(key, value):
+    url, token = _kv_config()
+    if not url or not token:
+        return False
+    try:
+        encoded_key = urllib.parse.quote(json.dumps(key))
+        encoded_val = urllib.parse.quote(json.dumps(value))
+        res = requests.get(
+            f"{url}/set/{encoded_key}/{encoded_val}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        return res.status_code == 200
+    except Exception:
+        return False
+

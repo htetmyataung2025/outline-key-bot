@@ -6,7 +6,7 @@ import string
 
 import requests
 
-from app.config import MY_PAYMENT_PHONES, OCR_API_KEY, TELEGRAM_TOKEN
+from bot_app.config import MY_PAYMENT_PHONES, OCR_API_KEY, TELEGRAM_TOKEN
 
 
 def parse_slip_ocr(file_path):

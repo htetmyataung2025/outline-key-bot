@@ -2,11 +2,11 @@
 
 import json
 import os
-from datetime import datetime, timedelta
+from bot_app.timeutil import myanmar_now
 
-from app.config import PLANS
-from app.storage.kv import redis_get, redis_set
-from app.storage.paths import (ADMIN_MSG_MAP_FILE, KEY_ORDERS_FILE, MAPPING_FILE,
+from bot_app.config import PLANS
+from bot_app.storage.kv import redis_get, redis_set
+from bot_app.storage.paths import (ADMIN_MSG_MAP_FILE, KEY_ORDERS_FILE, MAPPING_FILE,
                              ORDERS_FILE, REDEEM_FILE, REPLACEMENT_MSG_MAP_FILE,
                              SALES_FILE, STATE_FILE, USER_HISTORY_FILE)
 
@@ -29,7 +29,7 @@ def save_user_purchase_record(chat_id, order_id, plan_name, disp_gb, months_coun
     if uid not in history_data:
         history_data[uid] = []
         
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    now = myanmar_now()
     record = {
         "timestamp": now.strftime("%d/%m/%Y (%I:%M %p)"),
         "order_id": order_id if order_id else "N/A",
@@ -50,7 +50,7 @@ def save_user_purchase_record(chat_id, order_id, plan_name, disp_gb, months_coun
         pass
 
 def get_user_combined_purchase_records(chat_id):
-    from app.services.registry import load_persistent_keys
+    from bot_app.services.registry import load_persistent_keys
     history_data = load_all_user_history()
     records = list(history_data.get(str(chat_id), []))
     known_orders = set(r.get("order_id") for r in records if r.get("order_id") and r.get("order_id") != "N/A")
@@ -218,7 +218,7 @@ def load_sales_history():
 
 def save_sale_transaction(server_num, chat_id, plan_code, plan_name, months_count, price_int, order_id=None):
     sales = load_sales_history()
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    now = myanmar_now()
     sale_data = {
         "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
         "date": now.strftime("%Y-%m-%d"),

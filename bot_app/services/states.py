@@ -1,6 +1,6 @@
 """Transient per-user/per-admin state flags (Redis-only, no files)."""
 
-from app.storage.kv import redis_get, redis_set
+from bot_app.storage.kv import redis_get, redis_set
 
 
 def set_admin_deduct_state(admin_id, state_dict=None):

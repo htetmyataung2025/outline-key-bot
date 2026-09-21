@@ -2,7 +2,7 @@
 
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
-from app.config import ADMIN_CHAT_IDS, REQUIRED_CHANNEL
+from bot_app.config import ADMIN_CHAT_IDS, REQUIRED_CHANNEL
 
 
 def get_force_join_keyboard():

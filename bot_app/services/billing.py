@@ -4,9 +4,11 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from app.config import ADMIN_CHAT_IDS
-from app.storage.kv import redis_get, redis_set
-from app.storage.paths import EXPIRING_CREDITS_FILE, USED_REDEEMERS_FILE, WALLET_FILE
+from bot_app.timeutil import myanmar_now
+
+from bot_app.config import ADMIN_CHAT_IDS
+from bot_app.storage.kv import redis_get, redis_set
+from bot_app.storage.paths import EXPIRING_CREDITS_FILE, USED_REDEEMERS_FILE, WALLET_FILE
 
 
 # 💳 Advanced Wallet System
@@ -76,7 +78,7 @@ def get_user_balance_breakdown(chat_id):
     expiring_data = load_expiring_credits()
     user_grants = expiring_data.get(uid, [])
     
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    now = myanmar_now()
     valid_bonus = 0
     clean_grants = []
     
@@ -121,7 +123,7 @@ def update_user_balance(chat_id, amount_delta):
     expiring_data = load_expiring_credits()
     user_grants = expiring_data.get(uid, [])
     
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    now = myanmar_now()
     sorted_grants = []
     for g in user_grants:
         try:
@@ -166,7 +168,7 @@ def update_user_balance(chat_id, amount_delta):
 
 def add_expiring_bonus_to_wallet(chat_id, amount, validity_days):
     uid = str(chat_id)
-    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    now = myanmar_now()
     exp_dt = now + timedelta(days=validity_days)
     
     expiring_data = load_expiring_credits()

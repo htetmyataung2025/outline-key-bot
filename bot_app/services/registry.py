@@ -4,9 +4,9 @@ import json
 import os
 import re
 
-from app.services.orders import load_key_orders, load_orders, load_sales_history
-from app.storage.kv import redis_get, redis_set
-from app.storage.paths import PERSISTENT_KEYS_FILE
+from bot_app.services.orders import load_key_orders, load_orders, load_sales_history
+from bot_app.storage.kv import redis_get, redis_set
+from bot_app.storage.paths import PERSISTENT_KEYS_FILE
 
 
 def load_persistent_keys():
