@@ -17,3 +17,8 @@ venv/
 
 # Local temp state (code က /tmp/*.json fallback သုံးသည်)
 *.log
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
