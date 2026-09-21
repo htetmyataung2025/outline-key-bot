@@ -1,4 +1,4 @@
-import os
+Import os
 import requests
 import random
 import string
@@ -76,6 +76,7 @@ BROADCAST_STATE_FILE = "/tmp/admin_broadcast_state.json"
 ALL_USERS_FILE = "/tmp/all_users.json"
 ORDERS_FILE = "/tmp/orders_data.json"
 KEY_ORDERS_FILE = "/tmp/key_orders.json"
+USER_HISTORY_FILE = "/tmp/user_purchases.json"
 PERSISTENT_KEYS_FILE = "/tmp/persistent_keys.json"
 WALLET_FILE = "/tmp/user_wallets.json"
 TOPUP_STATE_FILE = "/tmp/user_topup_state.json"
@@ -492,6 +493,89 @@ def sync_legacy_redis_data_to_registry():
         except:
             pass
 
+# 📇 Customer Purchase History Storage Helpers
+def load_all_user_history():
+    data = redis_get("user_purchases_data")
+    if data is not None:
+        return data
+    if os.path.exists(USER_HISTORY_FILE):
+        try:
+            with open(USER_HISTORY_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_user_purchase_record(chat_id, order_id, plan_name, disp_gb, months_count, price_str, server_num, expire_date, vpn_key):
+    history_data = load_all_user_history()
+    uid = str(chat_id)
+    if uid not in history_data:
+        history_data[uid] = []
+        
+    now = datetime.utcnow() + timedelta(hours=6, minutes=30)
+    record = {
+        "timestamp": now.strftime("%d/%m/%Y (%I:%M %p)"),
+        "order_id": order_id if order_id else "N/A",
+        "plan_name": plan_name,
+        "disp_gb": disp_gb,
+        "months": months_count,
+        "price_str": price_str,
+        "server": str(server_num),
+        "expire_date": expire_date,
+        "vpn_key": vpn_key
+    }
+    history_data[uid].append(record)
+    redis_set("user_purchases_data", history_data)
+    try:
+        with open(USER_HISTORY_FILE, 'w') as f:
+            json.dump(history_data, f)
+    except:
+        pass
+
+def get_user_combined_purchase_records(chat_id):
+    history_data = load_all_user_history()
+    records = list(history_data.get(str(chat_id), []))
+    known_orders = set(r.get("order_id") for r in records if r.get("order_id") and r.get("order_id") != "N/A")
+
+    sales = load_sales_history()
+    user_sales = [s for s in sales if str(s.get("chat_id")) == str(chat_id)]
+    persistent_registry = load_persistent_keys()
+
+    for s in user_sales:
+        s_ord = s.get("order_id", "N/A")
+        if s_ord != "N/A" and s_ord in known_orders:
+            continue
+            
+        srv_num = str(s.get("server", "1"))
+        matched_key_link = "N/A"
+        exp_date_found = "မသိရှိပါ"
+        
+        for k_data in persistent_registry.values():
+            if str(k_data.get("chat_id")) == str(chat_id) and str(k_data.get("server")) == srv_num:
+                matched_key_link = k_data.get("access_url", "N/A")
+                exp_date_found = k_data.get("expire_date", "မသိရှိပါ")
+                break
+
+        p_info = PLANS.get(s.get("plan_code"), {})
+        disp_gb = p_info.get("data", "N/A")
+
+        legacy_rec = {
+            "timestamp": s.get("timestamp", s.get("date", "N/A")),
+            "order_id": s_ord,
+            "plan_name": s.get("plan_name", "VPN Plan"),
+            "disp_gb": disp_gb,
+            "months": s.get("months", 1),
+            "price_str": f"{s.get('price', 0):,} Ks",
+            "server": srv_num,
+            "expire_date": exp_date_found,
+            "vpn_key": matched_key_link
+        }
+        records.append(legacy_rec)
+        if s_ord != "N/A":
+            known_orders.add(s_ord)
+            
+    return records
+
 # 🔍 OCR Space Helper Functions
 def parse_slip_ocr(file_path):
     try:
@@ -888,12 +972,13 @@ def get_main_menu_keyboard(chat_id=None):
     btn_topup = KeyboardButton("💰 ငွေဖြည့်ရန်")
     btn_wallet = KeyboardButton("💳 လက်ကျန်ငွေ")
     btn_check = KeyboardButton("🧰 Data ပမာဏစစ်ရန်")
+    btn_history = KeyboardButton("📇 ဝယ်ယူမှုမှတ်တမ်း")
     btn_replace = KeyboardButton("♻️ Key လဲရန်")
     btn_admin = KeyboardButton("👨‍💻 Admin ဆက်သွယ်ရန်")
     btn_refresh = KeyboardButton("🤖 Bot Refresh")
     
     markup.add(btn_buy, btn_topup)
-    markup.add(btn_wallet)
+    markup.add(btn_wallet, btn_history)
     markup.add(btn_check, btn_replace)
     markup.add(btn_admin, btn_refresh)
     
@@ -2176,6 +2261,17 @@ def handle_renew_choice(call):
         return
 
     save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
+    save_user_purchase_record(
+        chat_id=chat_id,
+        order_id=order_id,
+        plan_name=plan['name'],
+        disp_gb=disp_gb,
+        months_count=1,
+        price_str=f"{amount:,} Ks",
+        server_num=server_num,
+        expire_date=expire_date,
+        vpn_key=vpn_key
+    )
 
     clean_name = user_name.strip().lower()
     save_key_mapping(clean_name, chat_id)
@@ -2287,6 +2383,17 @@ def handle_buy_with_wallet(call):
         return
 
     save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
+    save_user_purchase_record(
+        chat_id=chat_id,
+        order_id=order_id,
+        plan_name=plan['name'],
+        disp_gb=disp_gb,
+        months_count=1,
+        price_str=f"{amount:,} Ks",
+        server_num=server_num,
+        expire_date=expire_date,
+        vpn_key=vpn_key
+    )
 
     clean_name = user_name.strip().lower()
     save_key_mapping(clean_name, chat_id)
@@ -2715,6 +2822,17 @@ def handle_all_messages(message):
             today = datetime.now()
             expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
 
+            save_user_purchase_record(
+                chat_id=target_user_id,
+                order_id=order_id,
+                plan_name=plan_name,
+                disp_gb=disp_gb,
+                months_count=months_count,
+                price_str="-",
+                server_num="VIP",
+                expire_date=expire_date,
+                vpn_key=input_value
+            )
             save_persistent_key("VIP", f"custom_{order_id}", f"{plan_name} ({target_user_id}) {expire_date}", input_value, None, order_id, target_user_id)
 
             success_message = (
@@ -2819,6 +2937,49 @@ def handle_all_messages(message):
             "ဝယ်ယူထားသော VPN Key Link (<code>ss://...</code>) အား ဤ Chat ထဲသို့ Paste ချ၍ ပေးပို့စစ်ဆေးနိုင်ပါသည်ခင်ဗျာ။"
         )
         bot.send_message(chat_id, check_guide, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        return
+
+    # 📇 ဝယ်ယူမှုမှတ်တမ်း
+    if input_value in ["📇 ဝယ်ယူမှုမှတ်တမ်း", "ဝယ်ယူမှုမှတ်တမ်း"]:
+        clear_all_states(chat_id)
+        records = get_user_combined_purchase_records(chat_id)
+        if not records:
+            empty_msg = (
+                "📇 <b>လူကြီးမင်း၏ ဝယ်ယူမှုမှတ်တမ်း</b>\n\n"
+                "<i>လက်ရှိတွင် ဝယ်ယူထားသော မှတ်တမ်း မရှိသေးပါခင်ဗျာ။ '🛍️ Plan များဝယ်ရန်' မှတစ်ဆင့် စတင်ဝယ်ယူနိုင်ပါသည်ခင်ဗျာ။</i>"
+            )
+            bot.send_message(chat_id, empty_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+            return
+
+        history_texts = []
+        for idx, rec in enumerate(reversed(records), 1):
+            srv_name = f"Singapore Server {rec.get('server', '1')} 🇸🇬" if rec.get('server') != "VIP" else "VIP Server 🇸🇬"
+            vpn_k = rec.get('vpn_key', '')
+            key_block = f"<code>{vpn_k}</code>" if vpn_k != "N/A" else "<i>(Key လဲလှယ်ရန် Menu ရှိ '♻️ Key လဲရန်' အသုံးပြုနိုင်ပါသည်)</i>"
+            
+            item_txt = (
+                f"<b>#{idx} | ဝယ်ယူမှု အချက်အလက်</b>\n\n"
+                f"🧾 <b>Order ID:</b> <code>{rec.get('order_id', 'N/A')}</code>\n\n"
+                f"📅 <b>အချိန်:</b> <code>{rec.get('timestamp', 'N/A')}</code>\n\n"
+                f"🛍️ <b>Plan:</b> {rec.get('plan_name', '')} ({rec.get('disp_gb', '')})\n\n"
+                f"📡 <b>Server:</b> {srv_name}\n\n"
+                f"⏰ <b>သက်တမ်းကုန်ရက်:</b> <code>{rec.get('expire_date', 'N/A')}</code>\n\n"
+                f"🔑 <b>VPN Key:</b>\n\n"
+                f"{key_block}"
+            )
+            history_texts.append(item_txt)
+
+        final_history_msg = (
+            f"📇 <b>လူကြီးမင်း ဝယ်ယူခဲ့သော VPN Key များ ({len(records)} ခု):</b>\n\n" +
+            "\n\n━━━━━━━━━━━━━━━━━\n\n".join(history_texts) +
+            "\n\n☝️ <i>Key Link ကို တစ်ချက်နှိပ်လိုက်ရုံဖြင့် Auto Copy ကူးယူနိုင်ပါသည်ခင်ဗျာ။</i>"
+        )
+        
+        if len(final_history_msg) > 4000:
+            for piece in [final_history_msg[i:i+4000] for i in range(0, len(final_history_msg), 4000)]:
+                bot.send_message(chat_id, piece, parse_mode="HTML")
+        else:
+            bot.send_message(chat_id, final_history_msg, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return
 
     # ♻️ Key လဲရန်
