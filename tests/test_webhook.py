@@ -10,13 +10,13 @@ USER = 4242424242
 WEBHOOK = "/webhook"
 
 
-def _message_update(text="/start"):
+def _message_update(text="/start", chat_id=USER, user_id=USER):
     return {
         "update_id": 1,
         "message": {
             "message_id": 10,
-            "from": {"id": USER, "is_bot": False, "first_name": "Test"},
-            "chat": {"id": USER, "type": "private"},
+            "from": {"id": user_id, "is_bot": False, "first_name": "Test"},
+            "chat": {"id": chat_id, "type": "private"},
             "date": 1700000000,
             "text": text,
         },
@@ -132,5 +132,55 @@ def test_plain_get_does_not_run_cron(client):
     resp = client.get("/cron-check")
     assert resp.status_code == 200
     assert b"Bot is running perfectly!" in resp.data
+
+
+def test_myid_reports_admin_status_and_parsed_ids(client, mock_bot):
+    # The admin may be locked by the channel gate; /myid must still answer and
+    # must reveal what the *running deployment* parsed from ADMIN_CHAT_IDS.
+    from bot_app.config import admin_chat_ids
+
+    admin = int(admin_chat_ids()[0])
+    resp = client.post(WEBHOOK, json=_message_update("/myid", chat_id=admin, user_id=admin))
+    assert resp.status_code == 200
+    assert mock_bot.calls["reply_to"], "/myid did not answer"
+    chat_id, text = mock_bot.calls["reply_to"][0]
+    assert chat_id == admin
+    assert "✅" in text                     # recognised as admin
+    assert str(admin) in text               # shows the parsed list
+    assert "admin IDs" in text
+
+
+def test_myid_tells_normal_users_their_id(client, mock_bot):
+    resp = client.post(WEBHOOK, json=_message_update("/myid"))
+    assert resp.status_code == 200
+    assert mock_bot.calls["reply_to"], "/myid did not answer"
+    _, text = mock_bot.calls["reply_to"][0]
+    assert "❌" in text                     # not an admin
+    assert str(USER) in text
+    assert "ADMIN_CHAT_IDS" in text          # setup hint for the owner
+
+
+def test_diag_rejects_missing_or_wrong_key(client):
+    # No key / wrong key must look like any other anonymous GET (no info leak).
+    for url in ("/diag", "/diag?key=wrong", f"/diag?key={'0' * 16}"):
+        resp = client.get(url)
+        assert resp.status_code == 200
+        assert b"Bot is running perfectly!" in resp.data
+
+
+def test_diag_reports_config_status_for_the_owner(client):
+    from bot_app.config import admin_chat_ids
+    from bot_app.routes import diag_key
+
+    resp = client.get(f"/diag?key={diag_key()}")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "ok"
+    assert data["admins"] == len(admin_chat_ids())
+    assert data["admin_env_sources"] == ["ADMIN_CHAT_IDS"]
+    assert data["required_channel"]            # channel name is not a secret
+    assert "token" not in resp.get_data(as_text=True).lower()
+
+
 
 

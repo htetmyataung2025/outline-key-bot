@@ -40,10 +40,10 @@ def is_user_subscribed(user_id):
     (invite-link joins) count as subscribed so legit users are not locked
     out -- this was a Phase-1 TODO, now fixed.
     """
-    from bot_app.config import ADMIN_CHAT_IDS, REQUIRED_CHANNEL
+    from bot_app.config import REQUIRED_CHANNEL, is_admin
     from bot_app.extensions import bot
 
-    if str(user_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+    if is_admin(user_id):
         return True
     try:
         member = bot.get_chat_member(REQUIRED_CHANNEL, user_id)

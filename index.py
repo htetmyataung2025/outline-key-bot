@@ -24,6 +24,10 @@ from bot_app.config import (  # noqa: F401
     PLANS,
     REQUIRED_CHANNEL,
     TELEGRAM_TOKEN,
+    admin_chat_ids,
+    admin_env_sources,
+    admin_ids_masked,
+    is_admin,
 )
 from bot_app.helpers.callback_guard import (  # noqa: F401
     PROCESSED_CALLBACKS,
@@ -57,6 +61,7 @@ __all__ = [
     "ADMIN_CHAT_IDS", "MY_PAYMENT_PHONES", "OCR_API_KEY",
     "OUTLINE_API_URL_1", "OUTLINE_API_URL_2", "OUTLINE_API_URL_3",
     "PLANS", "REQUIRED_CHANNEL", "TELEGRAM_TOKEN",
+    "admin_chat_ids", "admin_env_sources", "admin_ids_masked", "is_admin",
     "PROCESSED_CALLBACKS", "is_callback_processed",
     "bytes_to_gb", "clean_ss_url", "extract_chat_id_from_key_name",
     "generate_random_redeem_code", "is_user_subscribed",

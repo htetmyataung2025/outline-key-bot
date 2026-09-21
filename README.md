@@ -28,6 +28,10 @@ redeem codes, expiry cron, admin reports).
 **Ops**
 - Nightly cron (`/cron-check`, 23:30 UTC): expiry/GB-full သတိပေးချက် +
   သက်တမ်းကုန်သော key များ အလိုအလျောက် ဖျက်ခြင်း
+- `/myid` — ကိုယ့် Telegram Chat/User ID နှင့် admin status ကို ပြသည်
+  (force-join gate ဖြင့် ပိတ်ထားသူတွေလည်း ရနိုင်သည်) + admin ဆိုရင်
+  deployment က ဖတ်ထားတဲ့ admin ID list ကို ပြသည်
+- `GET /diag?key=…` — secret-safe config self-check (README Troubleshooting တွင်)
 - Universal entry route (see "Vercel routing" note below)
 
 > ⚠️ **Vercel routing သတိပြုရန်** — ဒီ project ရဲ့ `vercel.json` က request
@@ -151,7 +155,7 @@ Local တွင် `KV_REST_API_URL/TOKEN` မထည့်ထားပါက sta
 ## 🧪 Tests & Lint
 
 ```bash
-pytest -q          # 37 tests — network မသုံး (Telegram/Outline mocked)
+pytest -q          # 68 tests — network မသုံး (Telegram/Outline mocked)
 pyflakes index.py api/index.py bot_app/ tests/ scripts/
 ```
 
@@ -170,8 +174,26 @@ vercel.json validation → (PR) preview deploy ပါသည်။ Tests မျ�
 
 | လက္ခဏာ | ဖြေရှင်းနည်း |
 |---|---|
+| **Admin ခလုတ်များ မပေါ်ခြင်း** (`ADMIN_CHAT_IDS` ထည့်ထားပေမယ့်) | Bot ဆီ `/myid` ပို့ပါ → admin ဖြစ်ရင် "deployment ဖတ်ထားတဲ့ admin IDs" ကို ပြပေးသည်။ `(none)` ပြရင် env var က **deployment ထဲ မရောက်သေး** — Vercel → Settings → Environment Variables တွင် `ADMIN_CHAT_IDS` (Production ✅) ရှိမရှိ စစ်ပြီး **Redeploy** လုပ်ပါ။ ကိုယ့် Chat ID က list ထဲ မပါရင် `/myid` က ပြသည့် Chat ID ကို ထည့်ပါ (ကော်မာ/နေရာလွတ်/ကွက်လပ် `['123']` ပါလည်း ဖတ်နိုင်သည်)။ |
+| Admin env var တကယ်ရောက်မရောက် အတိအကျ စစ်လိုခြင်း | `GET /diag?key=<sha256(TELEGRAM_TOKEN)[:16]>` → JSON (`admins`, `admin_ids_masked`, `admin_env_sources`, `kv`, `outline_servers`) ပြန်သည်။ Key မမှန်ရင် သာမန် GET လို ပြုမူသည် (info leak မရှိ)။ |
 | Inline button များ တုံ့နှေး/မအလုပ်လုပ် | `python scripts/set_webhook.py check` — `callback_query` ပါစေရန် `set`/`reset` |
+| Bot လုံးဝ မတုံ့ပြန် | `python scripts/set_webhook.py check` — webhook URL ရှိမရှိ (မရှိရင် `set`) |
 | State များ ပျောက်သွားသည် | Vercel တွင် Redis မချိတ်ရသေး (`/tmp` သည် ephemeral) |
-| Cron မ run | Vercel Cron → `vercel.json` (`/cron-check`, 23:30 UTC) စစ်ပါ |
+| Cron မ run | Vercel Cron → `vercel.json` (`/cron-check`, 23:30 UTC) စစ်ပါ။ လက်ဖြင့်: `curl -H 'User-Agent: vercel-cron/1.0' https://<app>.vercel.app/cron-check` |
 | Key ထုတ်မရ | Outline API URL များ / server online ဖြစ်မှု စစ်ပါ |
+
+### Admin access အလုပ်လုပ်ပုံ
+
+- `ADMIN_CHAT_IDS` = **chat id** များ (ဥပမာ `8778394176,6297145771`)။
+  Alias အနေဖြင့် `ADMIN_IDS`, `ADMINS`, `ADMIN_CHAT_ID`, `ADMIN_USER_IDS`,
+  `ADMIN_ID` ကိုလည်း ဖတ်သည် (အားလုံး ပေါင်းစည်းသည်)။
+- Value ကို **call-time** ဖတ်သည် — import-time snapshot မဟုတ်တာမို့
+  ပြောင်းလဲမှု အသစ်ကို ချက်ချင်း တွေ့သည် (သို့သော် Vercel env var အသစ်က
+  deployment အသစ် လိုအပ်သည်)။
+- Admin သည် force-join gate ကို ကျော်သည်၊ wallet က `♾️` ဖြစ်သည်၊
+  `📊 Total Data Usage / 🎟️ Gen RD Code / 💸 ငွေနှုတ်ရန် / 📢 Broadcast`
+  ခလုတ်များ ပေါ်လာသည်။
+- Cold start တိုင်း Vercel logs တွင် ဒီစာလုံးတစ်ကြောင်း ပေါ်သည် (secret မပါ):
+  `[config] admins=2 ids=…4176, …5771 env=ADMIN_CHAT_IDS outline_servers=3 kv=on`
+
 

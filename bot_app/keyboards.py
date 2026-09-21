@@ -2,7 +2,7 @@
 
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
-from bot_app.config import ADMIN_CHAT_IDS, REQUIRED_CHANNEL
+from bot_app.config import REQUIRED_CHANNEL, is_admin
 
 
 def get_force_join_keyboard():
@@ -30,7 +30,7 @@ def get_main_menu_keyboard(chat_id=None):
     markup.add(btn_check, btn_replace)
     markup.add(btn_admin, btn_refresh)
 
-    if chat_id and str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+    if chat_id and is_admin(chat_id):
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
         btn_gen_code = KeyboardButton("🎟️ Gen RD Code")
