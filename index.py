@@ -12,25 +12,41 @@ import html
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
+# Local .env support (Vercel မှာ system env သုံးမယ်, local မှာ .env file သုံးမယ်)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 app = Flask(__name__)
 
-# Token & API Configuration
-TELEGRAM_TOKEN = "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU"
+# Token & API Configuration (Env var ဦးစားပေး, မရှိရင် fallback)
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8779558815:AAEaXF6rRqCVM-PFhbOlwgubSknk5xTiKvU")
 
 # 📢 Force Join Channel Configuration
-REQUIRED_CHANNEL = "@hefeature"
+REQUIRED_CHANNEL = os.environ.get("REQUIRED_CHANNEL", "@hefeature")
 
 # 🌐 API Server ၁၊ ၂ နှင့် ၃ လင့်ခ်များ
-OUTLINE_API_URL_1 = "https://64.120.94.164:49429/YkDBSn3KwUaICBvzDQtvxQ"
-OUTLINE_API_URL_2 = "https://104.207.92.135:8443/o8a5SK1XlVXdrgXUX5Z24Q"
-OUTLINE_API_URL_3 = "https://vip.h-e-feature.store:33300/E_LfjCh3-9u_jEFyQnZUfA"
+OUTLINE_API_URL_1 = os.environ.get("OUTLINE_API_URL_1", "https://64.120.94.164:49429/YkDBSn3KwUaICBvzDQtvxQ")
+OUTLINE_API_URL_2 = os.environ.get("OUTLINE_API_URL_2", "https://104.207.92.135:8443/o8a5SK1XlVXdrgXUX5Z24Q")
+OUTLINE_API_URL_3 = os.environ.get("OUTLINE_API_URL_3", "https://vip.h-e-feature.store:33300/E_LfjCh3-9u_jEFyQnZUfA")
 
-# 🔑 Admin Telegram Chat IDs
-ADMIN_CHAT_IDS = ["8778394176", "6297145771"]
+# 🔑 Admin Telegram Chat IDs (comma-separated env ကိုလည်း လက်ခံတယ်)
+def _load_admin_ids():
+    raw = os.environ.get("ADMIN_CHAT_IDS")
+    if raw:
+        return [x.strip() for x in raw.split(",") if x.strip()]
+    return ["8778394176", "6297145771"]
+
+ADMIN_CHAT_IDS = _load_admin_ids()
 
 # 🔍 OCR Space API Key Configuration
-OCR_API_KEY = "K87641025188957"
-MY_PAYMENT_PHONES = ["09699970092", "9699970092", "699970092"]
+OCR_API_KEY = os.environ.get("OCR_API_KEY", "K87641025188957")
+MY_PAYMENT_PHONES = [p.strip() for p in os.environ.get("MY_PAYMENT_PHONES", "09699970092,9699970092,699970092").split(",") if p.strip()]
+
+if not TELEGRAM_TOKEN or ":" not in TELEGRAM_TOKEN:
+    raise ValueError("TELEGRAM_TOKEN မမှန်ပါ။ .env / Environment Variable မှာ TELEGRAM_TOKEN ထည့်ပေးပါ။")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 requests.packages.urllib3.disable_warnings()
@@ -3460,6 +3476,11 @@ def cron_check():
 
     return jsonify({"status": "cron completed", "notified": notified_count, "deleted": deleted_count}), 200
 
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok", "time": (datetime.utcnow() + timedelta(hours=6, minutes=30)).strftime("%Y-%m-%d %H:%M:%S")}), 200
+
+
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
 @app.route('/<path:path>', methods=['POST', 'GET'])
 def index(path):
@@ -3473,3 +3494,36 @@ def index(path):
             print("Webhook Processing Error:", e)
         return jsonify({"status": "ok"}), 200
     return "Bot is running perfectly!", 200
+
+
+# --- Local run / VPS run support ---
+# Vercel မှာ import လုပ်ရုံနဲ့ Flask app ကို serve လုပ်တယ်။
+# Local/VPS မှာ `python index.py` နဲ့ run ရင် polling (သို့) Flask webhook server ရွေးနိုင်တယ်။
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Outline Key Bot runner")
+    parser.add_argument("--mode", choices=["polling", "webhook"], default=os.environ.get("BOT_MODE", "polling"),
+                        help="polling: Telegram long-polling (local test အတွက်လွယ်), webhook: Flask server")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "5000")))
+    parser.add_argument("--webhook-url", default=os.environ.get("WEBHOOK_URL", ""),
+                        help="webhook mode မှာ Telegram ကို setWebhook လုပ်မည့် public URL (ဥပမာ https://yourdomain.com/)")
+    args = parser.parse_args()
+
+    if args.mode == "polling":
+        print("🤖 Polling mode ဖြင့် Bot စတင်နေသည်... (Ctrl+C ဖြင့် ရပ်ရန်)")
+        try:
+            bot.remove_webhook()
+        except Exception as e:
+            print(f"remove_webhook သတိ: {e}")
+        bot.infinity_polling(skip_pending=True, timeout=30)
+    else:
+        if args.webhook_url:
+            try:
+                bot.remove_webhook()
+                bot.set_webhook(url=f"{args.webhook_url.rstrip('/')}/")
+                print(f"✅ Webhook set: {args.webhook_url.rstrip('/')}/")
+            except Exception as e:
+                print(f"⚠️ setWebhook မအောင်မြင်ပါ: {e}")
+        print(f"🌐 Webhook Flask server on port {args.port} ...")
+        app.run(host="0.0.0.0", port=args.port, debug=False)

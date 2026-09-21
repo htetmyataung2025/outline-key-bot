@@ -1,0 +1,19 @@
+# Secrets / local env
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Local temp state (code က /tmp/*.json fallback သုံးသည်)
+*.log
