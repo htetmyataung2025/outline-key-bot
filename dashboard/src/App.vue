@@ -19,6 +19,7 @@ import { fetchOverview, fetchSlips } from '@/api'
 
 const pendingSlipsCount = ref(0)
 const currentViewRef = ref<any>(null)
+const isAuthenticated = ref(false)
 
 // Desktop Auth Modal
 const showLoginModal = ref(false)
@@ -28,11 +29,13 @@ const loginLoading = ref(false)
 const loginError = ref('')
 
 async function refreshPendingCount() {
+  if (!isAuthenticated.value) return
   try {
     const slips = await fetchSlips('PENDING')
     pendingSlipsCount.value = slips.length
   } catch (e: any) {
     if (e?.response?.status === 401 && !window.Telegram?.WebApp?.initData) {
+      isAuthenticated.value = false
       showLoginModal.value = true
     }
   }
@@ -55,10 +58,12 @@ async function handleLogin() {
   try {
     localStorage.setItem('admin_token', adminPin.value.trim())
     await fetchOverview()
+    isAuthenticated.value = true
     showLoginModal.value = false
     handleGlobalRefresh()
   } catch (err: any) {
     localStorage.removeItem('admin_token')
+    isAuthenticated.value = false
     loginError.value = err?.response?.data?.error || 'Invalid Admin Secret PIN. Check .env (ADMIN_SECRET_KEY)'
   } finally {
     loginLoading.value = false
@@ -67,6 +72,7 @@ async function handleLogin() {
 
 function handleLogout() {
   localStorage.removeItem('admin_token')
+  isAuthenticated.value = false
   showLoginModal.value = true
 }
 
@@ -85,12 +91,18 @@ onMounted(() => {
   const hasDesktopToken = Boolean(localStorage.getItem('admin_token'))
 
   if (!isTMA && !hasDesktopToken) {
+    isAuthenticated.value = false
     showLoginModal.value = true
   } else {
+    isAuthenticated.value = true
     refreshPendingCount()
   }
 
-  setInterval(refreshPendingCount, 15000)
+  setInterval(() => {
+    if (isAuthenticated.value) {
+      refreshPendingCount()
+    }
+  }, 15000)
 })
 </script>
 
@@ -110,7 +122,7 @@ onMounted(() => {
 
             <!-- Router View Content Container -->
             <main class="page-content">
-              <router-view v-slot="{ Component }">
+              <router-view v-if="isAuthenticated" v-slot="{ Component }">
                 <component :is="Component" ref="currentViewRef" />
               </router-view>
             </main>
