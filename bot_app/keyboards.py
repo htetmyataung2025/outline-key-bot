@@ -59,8 +59,6 @@ def get_plan_keyboard():
     markup.row(InlineKeyboardButton("👑 VIP (150 GB) - 5,000 Ks", callback_data="selectplan_vip"))
     markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="selectplan_pro"))
     markup.row(InlineKeyboardButton("🌌 Ultimate VIP (500 GB) - 10,000 Ks", callback_data="selectplan_ultimate"))
-    markup.row(InlineKeyboardButton("⚡️ ၁ လ စိတ်ကြိုက်သုံး (5 Device) - 20,000 Ks", callback_data="selectplan_custom_1m"))
-    markup.row(InlineKeyboardButton("🔥 ၃ လ စိတ်ကြိုက်သုံး (5 Device) - 60,000 Ks", callback_data="selectplan_custom_3m"))
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 
