@@ -123,7 +123,7 @@ def main() -> None:
             bot.remove_webhook()
         except Exception:
             pass
-        t = threading.Thread(target=lambda: bot.infinity_polling(skip_pending=True, timeout=30), daemon=True)
+        t = threading.Thread(target=lambda: bot.infinity_polling(skip_pending=False, timeout=30), daemon=True)
         t.start()
         print(f"🌐 Flask API server running on http://127.0.0.1:{args.port} (Dashboard backend)")
         app.run(host="0.0.0.0", port=args.port, debug=False)
