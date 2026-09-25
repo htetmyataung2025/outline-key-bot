@@ -3,8 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchOverview, triggerHaptic } from '@/api'
 import {
-  NGrid,
-  NGridItem,
   NTag,
   NSpin,
   NProgress,
@@ -20,10 +18,9 @@ import {
   ArrowForwardOutline,
   PulseOutline,
   FlashOutline,
-  WifiOutline,
   RefreshOutline,
-  CheckmarkCircleOutline,
-  AlertCircleOutline,
+  AddOutline,
+  GiftOutline,
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -35,10 +32,10 @@ const lastRefreshedAt = ref('')
 
 // Computed cluster stats
 const totalBandwidthGb = computed(() => {
-  if (!overviewData.value?.servers) return 0
-  return overviewData.value.servers
+  if (!overviewData.value?.servers) return '0.00'
+  const sum = overviewData.value.servers
     .reduce((acc: number, s: any) => acc + (Number(s.total_transferred_gb) || 0), 0)
-    .toFixed(2)
+  return sum.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })
 })
 
 const activeServersCount = computed(() => {
@@ -100,428 +97,375 @@ defineExpose({
 </script>
 
 <template>
-  <div class="overview-view">
-    <!-- View Header -->
-    <div class="view-header">
-      <div class="header-left">
-        <div class="category-tag">
+  <div class="overview-container">
+    <!-- Clean Compact Header -->
+    <div class="overview-header">
+      <div>
+        <div class="breadcrumb-tag">
           <PulseOutline class="tag-icon" />
-          <span>SYSTEM NOC & CLUSTER TELEMETRY</span>
+          <span>NETWORK OPERATIONS CENTER</span>
         </div>
-        <h1 class="page-title">Operational Overview</h1>
-        <p class="page-subtitle">Real-time Outline server telemetry, key load distribution & commercial health</p>
+        <h1 class="view-title">Cluster Overview</h1>
       </div>
 
-      <div class="header-actions">
+      <div class="header-btns">
         <NTooltip trigger="hover">
           <template #trigger>
-            <button class="glass-action-btn" @click="handleManualRefresh">
+            <button class="btn-secondary" @click="handleManualRefresh">
               <RefreshOutline class="btn-icon" :class="{ spin: loading }" />
-              <span>Refresh</span>
+              <span>Sync Telemetry</span>
             </button>
           </template>
           Last updated: {{ lastRefreshedAt || 'Just now' }}
         </NTooltip>
 
-        <button class="primary-action-btn" @click="goToSlips">
-          <ReceiptOutline class="btn-icon" />
-          <span>Review Slips</span>
-          <span
-            v-if="overviewData?.metrics?.pending_slips > 0"
-            class="action-badge-pill"
-          >
-            {{ overviewData.metrics.pending_slips }}
-          </span>
-        </button>
-
-        <button class="secondary-action-btn" @click="goToKeys()">
-          <KeyOutline class="btn-icon" />
-          <span>Manage Keys</span>
+        <button class="btn-primary" @click="goToKeys()">
+          <AddOutline class="btn-icon" />
+          <span>New Key</span>
         </button>
       </div>
     </div>
 
     <NSpin :show="loading">
-      <div v-if="overviewData" class="content-body">
-        <!-- 1. Top Cluster Health Status Banner -->
-        <div class="cluster-summary-banner">
-          <div class="summary-col">
-            <span class="summary-label">CLUSTER AVAILABILITY</span>
-            <div class="summary-val-row">
-              <span class="summary-num font-mono">{{ activeServersCount }}/{{ totalServersCount }}</span>
-              <NTag
-                :type="activeServersCount === totalServersCount ? 'success' : 'warning'"
-                size="tiny"
-                round
-                :bordered="false"
-              >
-                {{ Math.round((activeServersCount / (totalServersCount || 1)) * 100) }}% Operational
-              </NTag>
+      <div v-if="overviewData" class="overview-grid">
+        <!-- ROW 1: 4 Compact KPI Cards (Native CSS Grid, Guaranteed 4 Columns on Desktop) -->
+        <div class="kpi-row">
+          <!-- KPI 1: Active Keys -->
+          <div class="kpi-card" @click="goToKeys()">
+            <div class="kpi-meta">
+              <span class="kpi-label">Active Keys</span>
+              <KeyOutline class="kpi-icon emerald" />
             </div>
-            <span class="summary-sub">Singapore & VIP Edge Nodes</span>
+            <div class="kpi-value font-mono">{{ overviewData.metrics.total_active_keys }}</div>
+            <div class="kpi-sub">
+              <span>All nodes online</span>
+              <ArrowForwardOutline class="sub-arrow" />
+            </div>
           </div>
 
-          <div class="summary-divider"></div>
-
-          <div class="summary-col">
-            <span class="summary-label">TOTAL NETWORK LOAD</span>
-            <div class="summary-val-row">
-              <span class="summary-num font-mono text-emerald">{{ totalBandwidthGb }}</span>
-              <span class="summary-unit">GB</span>
+          <!-- KPI 2: Customers -->
+          <div class="kpi-card" @click="router.push('/customers')">
+            <div class="kpi-meta">
+              <span class="kpi-label">Registered Customers</span>
+              <PeopleOutline class="kpi-icon blue" />
             </div>
-            <span class="summary-sub">Across All Connected Users</span>
+            <div class="kpi-value font-mono">{{ overviewData.metrics.total_customers }}</div>
+            <div class="kpi-sub">
+              <span>User directory</span>
+              <ArrowForwardOutline class="sub-arrow" />
+            </div>
           </div>
 
-          <div class="summary-divider"></div>
-
-          <div class="summary-col">
-            <span class="summary-label">CLUSTER AVG LATENCY</span>
-            <div class="summary-val-row">
-              <FlashOutline class="latency-icon" />
-              <span class="summary-num font-mono">{{ avgPingLatency }}</span>
-              <span class="summary-unit">ms</span>
+          <!-- KPI 3: Pending Slips -->
+          <div
+            class="kpi-card"
+            :class="{ 'kpi-alert': overviewData.metrics.pending_slips > 0 }"
+            @click="goToSlips"
+          >
+            <div class="kpi-meta">
+              <span class="kpi-label">Pending Slips</span>
+              <ReceiptOutline class="kpi-icon amber" />
             </div>
-            <span class="summary-sub">Outline API Ping Health</span>
-          </div>
-
-          <div class="summary-divider"></div>
-
-          <div class="summary-col">
-            <span class="summary-label">COMMERCIAL BALANCE</span>
-            <div class="summary-val-row">
-              <span class="summary-num font-mono text-amber">
-                {{ overviewData.metrics.today_revenue_ks.toLocaleString() }}
-              </span>
-              <span class="summary-unit">Ks</span>
-            </div>
-            <span class="summary-sub">Month: {{ overviewData.metrics.month_revenue_ks.toLocaleString() }} Ks</span>
-          </div>
-        </div>
-
-        <!-- 2. KPI Metric Cards -->
-        <NGrid cols="1 s:2 m:4" :x-gap="16" :y-gap="16" class="metrics-grid">
-          <!-- Active Keys Card -->
-          <NGridItem>
-            <div class="stat-card" @click="goToKeys()">
-              <div class="card-glow emerald-glow"></div>
-              <div class="stat-top">
-                <span class="stat-eyebrow">ACTIVE KEYS</span>
-                <div class="stat-icon-pill emerald">
-                  <KeyOutline class="icon" />
-                </div>
-              </div>
-              <div class="stat-val font-mono">{{ overviewData.metrics.total_active_keys }}</div>
-              <div class="stat-bottom">
-                <span class="stat-desc">Provisioned across nodes</span>
-                <ArrowForwardOutline class="hover-arrow" />
-              </div>
-            </div>
-          </NGridItem>
-
-          <!-- Customers Card -->
-          <NGridItem>
-            <div class="stat-card" @click="router.push('/customers')">
-              <div class="card-glow blue-glow"></div>
-              <div class="stat-top">
-                <span class="stat-eyebrow">CUSTOMERS</span>
-                <div class="stat-icon-pill blue">
-                  <PeopleOutline class="icon" />
-                </div>
-              </div>
-              <div class="stat-val font-mono">{{ overviewData.metrics.total_customers }}</div>
-              <div class="stat-bottom">
-                <span class="stat-desc">Verified Telegram Users</span>
-                <ArrowForwardOutline class="hover-arrow" />
-              </div>
-            </div>
-          </NGridItem>
-
-          <!-- Pending Slips Card -->
-          <NGridItem>
             <div
-              class="stat-card"
-              :class="{ 'stat-card-alert': overviewData.metrics.pending_slips > 0 }"
-              @click="goToSlips"
+              class="kpi-value font-mono"
+              :class="{ 'text-amber': overviewData.metrics.pending_slips > 0 }"
             >
-              <div class="card-glow amber-glow"></div>
-              <div class="stat-top">
-                <span class="stat-eyebrow">PAYMENT SLIPS</span>
-                <div class="stat-icon-pill amber">
-                  <ReceiptOutline class="icon" />
-                </div>
-              </div>
-              <div class="stat-val font-mono" :class="{ 'text-amber': overviewData.metrics.pending_slips > 0 }">
-                {{ overviewData.metrics.pending_slips }}
-              </div>
-              <div class="stat-bottom">
-                <span v-if="overviewData.metrics.pending_slips > 0" class="stat-alert-tag">
-                  ⚠️ Action Required
-                </span>
-                <span v-else class="stat-desc text-emerald">
-                  <CheckmarkCircleOutline class="mini-icon" /> All clear
-                </span>
-                <ArrowForwardOutline class="hover-arrow" />
-              </div>
+              {{ overviewData.metrics.pending_slips }}
             </div>
-          </NGridItem>
-
-          <!-- Revenue Card -->
-          <NGridItem>
-            <div class="stat-card" @click="router.push('/customers')">
-              <div class="card-glow emerald-glow"></div>
-              <div class="stat-top">
-                <span class="stat-eyebrow">TODAY'S SALES</span>
-                <div class="stat-icon-pill emerald">
-                  <CashOutline class="icon" />
-                </div>
-              </div>
-              <div class="stat-val font-mono text-emerald">
-                {{ overviewData.metrics.today_revenue_ks.toLocaleString() }} <span class="val-currency">Ks</span>
-              </div>
-              <div class="stat-bottom">
-                <span class="stat-desc">Month: {{ overviewData.metrics.month_revenue_ks.toLocaleString() }} Ks</span>
-                <ArrowForwardOutline class="hover-arrow" />
-              </div>
+            <div class="kpi-sub">
+              <span v-if="overviewData.metrics.pending_slips > 0" class="alert-text">
+                Needs verification
+              </span>
+              <span v-else class="text-muted">Queue cleared</span>
+              <ArrowForwardOutline class="sub-arrow" />
             </div>
-          </NGridItem>
-        </NGrid>
-
-        <!-- 3. Outline VPN Cluster Nodes Section -->
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <ServerOutline class="section-icon" />
-            <h2 class="section-title">Outline VPN Cluster Nodes</h2>
-            <span class="section-badge">3 Nodes Managed</span>
           </div>
-          <span class="section-caption">Real-time health, ping response & key distribution per server</span>
+
+          <!-- KPI 4: Today's Revenue -->
+          <div class="kpi-card" @click="router.push('/customers')">
+            <div class="kpi-meta">
+              <span class="kpi-label">Today's Revenue</span>
+              <CashOutline class="kpi-icon emerald" />
+            </div>
+            <div class="kpi-value font-mono text-emerald">
+              {{ overviewData.metrics.today_revenue_ks.toLocaleString() }}
+              <span class="kpi-unit">MMK</span>
+            </div>
+            <div class="kpi-sub">
+              <span>Month: {{ overviewData.metrics.month_revenue_ks.toLocaleString() }} MMK</span>
+              <ArrowForwardOutline class="sub-arrow" />
+            </div>
+          </div>
         </div>
 
-        <!-- 3-Column Node Cards Grid -->
-        <NGrid cols="1 s:1 m:3" :x-gap="16" :y-gap="16" class="servers-grid">
-          <NGridItem v-for="srv in overviewData.servers" :key="srv.id">
-            <div class="node-card" :class="{ 'node-offline': !srv.is_active }">
-              <!-- Node Header -->
-              <div class="node-header">
-                <div class="node-name-wrap">
-                  <div class="flag-pill">🇸🇬 SG</div>
-                  <div>
-                    <h3 class="node-title">{{ srv.name }}</h3>
-                    <span class="node-sub">Node #{{ srv.id }} &bull; Shadowsocks</span>
-                  </div>
-                </div>
-
-                <div class="node-status-pill" :class="srv.is_active ? 'online' : 'offline'">
-                  <span class="node-pulse-dot"></span>
-                  <span>{{ srv.is_active ? 'ONLINE' : 'OFFLINE' }}</span>
-                </div>
+        <!-- ROW 2: Split 2-Column Dashboard (Left: Server Cluster Nodes, Right: Quick Panel) -->
+        <div class="main-split-layout">
+          <!-- Left Column (65%): Server Cluster Nodes -->
+          <div class="cluster-section">
+            <div class="section-title-bar">
+              <div class="title-left">
+                <ServerOutline class="sec-icon" />
+                <h2 class="sec-title">Server Cluster Nodes</h2>
+                <span class="sec-count">{{ activeServersCount }}/{{ totalServersCount }} Online</span>
               </div>
+              <span class="sec-hint">Shadowsocks Management API</span>
+            </div>
 
-              <!-- Node Telemetry Metrics Body -->
-              <div class="node-body">
-                <!-- Ping Latency Stat -->
-                <div class="metric-row">
-                  <div class="metric-label-group">
-                    <WifiOutline class="metric-icon" />
-                    <span>Ping Response</span>
+            <!-- Server Node Cards List -->
+            <div class="nodes-list">
+              <div
+                v-for="srv in overviewData.servers"
+                :key="srv.id"
+                class="node-row-card"
+                :class="{ 'offline': !srv.is_active }"
+              >
+                <!-- Node Header Row -->
+                <div class="node-main">
+                  <div class="node-identity">
+                    <div class="flag-badge">🇸🇬 SG</div>
+                    <div>
+                      <div class="node-name-text">
+                        {{ srv.name }}
+                        <span class="node-id-tag">Node #{{ srv.id }}</span>
+                      </div>
+                      <span class="node-endpoint-text">
+                        {{ srv.is_active ? 'Connected & Healthy' : 'Endpoint Not Configured / Unreachable' }}
+                      </span>
+                    </div>
                   </div>
-                  <div
-                    class="latency-badge"
-                    :class="{
-                      fast: srv.latency_ms > 0 && srv.latency_ms < 150,
-                      medium: srv.latency_ms >= 150 && srv.latency_ms < 350,
-                      slow: srv.latency_ms >= 350 || !srv.is_active,
-                    }"
+
+                  <div class="node-status-tag" :class="srv.is_active ? 'online' : 'offline'">
+                    <span class="dot"></span>
+                    <span>{{ srv.is_active ? 'ONLINE' : 'OFFLINE' }}</span>
+                  </div>
+                </div>
+
+                <!-- Node Metrics Grid -->
+                <div class="node-metrics-bar">
+                  <div class="metric-item">
+                    <span class="m-label">Ping Response</span>
+                    <span
+                      class="m-val font-mono"
+                      :class="{
+                        emerald: srv.latency_ms > 0 && srv.latency_ms < 200,
+                        amber: srv.latency_ms >= 200 && srv.latency_ms < 400,
+                        red: srv.latency_ms >= 400 || !srv.is_active,
+                      }"
+                    >
+                      <FlashOutline class="mini-icon" />
+                      {{ srv.is_active ? `${srv.latency_ms} ms` : 'N/A' }}
+                    </span>
+                  </div>
+
+                  <div class="metric-item">
+                    <span class="m-label">Active Keys</span>
+                    <span class="m-val font-mono">{{ srv.total_keys }} keys</span>
+                  </div>
+
+                  <div class="metric-item">
+                    <span class="m-label">Data Transferred</span>
+                    <span class="m-val font-mono text-emerald">{{ srv.total_transferred_gb }} GB</span>
+                  </div>
+                </div>
+
+                <!-- Progress & Action -->
+                <div class="node-footer-bar">
+                  <div class="progress-wrap">
+                    <NProgress
+                      type="line"
+                      :percentage="Math.min(100, Math.round((srv.total_transferred_gb / 50000) * 100))"
+                      :show-indicator="false"
+                      status="success"
+                      :height="4"
+                    />
+                  </div>
+                  <button
+                    class="node-filter-btn"
+                    :disabled="!srv.is_active"
+                    @click="goToKeys(srv.id)"
                   >
-                    <FlashOutline class="mini-flash" />
-                    <span class="font-mono">{{ srv.is_active ? `${srv.latency_ms} ms` : 'Offline' }}</span>
-                  </div>
-                </div>
-
-                <!-- Bandwidth Transferred -->
-                <div class="node-bandwidth-box">
-                  <div class="bw-header">
-                    <span class="bw-label">Data Transferred</span>
-                    <span class="bw-val font-mono text-emerald">{{ srv.total_transferred_gb }} GB</span>
-                  </div>
-                  <NProgress
-                    type="line"
-                    :percentage="Math.min(100, Math.round((srv.total_transferred_gb / 50000) * 100))"
-                    :show-indicator="false"
-                    status="success"
-                    class="node-progress"
-                  />
-                </div>
-
-                <!-- Keys Hosted -->
-                <div class="metric-row">
-                  <div class="metric-label-group">
-                    <KeyOutline class="metric-icon" />
-                    <span>Active Keys Hosted</span>
-                  </div>
-                  <span class="keys-count-pill font-mono">
-                    {{ srv.total_keys }} Keys
-                  </span>
-                </div>
-
-                <!-- Error indicator if any -->
-                <div v-if="!srv.is_active" class="node-error-banner">
-                  <AlertCircleOutline class="error-icon" />
-                  <span>{{ srv.error || 'Server endpoint unreachable' }}</span>
+                    <span>View Keys</span>
+                    <ArrowForwardOutline class="btn-mini-arrow" />
+                  </button>
                 </div>
               </div>
+            </div>
+          </div>
 
-              <!-- Node Card Footer -->
-              <div class="node-footer">
-                <button
-                  class="node-action-btn"
-                  :disabled="!srv.is_active"
-                  @click="goToKeys(srv.id)"
-                >
-                  <span>Filter Keys on this Node</span>
-                  <ArrowForwardOutline class="btn-arrow" />
+          <!-- Right Column (35%): Telemetry Summary & Quick Actions -->
+          <div class="side-panel">
+            <!-- Cluster Status Card -->
+            <div class="panel-card">
+              <h3 class="panel-heading">Cluster Telemetry</h3>
+
+              <div class="telemetry-items">
+                <div class="telemetry-row">
+                  <span class="t-label">Network Load</span>
+                  <span class="t-val font-mono text-emerald">{{ totalBandwidthGb }} GB</span>
+                </div>
+
+                <div class="telemetry-row">
+                  <span class="t-label">Average Latency</span>
+                  <span class="t-val font-mono">{{ avgPingLatency }} ms</span>
+                </div>
+
+                <div class="telemetry-row">
+                  <span class="t-label">Active Nodes</span>
+                  <span class="t-val font-mono">{{ activeServersCount }} of {{ totalServersCount }}</span>
+                </div>
+
+                <div class="telemetry-row">
+                  <span class="t-label">Cluster Status</span>
+                  <NTag
+                    :type="activeServersCount === totalServersCount ? 'success' : 'warning'"
+                    size="tiny"
+                    round
+                    :bordered="false"
+                  >
+                    {{ activeServersCount === totalServersCount ? 'Optimal' : 'Degraded' }}
+                  </NTag>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Management Card -->
+            <div class="panel-card">
+              <h3 class="panel-heading">Quick Actions</h3>
+
+              <div class="quick-actions-list">
+                <button class="quick-btn" @click="goToSlips">
+                  <div class="quick-btn-left">
+                    <ReceiptOutline class="q-icon amber" />
+                    <span>Review Pending Slips</span>
+                  </div>
+                  <span v-if="overviewData.metrics.pending_slips > 0" class="q-badge">
+                    {{ overviewData.metrics.pending_slips }}
+                  </span>
+                  <ArrowForwardOutline v-else class="q-arrow" />
+                </button>
+
+                <button class="quick-btn" @click="goToKeys()">
+                  <div class="quick-btn-left">
+                    <KeyOutline class="q-icon emerald" />
+                    <span>Create Outline Key</span>
+                  </div>
+                  <ArrowForwardOutline class="q-arrow" />
+                </button>
+
+                <button class="quick-btn" @click="router.push('/redeems')">
+                  <div class="quick-btn-left">
+                    <GiftOutline class="q-icon blue" />
+                    <span>Generate Vouchers</span>
+                  </div>
+                  <ArrowForwardOutline class="q-arrow" />
+                </button>
+
+                <button class="quick-btn" @click="router.push('/customers')">
+                  <div class="quick-btn-left">
+                    <PeopleOutline class="q-icon" />
+                    <span>Customer Balances</span>
+                  </div>
+                  <ArrowForwardOutline class="q-arrow" />
                 </button>
               </div>
             </div>
-          </NGridItem>
-        </NGrid>
+          </div>
+        </div>
       </div>
     </NSpin>
   </div>
 </template>
 
 <style scoped>
-.overview-view {
-  padding: 24px;
-  max-width: 1360px;
+.overview-container {
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 24px 20px;
 }
 
 /* Header */
-.view-header {
+.overview-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 16px;
 }
 
-.header-left {
+.breadcrumb-tag {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.category-tag {
-  display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.6px;
   color: #10b981;
+  margin-bottom: 4px;
 }
 
 .tag-icon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
-.page-title {
+.view-title {
   margin: 0;
-  font-size: 24px;
-  font-weight: 800;
+  font-size: 22px;
+  font-weight: 700;
   color: #f8fafc;
-  letter-spacing: -0.4px;
+  letter-spacing: -0.3px;
 }
 
-.page-subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #94a3b8;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Buttons */
-.glass-action-btn {
+.header-btns {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+}
+
+.btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 9px;
+  border-radius: 8px;
   color: #cbd5e1;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
-.glass-action-btn:hover {
+.btn-secondary:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #f8fafc;
-  border-color: rgba(255, 255, 255, 0.15);
 }
 
-.primary-action-btn {
+.btn-primary {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  border-radius: 9px;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #10b981;
+  border: 1px solid #10b981;
+  border-radius: 8px;
+  color: #041f14;
+  font-size: 12.5px;
+  font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
-.primary-action-btn:hover {
-  filter: brightness(1.1);
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
-}
-
-.action-badge-pill {
-  background: #f59e0b;
-  color: #0f172a;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 1px 6px;
-  border-radius: 10px;
-}
-
-.secondary-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 9px;
-  color: #cbd5e1;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.secondary-action-btn:hover {
-  background: rgba(51, 65, 85, 0.6);
-  color: #f8fafc;
+.btn-primary:hover {
+  background: #34d399;
+  border-color: #34d399;
 }
 
 .btn-icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 
 .btn-icon.spin {
@@ -532,528 +476,466 @@ defineExpose({
   100% { transform: rotate(360deg); }
 }
 
-/* 1. Cluster Summary Banner */
-.cluster-summary-banner {
+/* Overview Grid */
+.overview-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 1. KPI Row: Strictly 4 Columns on Desktop */
+.kpi-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  background: linear-gradient(135deg, rgba(14, 21, 38, 0.8) 0%, rgba(13, 19, 34, 0.6) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 18px 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  position: relative;
-  overflow: hidden;
+  gap: 14px;
 }
 
-.cluster-summary-banner::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #10b981 0%, #06b6d4 50%, #8b5cf6 100%);
-  opacity: 0.8;
-}
-
-@media (max-width: 900px) {
-  .cluster-summary-banner {
+@media (max-width: 960px) {
+  .kpi-row {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 520px) {
-  .cluster-summary-banner {
+  .kpi-row {
     grid-template-columns: 1fr;
   }
 }
 
-.summary-col {
+.kpi-card {
+  background: #0d131f;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 98px;
 }
 
-.summary-label {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
+.kpi-card:hover {
+  background: #111827;
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.kpi-alert {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.03);
+}
+
+.kpi-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kpi-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.kpi-icon {
+  width: 16px;
+  height: 16px;
   color: #64748b;
 }
 
-.summary-val-row {
+.kpi-icon.emerald { color: #10b981; }
+.kpi-icon.blue { color: #0ea5e9; }
+.kpi-icon.amber { color: #f59e0b; }
+
+.kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.1;
+  margin: 6px 0 4px 0;
+}
+
+.kpi-unit {
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-left: 2px;
+}
+
+.kpi-sub {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.alert-text {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.sub-arrow {
+  width: 12px;
+  height: 12px;
+  color: #64748b;
+  transition: transform 0.15s ease;
+}
+
+.kpi-card:hover .sub-arrow {
+  transform: translateX(3px);
+  color: #cbd5e1;
+}
+
+/* 2. Split Layout: 65% Nodes + 35% Side Panel */
+.main-split-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .main-split-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Section Header */
+.section-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.title-left {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.summary-num {
-  font-size: 22px;
-  font-weight: 800;
+.sec-icon {
+  width: 17px;
+  height: 17px;
+  color: #10b981;
+}
+
+.sec-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
   color: #f8fafc;
 }
 
-.summary-unit {
-  font-size: 12px;
+.sec-count {
+  font-size: 11px;
   font-weight: 600;
   color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 6px;
 }
 
-.summary-sub {
-  font-size: 11.5px;
-  color: #94a3b8;
+.sec-hint {
+  font-size: 11px;
+  color: #64748b;
 }
 
-.summary-divider {
-  display: none;
+/* Node Cards List */
+.nodes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.latency-icon {
-  width: 18px;
-  height: 18px;
-  color: #f59e0b;
-}
-
-/* 2. KPI Stat Cards */
-.metrics-grid {
-  margin-bottom: 32px;
-}
-
-.stat-card {
-  position: relative;
-  background: rgba(14, 21, 38, 0.7);
+.node-row-card {
+  background: #0d131f;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 12px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  cursor: pointer;
-  overflow: hidden;
-  transition: all 0.22s ease;
+  transition: all 0.15s ease;
 }
 
-.stat-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(18, 27, 48, 0.85);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+.node-row-card:hover {
+  background: #101625;
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
-.stat-card:hover .hover-arrow {
-  transform: translateX(4px);
-  color: #f8fafc;
+.node-row-card.offline {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.02);
 }
 
-.stat-card-alert {
-  border-color: rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.05);
-}
-
-.card-glow {
-  position: absolute;
-  top: -20px;
-  right: -20px;
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  pointer-events: none;
-  filter: blur(28px);
-  opacity: 0.15;
-}
-
-.emerald-glow { background: #10b981; }
-.blue-glow { background: #0ea5e9; }
-.amber-glow { background: #f59e0b; }
-
-.stat-top {
+.node-main {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.stat-eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  color: #64748b;
-}
-
-.stat-icon-pill {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stat-icon-pill.emerald {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-}
-
-.stat-icon-pill.blue {
-  background: rgba(14, 165, 233, 0.15);
-  color: #0ea5e9;
-}
-
-.stat-icon-pill.amber {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
-}
-
-.stat-icon-pill .icon {
-  width: 18px;
-  height: 18px;
-}
-
-.stat-val {
-  font-size: 30px;
-  font-weight: 800;
-  color: #f8fafc;
-  line-height: 1.1;
-  letter-spacing: -0.5px;
-}
-
-.val-currency {
-  font-size: 16px;
-  font-weight: 600;
-  color: #94a3b8;
-}
-
-.stat-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #64748b;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  padding-top: 10px;
-}
-
-.stat-desc {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.mini-icon {
-  width: 14px;
-  height: 14px;
-}
-
-.stat-alert-tag {
-  color: #f59e0b;
-  font-weight: 700;
-}
-
-.hover-arrow {
-  width: 14px;
-  height: 14px;
-  color: #64748b;
-  transition: transform 0.2s ease, color 0.2s ease;
-}
-
-/* 3. Section Header */
-.section-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 18px;
-}
-
-.section-title-wrap {
+.node-identity {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.section-icon {
-  width: 20px;
-  height: 20px;
-  color: #10b981;
-}
-
-.section-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: #f8fafc;
-}
-
-.section-badge {
-  font-size: 11px;
-  font-weight: 600;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.05);
+.flag-badge {
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 2px 8px;
-  border-radius: 12px;
-}
-
-.section-caption {
-  font-size: 12.5px;
-  color: #64748b;
-}
-
-/* 3-Column Node Cards */
-.servers-grid {
-  margin-bottom: 24px;
-}
-
-.node-card {
-  background: rgba(14, 21, 38, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 16px;
-  position: relative;
-  transition: all 0.22s ease;
-}
-
-.node-card:hover {
-  border-color: rgba(16, 185, 129, 0.35);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-  transform: translateY(-2px);
-}
-
-.node-offline {
-  border-color: rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.03);
-}
-
-.node-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  padding-bottom: 14px;
-}
-
-.node-name-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.flag-pill {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  padding: 4px 7px;
+  padding: 3px 6px;
   border-radius: 6px;
   color: #e2e8f0;
 }
 
-.node-title {
-  margin: 0;
-  font-size: 14.5px;
+.node-name-text {
+  font-size: 14px;
   font-weight: 700;
   color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.node-sub {
+.node-id-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.node-endpoint-text {
   font-size: 11px;
   color: #64748b;
 }
 
-.node-status-pill {
+.node-status-tag {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
+  gap: 5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  padding: 4px 8px;
-  border-radius: 14px;
+  padding: 3px 8px;
+  border-radius: 12px;
 }
 
-.node-status-pill.online {
-  background: rgba(16, 185, 129, 0.12);
+.node-status-tag.online {
+  background: rgba(16, 185, 129, 0.1);
   color: #10b981;
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
-.node-status-pill.offline {
-  background: rgba(239, 68, 68, 0.12);
+.node-status-tag.offline {
+  background: rgba(239, 68, 68, 0.1);
   color: #f87171;
   border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
-.node-pulse-dot {
-  width: 6px;
-  height: 6px;
+.node-status-tag .dot {
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background-color: currentColor;
 }
 
-.online .node-pulse-dot {
-  box-shadow: 0 0 6px #10b981;
+/* Node Metrics Bar */
+.node-metrics-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 8px 12px;
 }
 
-/* Node Body */
-.node-body {
+.metric-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 2px;
 }
 
-.metric-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12.5px;
-}
-
-.metric-label-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #94a3b8;
-}
-
-.metric-icon {
-  width: 15px;
-  height: 15px;
+.m-label {
+  font-size: 10.5px;
   color: #64748b;
+  font-weight: 500;
 }
 
-.latency-badge {
+.m-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 6px;
 }
 
-.latency-badge.fast {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.2);
-}
+.m-val.emerald { color: #10b981; }
+.m-val.amber { color: #f59e0b; }
+.m-val.red { color: #ef4444; }
 
-.latency-badge.medium {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.2);
-}
-
-.latency-badge.slow {
-  background: rgba(239, 68, 68, 0.12);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-}
-
-.mini-flash {
+.mini-icon {
   width: 12px;
   height: 12px;
 }
 
-.node-bandwidth-box {
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 9px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.bw-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-}
-
-.bw-label {
-  color: #94a3b8;
-}
-
-.bw-val {
-  font-weight: 700;
-}
-
-.node-progress :deep(.n-progress-graph-line-fill) {
-  background: linear-gradient(90deg, #10b981 0%, #06b6d4 100%) !important;
-}
-
-.keys-count-pill {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.node-error-banner {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 11px;
-  color: #fca5a5;
-}
-
-.error-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
 /* Node Footer */
-.node-footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: 12px;
-}
-
-.node-action-btn {
-  width: 100%;
+.node-footer-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  gap: 16px;
+}
+
+.progress-wrap {
+  flex: 1;
+}
+
+.node-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease;
+  padding: 0;
 }
 
-.node-action-btn:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.1);
+.node-filter-btn:hover:not(:disabled) {
   color: #10b981;
-  border-color: rgba(16, 185, 129, 0.25);
 }
 
-.node-action-btn:disabled {
-  opacity: 0.4;
+.node-filter-btn:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
-.btn-arrow {
-  width: 13px;
-  height: 13px;
+.btn-mini-arrow {
+  width: 11px;
+  height: 11px;
 }
 
-/* Utility classes */
+/* Right Side Panel */
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.panel-card {
+  background: #0d131f;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.panel-heading {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.2px;
+}
+
+.telemetry-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.telemetry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.t-label {
+  color: #94a3b8;
+}
+
+.t-val {
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+/* Quick Actions List */
+.quick-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quick-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.quick-btn-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.q-icon {
+  width: 15px;
+  height: 15px;
+  color: #94a3b8;
+}
+
+.q-icon.amber { color: #f59e0b; }
+.q-icon.emerald { color: #10b981; }
+.q-icon.blue { color: #0ea5e9; }
+
+.q-badge {
+  background: #f59e0b;
+  color: #0f172a;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 10px;
+}
+
+.q-arrow {
+  width: 12px;
+  height: 12px;
+  color: #64748b;
+  transition: transform 0.15s ease;
+}
+
+.quick-btn:hover .q-arrow {
+  transform: translateX(2px);
+  color: #cbd5e1;
+}
+
+/* Font & color utilities */
 .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
@@ -1064,5 +946,9 @@ defineExpose({
 
 .text-amber {
   color: #f59e0b !important;
+}
+
+.text-muted {
+  color: #64748b !important;
 }
 </style>
