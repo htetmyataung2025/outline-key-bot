@@ -204,7 +204,7 @@ onMounted(() => {
 body {
   margin: 0;
   padding: 0;
-  background-color: #0b1120;
+  background-color: #080c14;
   color: #f8fafc;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
@@ -217,14 +217,14 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b1120;
+  background: #080c14;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgba(255, 255, 255, 0.2);
 }
 </style>
 
@@ -233,20 +233,25 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #0b1120;
+  background-color: #080c14;
+  background-image:
+    radial-gradient(at 15% 15%, rgba(16, 185, 129, 0.04) 0px, transparent 45%),
+    radial-gradient(at 85% 85%, rgba(14, 165, 233, 0.04) 0px, transparent 45%);
 }
 
 .layout-main {
   display: flex;
   flex: 1;
+  min-height: calc(100vh - 64px);
 }
 
 .page-content {
   flex: 1;
-  max-width: 1400px;
+  max-width: 1440px;
   margin: 0 auto;
   width: 100%;
   padding-bottom: 80px; /* Space for mobile bottom nav */
+  transition: all 0.22s ease;
 }
 
 @media (min-width: 768px) {
