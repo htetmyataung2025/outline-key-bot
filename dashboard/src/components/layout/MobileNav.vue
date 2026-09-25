@@ -62,9 +62,11 @@ function navigate(path: string) {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 60px;
-  background-color: #0f172a;
-  border-top: 1px solid #334155;
+  height: 56px;
+  background: rgba(13, 19, 31, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -80,8 +82,8 @@ function navigate(path: string) {
   background: transparent;
   border: none;
   color: #64748b;
-  gap: 4px;
-  padding: 6px 12px;
+  gap: 3px;
+  padding: 6px 8px;
   cursor: pointer;
   transition: all 0.15s ease;
   flex: 1;
@@ -99,18 +101,23 @@ function navigate(path: string) {
 }
 
 .mobile-icon {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
+  transition: transform 0.15s ease;
+}
+
+.mobile-nav-item.active .mobile-icon {
+  transform: translateY(-1px);
 }
 
 .badge-dot {
   position: absolute;
   top: -2px;
-  right: -6px;
+  right: -5px;
 }
 
 .item-label {
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 600;
 }
 </style>

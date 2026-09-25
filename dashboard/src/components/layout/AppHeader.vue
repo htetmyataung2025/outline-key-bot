@@ -62,10 +62,10 @@ onUnmounted(() => {
 <template>
   <header class="app-header">
     <div class="header-left">
-      <!-- Sidebar Toggle Button (Desktop & Mobile) -->
+      <!-- Sidebar Toggle: DESKTOP ONLY (Hidden on mobile) -->
       <NTooltip trigger="hover">
         <template #trigger>
-          <button class="sidebar-toggle-btn" @click="handleToggleSidebar">
+          <button class="sidebar-toggle-btn desktop-only" @click="handleToggleSidebar">
             <MenuOutline class="toggle-icon" />
           </button>
         </template>
@@ -78,10 +78,10 @@ onUnmounted(() => {
         </div>
         <div class="brand-text">
           <div class="title-row">
-            <span class="app-title">Outline Control Center</span>
-            <span class="version-tag">v2.1</span>
+            <span class="app-title">Control Center</span>
+            <span class="version-tag desktop-only">v2.1</span>
           </div>
-          <span class="app-subtitle">H & E Premium VPN Infrastructure</span>
+          <span class="app-subtitle desktop-only">H & E Premium VPN Infrastructure</span>
         </div>
       </div>
     </div>
@@ -90,18 +90,19 @@ onUnmounted(() => {
       <!-- Live Indicator -->
       <div class="status-pill">
         <span class="pulse-dot"></span>
-        <span class="status-label">CLUSTER LIVE</span>
+        <span class="status-label desktop-only">CLUSTER LIVE</span>
+        <span class="status-label mobile-only">LIVE</span>
       </div>
 
-      <!-- Yangon Clock -->
+      <!-- Yangon Clock: Large Screen only -->
       <div class="clock-badge">
         <TimeOutline class="clock-icon" />
         <span class="time-text">{{ yangonTime }}</span>
         <span class="tz-label">MMT</span>
       </div>
 
-      <!-- Admin Tag -->
-      <NTag type="success" size="small" round :bordered="false" class="admin-badge">
+      <!-- Admin Tag: Desktop only -->
+      <NTag type="success" size="small" round :bordered="false" class="admin-badge desktop-only">
         <template #icon>
           <ShieldCheckmarkOutline />
         </template>
@@ -137,30 +138,38 @@ onUnmounted(() => {
 
 <style scoped>
 .app-header {
-  height: 64px;
-  background: rgba(13, 19, 34, 0.85);
+  height: 60px;
+  background: rgba(13, 19, 34, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px;
+  padding: 0 16px;
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
+@media (max-width: 767px) {
+  .app-header {
+    height: 52px;
+    padding: 0 12px;
+  }
+}
+
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
+/* Sidebar Toggle: Desktop only */
 .sidebar-toggle-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   color: #94a3b8;
@@ -178,31 +187,31 @@ onUnmounted(() => {
 }
 
 .toggle-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .logo-badge {
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(6, 182, 212, 0.15) 100%);
   border: 1px solid rgba(16, 185, 129, 0.35);
-  border-radius: 10px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+  flex-shrink: 0;
 }
 
 .brand-key-icon {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   color: #10b981;
 }
 
@@ -214,68 +223,70 @@ onUnmounted(() => {
 .title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .app-title {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #f8fafc;
   letter-spacing: -0.2px;
+  white-space: nowrap;
 }
 
 .version-tag {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   color: #10b981;
   background: rgba(16, 185, 129, 0.12);
   border: 1px solid rgba(16, 185, 129, 0.25);
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 4px;
 }
 
 .app-subtitle {
-  font-size: 11px;
+  font-size: 10.5px;
   color: #64748b;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .status-pill {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   background: rgba(16, 185, 129, 0.08);
   border: 1px solid rgba(16, 185, 129, 0.25);
-  padding: 4px 10px;
-  border-radius: 20px;
+  padding: 3px 8px;
+  border-radius: 16px;
 }
 
 .pulse-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   background-color: #10b981;
   border-radius: 50%;
-  box-shadow: 0 0 8px #10b981;
+  box-shadow: 0 0 6px #10b981;
   animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
   0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+  70% { transform: scale(1); box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
 .status-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #10b981;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
 }
 
 .clock-badge {
@@ -284,35 +295,35 @@ onUnmounted(() => {
   gap: 6px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 5px 10px;
-  border-radius: 8px;
-  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 11.5px;
   color: #cbd5e1;
   font-family: 'JetBrains Mono', monospace;
 }
 
-@media (min-width: 820px) {
+@media (min-width: 960px) {
   .clock-badge {
     display: flex;
   }
 }
 
 .clock-icon {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   color: #94a3b8;
 }
 
 .tz-label {
-  font-size: 10px;
+  font-size: 9.5px;
   color: #64748b;
   font-weight: 600;
 }
 
 .action-icon-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   color: #94a3b8;
@@ -336,8 +347,8 @@ onUnmounted(() => {
 }
 
 .btn-icon {
-  width: 17px;
-  height: 17px;
+  width: 15px;
+  height: 15px;
 }
 
 .spinning .btn-icon {
@@ -346,5 +357,23 @@ onUnmounted(() => {
 
 @keyframes spin {
   100% { transform: rotate(360deg); }
+}
+
+/* Visibility helpers */
+.desktop-only {
+  display: flex;
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .desktop-only {
+    display: none !important;
+  }
+  .mobile-only {
+    display: inline !important;
+  }
 }
 </style>

@@ -32,7 +32,7 @@ const lastRefreshedAt = ref('')
 
 // Computed cluster stats
 const totalBandwidthGb = computed(() => {
-  if (!overviewData.value?.servers) return '0.00'
+  if (!overviewData.value?.servers) return '0.0'
   const sum = overviewData.value.servers
     .reduce((acc: number, s: any) => acc + (Number(s.total_transferred_gb) || 0), 0)
   return sum.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })
@@ -98,10 +98,10 @@ defineExpose({
 
 <template>
   <div class="overview-container">
-    <!-- Clean Compact Header -->
+    <!-- Header -->
     <div class="overview-header">
-      <div>
-        <div class="breadcrumb-tag">
+      <div class="header-titles">
+        <div class="breadcrumb-tag desktop-only">
           <PulseOutline class="tag-icon" />
           <span>NETWORK OPERATIONS CENTER</span>
         </div>
@@ -113,7 +113,7 @@ defineExpose({
           <template #trigger>
             <button class="btn-secondary" @click="handleManualRefresh">
               <RefreshOutline class="btn-icon" :class="{ spin: loading }" />
-              <span>Sync Telemetry</span>
+              <span>Sync</span>
             </button>
           </template>
           Last updated: {{ lastRefreshedAt || 'Just now' }}
@@ -128,7 +128,7 @@ defineExpose({
 
     <NSpin :show="loading">
       <div v-if="overviewData" class="overview-grid">
-        <!-- ROW 1: 4 Compact KPI Cards (Native CSS Grid, Guaranteed 4 Columns on Desktop) -->
+        <!-- ROW 1: 4 KPI Cards (Desktop 4-col, Mobile 2x2 grid) -->
         <div class="kpi-row">
           <!-- KPI 1: Active Keys -->
           <div class="kpi-card" @click="goToKeys()">
@@ -146,7 +146,7 @@ defineExpose({
           <!-- KPI 2: Customers -->
           <div class="kpi-card" @click="router.push('/customers')">
             <div class="kpi-meta">
-              <span class="kpi-label">Registered Customers</span>
+              <span class="kpi-label">Customers</span>
               <PeopleOutline class="kpi-icon blue" />
             </div>
             <div class="kpi-value font-mono">{{ overviewData.metrics.total_customers }}</div>
@@ -174,9 +174,9 @@ defineExpose({
             </div>
             <div class="kpi-sub">
               <span v-if="overviewData.metrics.pending_slips > 0" class="alert-text">
-                Needs verification
+                Needs review
               </span>
-              <span v-else class="text-muted">Queue cleared</span>
+              <span v-else class="text-muted">Cleared</span>
               <ArrowForwardOutline class="sub-arrow" />
             </div>
           </div>
@@ -184,7 +184,7 @@ defineExpose({
           <!-- KPI 4: Today's Revenue -->
           <div class="kpi-card" @click="router.push('/customers')">
             <div class="kpi-meta">
-              <span class="kpi-label">Today's Revenue</span>
+              <span class="kpi-label">Today's Sales</span>
               <CashOutline class="kpi-icon emerald" />
             </div>
             <div class="kpi-value font-mono text-emerald">
@@ -198,9 +198,9 @@ defineExpose({
           </div>
         </div>
 
-        <!-- ROW 2: Split 2-Column Dashboard (Left: Server Cluster Nodes, Right: Quick Panel) -->
+        <!-- ROW 2: Split Layout (Left: Server Cluster Nodes, Right: Quick Panel) -->
         <div class="main-split-layout">
-          <!-- Left Column (65%): Server Cluster Nodes -->
+          <!-- Left: Server Cluster Nodes -->
           <div class="cluster-section">
             <div class="section-title-bar">
               <div class="title-left">
@@ -208,7 +208,7 @@ defineExpose({
                 <h2 class="sec-title">Server Cluster Nodes</h2>
                 <span class="sec-count">{{ activeServersCount }}/{{ totalServersCount }} Online</span>
               </div>
-              <span class="sec-hint">Shadowsocks Management API</span>
+              <span class="sec-hint desktop-only">Shadowsocks Management API</span>
             </div>
 
             <!-- Server Node Cards List -->
@@ -226,10 +226,10 @@ defineExpose({
                     <div>
                       <div class="node-name-text">
                         {{ srv.name }}
-                        <span class="node-id-tag">Node #{{ srv.id }}</span>
+                        <span class="node-id-tag">#{{ srv.id }}</span>
                       </div>
-                      <span class="node-endpoint-text">
-                        {{ srv.is_active ? 'Connected & Healthy' : 'Endpoint Not Configured / Unreachable' }}
+                      <span class="node-endpoint-text desktop-only">
+                        {{ srv.is_active ? 'Connected & Healthy' : 'Endpoint Not Configured' }}
                       </span>
                     </div>
                   </div>
@@ -243,7 +243,7 @@ defineExpose({
                 <!-- Node Metrics Grid -->
                 <div class="node-metrics-bar">
                   <div class="metric-item">
-                    <span class="m-label">Ping Response</span>
+                    <span class="m-label">Ping</span>
                     <span
                       class="m-val font-mono"
                       :class="{
@@ -258,12 +258,12 @@ defineExpose({
                   </div>
 
                   <div class="metric-item">
-                    <span class="m-label">Active Keys</span>
+                    <span class="m-label">Keys</span>
                     <span class="m-val font-mono">{{ srv.total_keys }} keys</span>
                   </div>
 
                   <div class="metric-item">
-                    <span class="m-label">Data Transferred</span>
+                    <span class="m-label">Data</span>
                     <span class="m-val font-mono text-emerald">{{ srv.total_transferred_gb }} GB</span>
                   </div>
                 </div>
@@ -292,7 +292,7 @@ defineExpose({
             </div>
           </div>
 
-          <!-- Right Column (35%): Telemetry Summary & Quick Actions -->
+          <!-- Right: Telemetry Summary & Quick Actions -->
           <div class="side-panel">
             <!-- Cluster Status Card -->
             <div class="panel-card">
@@ -380,7 +380,13 @@ defineExpose({
 .overview-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 20px;
+  padding: 20px;
+}
+
+@media (max-width: 767px) {
+  .overview-container {
+    padding: 14px 12px 85px 12px;
+  }
 }
 
 /* Header */
@@ -388,20 +394,33 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  padding-bottom: 16px;
+  padding-bottom: 12px;
+}
+
+@media (max-width: 767px) {
+  .overview-header {
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+  }
+}
+
+.header-titles {
+  display: flex;
+  flex-direction: column;
 }
 
 .breadcrumb-tag {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.6px;
   color: #10b981;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .tag-icon {
@@ -411,10 +430,17 @@ defineExpose({
 
 .view-title {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   color: #f8fafc;
   letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+
+@media (max-width: 767px) {
+  .view-title {
+    font-size: 18px;
+  }
 }
 
 .header-btns {
@@ -426,13 +452,13 @@ defineExpose({
 .btn-secondary {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
+  gap: 5px;
+  padding: 6px 11px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 7px;
   color: #cbd5e1;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -446,13 +472,13 @@ defineExpose({
 .btn-primary {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
+  gap: 5px;
+  padding: 6px 12px;
   background: #10b981;
   border: 1px solid #10b981;
-  border-radius: 8px;
+  border-radius: 7px;
   color: #041f14;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -464,8 +490,8 @@ defineExpose({
 }
 
 .btn-icon {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 
 .btn-icon.spin {
@@ -480,45 +506,46 @@ defineExpose({
 .overview-grid {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
-/* 1. KPI Row: Strictly 4 Columns on Desktop */
+/* 1. KPI Row: Desktop 4-col, Mobile 2x2 grid */
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  gap: 12px;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 900px) {
   .kpi-row {
     grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 520px) {
-  .kpi-row {
-    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
 
 .kpi-card {
   background: #0d131f;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-  padding: 14px 16px;
+  border-radius: 10px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   cursor: pointer;
   transition: all 0.15s ease;
-  min-height: 98px;
+  min-height: 82px;
+}
+
+@media (max-width: 767px) {
+  .kpi-card {
+    padding: 10px 11px;
+    min-height: 74px;
+  }
 }
 
 .kpi-card:hover {
   background: #111827;
   border-color: rgba(255, 255, 255, 0.14);
-  transform: translateY(-1px);
 }
 
 .kpi-alert {
@@ -533,14 +560,14 @@ defineExpose({
 }
 
 .kpi-label {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: #94a3b8;
 }
 
 .kpi-icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   color: #64748b;
 }
 
@@ -549,15 +576,21 @@ defineExpose({
 .kpi-icon.amber { color: #f59e0b; }
 
 .kpi-value {
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 700;
   color: #f8fafc;
   line-height: 1.1;
-  margin: 6px 0 4px 0;
+  margin: 4px 0 2px 0;
+}
+
+@media (max-width: 767px) {
+  .kpi-value {
+    font-size: 19px;
+  }
 }
 
 .kpi-unit {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #94a3b8;
   margin-left: 2px;
@@ -567,7 +600,7 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 10.5px;
   color: #64748b;
 }
 
@@ -577,22 +610,22 @@ defineExpose({
 }
 
 .sub-arrow {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   color: #64748b;
   transition: transform 0.15s ease;
 }
 
 .kpi-card:hover .sub-arrow {
-  transform: translateX(3px);
+  transform: translateX(2px);
   color: #cbd5e1;
 }
 
-/* 2. Split Layout: 65% Nodes + 35% Side Panel */
+/* 2. Split Layout: 1fr on mobile, 1fr 320px on desktop */
 .main-split-layout {
   display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 20px;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
   align-items: start;
 }
 
@@ -607,30 +640,30 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .title-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .sec-icon {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
   color: #10b981;
 }
 
 .sec-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #f8fafc;
 }
 
 .sec-count {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   color: #94a3b8;
   background: rgba(255, 255, 255, 0.04);
@@ -648,18 +681,24 @@ defineExpose({
 .nodes-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .node-row-card {
   background: #0d131f;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-  padding: 14px 16px;
+  border-radius: 10px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   transition: all 0.15s ease;
+}
+
+@media (max-width: 767px) {
+  .node-row-card {
+    padding: 10px 12px;
+  }
 }
 
 .node-row-card:hover {
@@ -681,48 +720,48 @@ defineExpose({
 .node-identity {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .flag-badge {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 3px 6px;
-  border-radius: 6px;
+  padding: 2px 5px;
+  border-radius: 5px;
   color: #e2e8f0;
 }
 
 .node-name-text {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #f8fafc;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .node-id-tag {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   color: #64748b;
 }
 
 .node-endpoint-text {
-  font-size: 11px;
+  font-size: 10.5px;
   color: #64748b;
 }
 
 .node-status-tag {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10px;
+  gap: 4px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  padding: 3px 8px;
-  border-radius: 12px;
+  padding: 2px 7px;
+  border-radius: 10px;
 }
 
 .node-status-tag.online {
@@ -738,8 +777,8 @@ defineExpose({
 }
 
 .node-status-tag .dot {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background-color: currentColor;
 }
@@ -748,32 +787,32 @@ defineExpose({
 .node-metrics-bar {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 8px;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  padding: 8px 12px;
+  border-radius: 7px;
+  padding: 6px 10px;
 }
 
 .metric-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .m-label {
-  font-size: 10.5px;
+  font-size: 10px;
   color: #64748b;
   font-weight: 500;
 }
 
 .m-val {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #e2e8f0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .m-val.emerald { color: #10b981; }
@@ -781,8 +820,8 @@ defineExpose({
 .m-val.red { color: #ef4444; }
 
 .mini-icon {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 
 /* Node Footer */
@@ -790,7 +829,7 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
 }
 
 .progress-wrap {
@@ -800,11 +839,11 @@ defineExpose({
 .node-filter-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   background: transparent;
   border: none;
   color: #94a3b8;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: color 0.15s ease;
@@ -821,43 +860,42 @@ defineExpose({
 }
 
 .btn-mini-arrow {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
 }
 
 /* Right Side Panel */
 .side-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .panel-card {
   background: #0d131f;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 10px;
+  padding: 14px;
 }
 
 .panel-heading {
-  margin: 0 0 12px 0;
-  font-size: 13px;
+  margin: 0 0 10px 0;
+  font-size: 12.5px;
   font-weight: 700;
   color: #f8fafc;
-  letter-spacing: -0.2px;
 }
 
 .telemetry-items {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .telemetry-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .t-label {
@@ -873,7 +911,7 @@ defineExpose({
 .quick-actions-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .quick-btn {
@@ -881,12 +919,12 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 9px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  border-radius: 7px;
   color: #cbd5e1;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -901,12 +939,12 @@ defineExpose({
 .quick-btn-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .q-icon {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   color: #94a3b8;
 }
 
@@ -917,22 +955,27 @@ defineExpose({
 .q-badge {
   background: #f59e0b;
   color: #0f172a;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   padding: 1px 5px;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .q-arrow {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   color: #64748b;
-  transition: transform 0.15s ease;
 }
 
-.quick-btn:hover .q-arrow {
-  transform: translateX(2px);
-  color: #cbd5e1;
+/* Visibility helpers */
+.desktop-only {
+  display: flex;
+}
+
+@media (max-width: 767px) {
+  .desktop-only {
+    display: none !important;
+  }
 }
 
 /* Font & color utilities */
