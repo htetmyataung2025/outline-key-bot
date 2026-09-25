@@ -475,11 +475,13 @@ onMounted(() => {
                     </div>
 
                     <div class="field-switch-row">
-                      <span class="field-label">Manual Slip Approval</span>
-                      <NSwitch v-model:value="plan.manual" size="small">
-                        <template #checked>Manual Approval</template>
-                        <template #unchecked>Auto Issue</template>
-                      </NSwitch>
+                      <span class="field-label">Fulfillment Mode</span>
+                      <div class="switch-toggle-wrap">
+                        <span class="switch-status-label" :class="{ 'is-manual': plan.manual }">
+                          {{ plan.manual ? 'Manual Review' : 'Auto Issue' }}
+                        </span>
+                        <NSwitch v-model:value="plan.manual" size="small" />
+                      </div>
                     </div>
                   </div>
                 </NCard>
@@ -746,8 +748,25 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 6px;
+  padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.switch-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-status-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  transition: color 0.15s ease;
+}
+
+.switch-status-label.is-manual {
+  color: #10b981;
 }
 
 @media (max-width: 768px) {
