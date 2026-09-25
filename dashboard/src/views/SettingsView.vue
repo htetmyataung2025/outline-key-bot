@@ -496,9 +496,18 @@ onMounted(() => {
 
 <style scoped>
 .settings-view {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+}
+
+@media (max-width: 767px) {
+  .settings-view {
+    padding: 14px 12px;
+  }
 }
 
 .page-header {
@@ -517,9 +526,9 @@ onMounted(() => {
 
 .page-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #f8fafc;
 }
 
 .cloud-badge {
@@ -540,17 +549,15 @@ onMounted(() => {
 }
 
 .tabs-wrapper {
-  background: #131d31;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 16px;
+  background: transparent;
+  padding: 0;
 }
 
 .tab-content {
-  padding-top: 12px;
+  padding-top: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .section-desc-row {
@@ -571,8 +578,9 @@ onMounted(() => {
 }
 
 .server-card {
-  background: #162032;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
 }
 
 .server-card-header {
@@ -677,9 +685,10 @@ onMounted(() => {
 
 /* Settings Card */
 .settings-card {
-  background: #162032;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  max-width: 600px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  max-width: 640px;
 }
 
 .setting-item {
@@ -715,8 +724,9 @@ onMounted(() => {
 }
 
 .plan-card {
-  background: #162032;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
 }
 
 .plan-card-header {
