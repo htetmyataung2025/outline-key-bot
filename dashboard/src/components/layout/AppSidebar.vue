@@ -13,6 +13,7 @@ import {
   ChevronBackOutline,
   ChevronForwardOutline,
   CloudDoneOutline,
+  SettingsOutline,
 } from '@vicons/ionicons5'
 
 const props = defineProps<{
@@ -29,6 +30,7 @@ const navItems = computed(() => [
   { path: '/keys', label: 'Access Keys', icon: KeyOutline, hint: 'Manage & extend Outline keys' },
   { path: '/redeems', label: 'Redeem Codes', icon: GiftOutline, hint: 'Generate voucher codes' },
   { path: '/customers', label: 'Customers', icon: PeopleOutline, hint: 'Wallets & balances' },
+  { path: '/settings', label: 'Settings', icon: SettingsOutline, hint: 'Servers, Plans & Rules' },
 ])
 
 function navigate(path: string) {

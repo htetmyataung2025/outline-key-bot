@@ -145,11 +145,51 @@ ADMIN_CHAT_IDS = _AdminIdList()
 
 
 OCR_API_KEY = os.environ.get("OCR_API_KEY", "")
-MY_PAYMENT_PHONES = [p.strip() for p in os.environ.get("MY_PAYMENT_PHONES", "").split(",") if p.strip()]
+
+
+class _DynamicPaymentPhones(Sequence):
+    """Dynamic view of payment phones from Supabase settings with env fallback."""
+
+    def _phones(self):
+        try:
+            from bot_app.services.settings import get_system_settings
+            phones = get_system_settings().get("payment_phones", [])
+            if phones and isinstance(phones, list):
+                return [str(p).strip() for p in phones if str(p).strip()]
+        except Exception:
+            pass
+        return [p.strip() for p in os.environ.get("MY_PAYMENT_PHONES", "").split(",") if p.strip()]
+
+    def __iter__(self):
+        return iter(self._phones())
+
+    def __len__(self):
+        return len(self._phones())
+
+    def __getitem__(self, index):
+        return self._phones()[index]
+
+    def __contains__(self, item):
+        return str(item).strip() in self._phones()
+
+    def __repr__(self):
+        return repr(self._phones())
+
+
+MY_PAYMENT_PHONES = _DynamicPaymentPhones()
 
 
 def outline_api_urls():
-    """Configured Outline servers only (skip unconfigured slots)."""
+    """Configured Outline servers (dynamic settings prioritized, fallback to env slots)."""
+    try:
+        from bot_app.services.settings import get_system_settings
+        settings = get_system_settings()
+        servers = settings.get("servers", [])
+        urls = [s.get("api_url", "").rstrip("/") for s in servers if s.get("api_url")]
+        if urls:
+            return urls
+    except Exception:
+        pass
     return [u.rstrip("/") for u in (OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3) if u]
 
 
@@ -159,9 +199,7 @@ def is_telegram_configured():
 
 # --- Startup diagnostic -----------------------------------------------------
 # One secret-safe line in the runtime logs (Vercel → Logs) telling the owner
-# exactly what the running build parsed. This is what turns "admin မပါလာဘူး"
-# into either "admins=0 → env var deployment ထဲ မရောက်ဘူး" or
-# "admins=2 → list ထဲ ဒီ account မပါဘူး" immediately.
+# exactly what the running build parsed.
 if is_telegram_configured():
     print(
         "[config] admins={n} ids={ids} env={env} outline_servers={srv} kv={kv}".format(
@@ -174,8 +212,8 @@ if is_telegram_configured():
     )
 
 
-# 🌟 Plan Configuration
-PLANS = {
+# 🌟 Default Plan Configuration (Baseline fallback)
+_DEFAULT_PLANS = {
     "starter": {"name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000**3, "price": 1000, "manual": False, "months": 1},
     "basic": {"name": "Basic Plan", "data": "50 GB", "bytes": 50 * 1000**3, "price": 2000, "manual": False, "months": 1},
     "standard": {"name": "Standard Plan", "data": "75 GB", "bytes": 75 * 1000**3, "price": 3000, "manual": False, "months": 1},
@@ -186,3 +224,48 @@ PLANS = {
     "custom_1m": {"name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited Data", "bytes": 0, "price": 20000, "manual": True, "months": 1},
     "custom_3m": {"name": "၃ လ စိတ်ကြိုက်သုံး (5 Device)", "data": "Unlimited Data", "bytes": 0, "price": 60000, "manual": True, "months": 3},
 }
+
+
+class _DynamicPlans(dict):
+    """Dynamic dictionary view of VPN plans from Supabase settings."""
+
+    def _data(self) -> dict:
+        try:
+            from bot_app.services.settings import get_system_settings
+            dyn = get_system_settings().get("plans")
+            if dyn and isinstance(dyn, dict):
+                return dyn
+        except Exception:
+            pass
+        return _DEFAULT_PLANS
+
+    def get(self, key, default=None):
+        return self._data().get(key, default)
+
+    def items(self):
+        return self._data().items()
+
+    def keys(self):
+        return self._data().keys()
+
+    def values(self):
+        return self._data().values()
+
+    def __getitem__(self, key):
+        return self._data()[key]
+
+    def __contains__(self, key):
+        return key in self._data()
+
+    def __len__(self):
+        return len(self._data())
+
+    def __iter__(self):
+        return iter(self._data())
+
+    def __repr__(self):
+        return repr(self._data())
+
+
+PLANS = _DynamicPlans()
+

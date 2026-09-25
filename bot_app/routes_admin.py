@@ -308,3 +308,40 @@ def adjust_customer_balance(chat_id):
     )
 
     return jsonify({"success": True, "chat_id": str(chat_id), "new_balance": new_balance}), 200
+
+
+# ---------------------------------------------------------------------------
+# 6. Dynamic System Settings (Supabase-backed)
+# ---------------------------------------------------------------------------
+@admin_bp.route("/settings", methods=["GET"])
+def get_settings_endpoint():
+    from bot_app.services.settings import get_system_settings
+    return jsonify(get_system_settings()), 200
+
+
+@admin_bp.route("/settings", methods=["POST"])
+def update_settings_endpoint():
+    from bot_app.services.settings import save_system_settings
+    data = request.get_json(silent=True) or {}
+    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+
+    updated = save_system_settings(data, updated_by=admin_id)
+    record_audit_log(
+        admin_id=admin_id,
+        action="SETTINGS_UPDATE",
+        target_type="system",
+        target_id="settings",
+        details={"updated_keys": list(data.keys())},
+    )
+
+    return jsonify({"success": True, "settings": updated}), 200
+
+
+@admin_bp.route("/settings/test-server", methods=["POST"])
+def test_server_endpoint():
+    from bot_app.services.settings import test_outline_server
+    data = request.get_json(silent=True) or {}
+    url = data.get("api_url", "")
+    result = test_outline_server(url)
+    return jsonify(result), 200
+

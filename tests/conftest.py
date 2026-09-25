@@ -13,7 +13,7 @@ Safety rules for the whole suite:
 import os
 
 # --- Must run BEFORE importing bot_app (config reads these at import time) ---
-for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN"):
+for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY"):
     os.environ.pop(_var, None)
 os.environ.setdefault("ADMIN_CHAT_IDS", "111000111,222000222")
 os.environ.setdefault("MY_PAYMENT_PHONES", "0999999999,9699999999")
@@ -27,7 +27,19 @@ def registered_app():
     """Import the app package once: registers Telegram handlers + Flask routes."""
     import bot_app
 
+    for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY"):
+        os.environ.pop(_var, None)
+
     return bot_app
+
+
+@pytest.fixture(autouse=True)
+def disable_external_network(monkeypatch):
+    """Ensure tests never attempt external network calls."""
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
+    monkeypatch.delenv("KV_REST_API_URL", raising=False)
+    monkeypatch.delenv("KV_REST_API_TOKEN", raising=False)
 
 
 @pytest.fixture()

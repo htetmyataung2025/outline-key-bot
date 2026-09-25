@@ -9,6 +9,7 @@ import {
   KeyOutline,
   GiftOutline,
   PeopleOutline,
+  SettingsOutline,
 } from '@vicons/ionicons5'
 
 const props = defineProps<{
@@ -24,6 +25,7 @@ const navItems = computed(() => [
   { path: '/keys', label: 'Keys', icon: KeyOutline },
   { path: '/redeems', label: 'Redeem', icon: GiftOutline },
   { path: '/customers', label: 'Users', icon: PeopleOutline },
+  { path: '/settings', label: 'Config', icon: SettingsOutline },
 ])
 
 function navigate(path: string) {

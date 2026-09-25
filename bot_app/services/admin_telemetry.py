@@ -80,16 +80,20 @@ def get_admin_overview_telemetry() -> dict:
     current_year = now.year
     current_month = now.month
 
-    # 1. Server telemetries
-    server_configs = [
-        (1, "Server 1 (SG-1)", OUTLINE_API_URL_1),
-        (2, "Server 2 (SG-2)", OUTLINE_API_URL_2),
-        (3, "Server 3 (VIP)", OUTLINE_API_URL_3),
-    ]
+    # 1. Server telemetries (dynamically loaded from Supabase settings or fallback)
+    from bot_app.services.settings import get_system_settings
+    dyn_settings = get_system_settings()
+    configured_servers = dyn_settings.get("servers", [])
+    if not configured_servers:
+        configured_servers = [
+            {"id": 1, "name": "Server 1 (SG-1)", "api_url": OUTLINE_API_URL_1},
+            {"id": 2, "name": "Server 2 (SG-2)", "api_url": OUTLINE_API_URL_2},
+            {"id": 3, "name": "Server 3 (VIP)", "api_url": OUTLINE_API_URL_3},
+        ]
 
     servers = [
-        get_server_metrics(srv_id, name, url)
-        for srv_id, name, url in server_configs
+        get_server_metrics(srv.get("id", idx), srv.get("name", f"Server {idx}"), srv.get("api_url", ""))
+        for idx, srv in enumerate(configured_servers, 1)
     ]
 
     # 2. Sales and revenue calculation
