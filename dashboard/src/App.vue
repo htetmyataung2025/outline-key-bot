@@ -22,8 +22,9 @@ const currentViewRef = ref<any>(null)
 
 // Desktop Auth Modal
 const showLoginModal = ref(false)
-const adminPin = ref('admin12345')
+const adminPin = ref('')
 const loginLoading = ref(false)
+
 const loginError = ref('')
 
 async function refreshPendingCount() {
@@ -155,8 +156,9 @@ onMounted(() => {
                     </template>
                   </NInput>
                   <span style="font-size: 11px; color: #64748b;">
-                    Default local PIN: <code style="color: #10b981;">admin12345</code> (Configured in .env)
+                    Enter the secret key configured in .env (<code>ADMIN_SECRET_KEY</code>)
                   </span>
+
                 </div>
 
                 <div v-if="loginError" style="color: #ef4444; font-size: 12px; background: rgba(239, 68, 68, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2);">

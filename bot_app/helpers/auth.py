@@ -25,9 +25,11 @@ def get_telegram_token() -> str:
 
 
 def get_admin_secret_key() -> str:
-    """Retrieve desktop admin fallback secret key."""
-    return os.environ.get("ADMIN_SECRET_KEY", "admin12345")
+    """Retrieve desktop admin fallback secret key strictly from environment.
 
+    Never fallback to a default password. If unset, desktop Bearer auth is disabled.
+    """
+    return os.environ.get("ADMIN_SECRET_KEY", "").strip()
 
 
 def verify_telegram_init_data(init_data_raw: str, bot_token: str | None = None) -> dict | None:
@@ -103,7 +105,9 @@ def require_admin_api(f):
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
             secret = get_admin_secret_key()
-            if secret and hmac.compare_digest(token, secret):
+            if not secret:
+                return jsonify({"error": "Desktop admin access is not enabled. Set ADMIN_SECRET_KEY in .env"}), 403
+            if hmac.compare_digest(token, secret):
                 g.admin_user = {"id": "desktop_admin", "username": "Admin"}
                 return f(*args, **kwargs)
             return jsonify({"error": "Invalid admin token"}), 401
@@ -112,3 +116,4 @@ def require_admin_api(f):
         return jsonify({"error": "Unauthorized: Missing authentication"}), 401
 
     return decorated_function
+

@@ -106,3 +106,14 @@ def test_admin_api_bearer_token_authentication(auth_test_app, monkeypatch):
         headers={"Authorization": "Bearer wrong-password"},
     )
     assert resp_invalid.status_code == 401
+
+
+def test_admin_api_bearer_disabled_when_secret_not_set(auth_test_app, monkeypatch):
+    monkeypatch.delenv("ADMIN_SECRET_KEY", raising=False)
+    resp = auth_test_app.get(
+        "/api/admin/test",
+        headers={"Authorization": "Bearer any_token_at_all"},
+    )
+    assert resp.status_code == 403
+    assert "not enabled" in resp.json["error"]
+
