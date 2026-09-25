@@ -168,10 +168,11 @@ def test_diag_rejects_missing_or_wrong_key(client):
         assert b"Bot is running perfectly!" in resp.data
 
 
-def test_diag_reports_config_status_for_the_owner(client):
+def test_diag_reports_config_status_for_the_owner(client, monkeypatch):
     from bot_app.config import admin_chat_ids
     from bot_app.routes import diag_key
 
+    monkeypatch.setattr("bot_app.routes.outline_api_urls", lambda: [])
     resp = client.get(f"/diag?key={diag_key()}")
     assert resp.status_code == 200
     data = resp.get_json()
