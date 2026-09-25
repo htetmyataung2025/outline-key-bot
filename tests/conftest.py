@@ -154,3 +154,35 @@ def client(isolated_state):
     flask_app.config["TESTING"] = True
     return flask_app.test_client()
 
+
+@pytest.fixture()
+def make_telegram_init_data():
+    """Generate cryptographically valid or tampered Telegram initData strings."""
+    import hashlib
+    import hmac
+    import json
+    from urllib.parse import urlencode
+
+    def _generator(user_id=111000111, username="admin_user", is_tampered=False, token=None):
+        bot_token = token or os.environ.get("TELEGRAM_TOKEN", "0000000000:AAADummyTokenForTestsOnly00000000000")
+        user_dict = {"id": user_id, "first_name": "Test", "username": username}
+        params = {
+            "auth_date": "1727260000",
+            "query_id": "AAHdF6IQAAAAAN0XohD5p8Zb",
+            "user": json.dumps(user_dict, separators=(",", ":")),
+        }
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+        secret_key = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
+        computed_hash = hmac.new(
+            secret_key, data_check_string.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+
+        if is_tampered:
+            computed_hash = "tampered_bad_hash_999999"
+
+        params["hash"] = computed_hash
+        return urlencode(params)
+
+    return _generator
+
+

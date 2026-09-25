@@ -29,3 +29,7 @@ This directory contains the complete technical blueprints, database schemas, API
    - Supabase project initialization
    - Frontend Vite + Vercel setup
    - Telegram BotFather Menu Button configuration guide
+
+6. [**2026-09-25_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-25_PROGRESS.md)
+   - Daily progress log, active execution plan, milestones, and test suite verification
+

@@ -1,0 +1,51 @@
+import type { GlobalThemeOverrides } from 'naive-ui'
+
+export const themeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: '#10b981',
+    primaryColorHover: '#34d399',
+    primaryColorPressed: '#059669',
+    primaryColorSuppl: '#10b981',
+    infoColor: '#0ea5e9',
+    successColor: '#10b981',
+    warningColor: '#f59e0b',
+    errorColor: '#ef4444',
+    bodyColor: '#0b1120',
+    cardColor: '#1e293b',
+    modalColor: '#0f172a',
+    popoverColor: '#1e293b',
+    tableColor: '#1e293b',
+    textColorBase: '#f8fafc',
+    textColor1: '#f8fafc',
+    textColor2: '#cbd5e1',
+    textColor3: '#94a3b8',
+    borderColor: '#334155',
+    dividerColor: '#334155',
+    borderRadius: '10px',
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    fontFamilyMono: "'JetBrains Mono', monospace",
+  },
+  Card: {
+    borderColor: '#334155',
+    color: '#1e293b',
+    textColor: '#f8fafc',
+    titleTextColor: '#f8fafc',
+    borderRadius: '12px',
+  },
+  DataTable: {
+    headerColor: '#0f172a',
+    headerTextColor: '#94a3b8',
+    borderColor: '#334155',
+    thFontWeight: '600',
+    tdColorHover: '#33415555',
+  },
+  Button: {
+    borderRadiusMedium: '8px',
+    fontWeight: '600',
+  },
+  Tabs: {
+    tabTextColorActiveLine: '#10b981',
+    tabTextColorHoverLine: '#34d399',
+    barColor: '#10b981',
+  },
+}

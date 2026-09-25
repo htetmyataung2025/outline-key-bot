@@ -22,3 +22,6 @@ CUSTOM_TOPUP_STATE_FILE = "/tmp/user_custom_topup.json"
 EXPIRING_CREDITS_FILE = "/tmp/expiring_credits.json"
 DEDUCT_STATE_FILE = "/tmp/admin_deduct_state.json"
 RENEW_CHOICE_STATE_FILE = "/tmp/user_renew_choice.json"
+SLIPS_FILE = "/tmp/payment_slips.json"
+AUDIT_LOGS_FILE = "/tmp/audit_logs.json"
+

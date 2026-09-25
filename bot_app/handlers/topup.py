@@ -11,6 +11,7 @@ from bot_app.keyboards import get_topup_amounts_keyboard
 from bot_app.services.billing import update_user_balance
 from bot_app.services.ocr import generate_order_id_from_slip
 from bot_app.services.orders import load_all_users, save_user_id
+from bot_app.services.slips import record_slip
 from bot_app.services.states import (
     get_broadcast_state,
     get_topup_state, set_broadcast_state, set_custom_topup_state, set_topup_state,
@@ -137,6 +138,14 @@ def handle_photo_messages(message):
 
     photo_file = bot.get_file(message.photo[-1].file_id)
     topup_id = generate_order_id_from_slip(photo_file.file_path)
+    record_slip(
+        slip_id=topup_id,
+        chat_id=chat_id,
+        amount=topup_amt,
+        username=username,
+        file_id=message.photo[-1].file_id,
+    )
+
 
     admin_alert_text = (
         f"💰 <b>ငွေဖြည့်ပြေစာအသစ် (Top-Up Request)</b>\n\n"
