@@ -127,7 +127,7 @@ def run_expiry_cron():
                             pass
 
                     admin_noti = (
-                        f"📢 <b>Customer သိပေးချက်</b>\n"
+                        f"📢 <b>Customer သတိပေးချက်</b>\n"
                         f"👤 အသုံးပြုသူ: {full_name}\n"
                         f"⚠️ အခြေအနေ: {reason_text}\n"
                         f"🆔 User ID: {target_chat_id if target_chat_id else 'မသိရှိပါ'}"
