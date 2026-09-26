@@ -47,6 +47,19 @@ def redis_get(key):
 
 
 def redis_set(key, value):
+    # Every shared-state mutation bumps the dashboard data-version so the
+    # admin UI can live-refresh (see bot_app/storage/versioning.py). Runs
+    # even when Redis is unconfigured (dev/tests) — the version then lives
+    # in a local JSON file. Guarded against recursion for the version key
+    # itself, and never allowed to break the caller's write.
+    if key != "admin_data_version":
+        try:
+            from bot_app.storage.versioning import bump_data_version
+
+            bump_data_version()
+        except Exception:
+            pass
+
     url, token = _kv_config()
     if not url or not token:
         return False

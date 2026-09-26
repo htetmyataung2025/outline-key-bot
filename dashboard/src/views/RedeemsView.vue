@@ -89,6 +89,8 @@ function copyAllGenerated() {
 onMounted(() => {
   loadRedeems()
 })
+
+defineExpose({ loadData: loadRedeems })
 </script>
 
 <template>

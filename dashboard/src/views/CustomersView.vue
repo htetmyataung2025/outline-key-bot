@@ -88,6 +88,8 @@ async function handleAdjustBalance() {
 onMounted(() => {
   loadCustomers()
 })
+
+defineExpose({ loadData: loadCustomers })
 </script>
 
 <template>

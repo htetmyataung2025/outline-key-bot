@@ -13,13 +13,11 @@ import {
   NInput,
   NSelect,
   NButton,
-  NTag,
   NModal,
   NForm,
   NFormItem,
   NInputNumber,
   NSpin,
-  NPopconfirm,
   NPagination,
   NEmpty,
   useMessage,
@@ -172,7 +170,7 @@ async function loadKeys() {
   }
 }
 
-async function handleExtend(row: any) {
+async function handleExtend(row: any): Promise<boolean> {
   triggerHaptic('medium')
   try {
     const res = await extendKey(row.key_id, 30)
@@ -180,10 +178,13 @@ async function handleExtend(row: any) {
       triggerHapticNotification('success')
       message.success(`Extended key ${row.key_id} to ${res.new_expire_date}`)
       await loadKeys()
+      return true
     }
+    return false
   } catch (err: any) {
     triggerHapticNotification('error')
     message.error(err?.response?.data?.error || 'Failed to extend key')
+    return false
   }
 }
 
@@ -193,7 +194,7 @@ function copyKeyUrl(url: string) {
   message.info('Key access URL copied to clipboard!')
 }
 
-async function handleDelete(row: any) {
+async function handleDelete(row: any): Promise<boolean> {
   triggerHaptic('medium')
   try {
     const res = await deleteKey(row.server, row.key_id)
@@ -201,12 +202,63 @@ async function handleDelete(row: any) {
       triggerHapticNotification('success')
       message.success(`Deleted key ${row.name || row.key_id}`)
       await loadKeys()
+      return true
     }
+    return false
   } catch (err: any) {
     triggerHapticNotification('error')
     message.error(err?.response?.data?.error || 'Failed to delete key')
+    return false
   }
 }
+
+// ── Confirm dialog (replaces the cramped anchored NPopconfirm) ──────
+type ConfirmAction = 'extend' | 'delete'
+const confirmOpen = ref(false)
+const confirmAction = ref<ConfirmAction>('extend')
+const confirmTarget = ref<any>(null)
+const confirmBusy = ref(false)
+
+function openConfirm(action: ConfirmAction, row: any) {
+  triggerHaptic('light')
+  confirmAction.value = action
+  confirmTarget.value = row
+  confirmOpen.value = true
+}
+
+function closeConfirm() {
+  if (confirmBusy.value) return
+  confirmOpen.value = false
+}
+
+async function runConfirm() {
+  if (!confirmTarget.value || confirmBusy.value) return
+  confirmBusy.value = true
+  try {
+    const ok = confirmAction.value === 'extend'
+      ? await handleExtend(confirmTarget.value)
+      : await handleDelete(confirmTarget.value)
+    if (ok) {
+      confirmOpen.value = false
+      confirmTarget.value = null
+    }
+  } finally {
+    confirmBusy.value = false
+  }
+}
+
+const confirmTitle = computed(() =>
+  confirmAction.value === 'extend' ? 'Extend Access Key' : 'Delete Access Key')
+const confirmVerb = computed(() =>
+  confirmAction.value === 'extend' ? 'Extend +30 Days' : 'Delete Permanently')
+
+const newExpiryText = computed(() => {
+  const dt = parseExpiry(confirmTarget.value?.expire_date)
+  if (!dt) return ''
+  const nd = new Date(dt.getTime() + 30 * 86400000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(nd.getDate())}.${p(nd.getMonth() + 1)}.${nd.getFullYear()}`
+})
 
 async function handleCreateKey() {
   if (!createForm.value.name) {
@@ -253,7 +305,7 @@ defineExpose({
         <h1 class="page-title">Outline Access Keys</h1>
         <p class="page-subtitle">Manage, extend, and provision VPN credentials across servers</p>
       </div>
-      <NButton type="primary" size="medium" @click="showCreateModal = true">
+      <NButton class="provision-btn" type="primary" size="medium" @click="showCreateModal = true">
         <template #icon>
           <AddOutline />
         </template>
@@ -307,58 +359,66 @@ defineExpose({
           <div class="key-main">
             <div class="key-identity">
               <span class="key-name">{{ k.name }}</span>
-              <div class="key-tags">
-                <NTag size="small" type="info" round>Server {{ k.server }}</NTag>
-                <NTag size="small" type="default" round class="font-mono">ID: {{ k.key_id }}</NTag>
-                <NTag v-if="k.chat_id" size="small" type="success" round class="font-mono">
-                  UID: {{ k.chat_id }}
-                </NTag>
-              </div>
+              <span class="expiry-pill" :class="expiryClass(k.expire_date)">
+                {{ expiryLabel(k.expire_date) }}
+              </span>
+            </div>
+
+            <div class="key-meta">
+              <span class="meta-server">Server {{ k.server }}</span>
+              <span class="meta-sep">·</span>
+              <span class="font-mono">ID {{ k.key_id }}</span>
+              <template v-if="k.chat_id">
+                <span class="meta-sep">·</span>
+                <span class="font-mono">UID {{ k.chat_id }}</span>
+              </template>
             </div>
 
             <div class="key-expiry">
               <CalendarOutline class="cal-icon" />
-              <span class="expiry-label">Expires:</span>
+              <span class="expiry-label">Expires</span>
               <span class="expiry-val font-mono">{{ k.expire_date || 'N/A' }}</span>
-              <span class="expiry-pill" :class="expiryClass(k.expire_date)">
-                {{ expiryLabel(k.expire_date) }}
-              </span>
             </div>
           </div>
 
           <div class="key-actions">
             <NButton
               v-if="k.access_url"
+              class="action-copy"
               size="small"
               secondary
+              aria-label="Copy access link"
               @click="copyKeyUrl(k.access_url)"
             >
               <template #icon>
                 <CopyOutline />
               </template>
-              Copy Link
+              <span class="btn-text">Copy Link</span>
             </NButton>
 
-            <NPopconfirm @positive-click="handleExtend(k)">
-              <template #trigger>
-                <NButton size="small" type="primary" secondary>
-                  +30 Days Extend
-                </NButton>
-              </template>
-              Extend "{{ k.name || k.key_id }}" by 30 days?
-            </NPopconfirm>
+            <NButton
+              class="action-extend"
+              size="small"
+              type="primary"
+              secondary
+              @click="openConfirm('extend', k)"
+            >
+              +30 Days Extend
+            </NButton>
 
-            <NPopconfirm @positive-click="handleDelete(k)">
-              <template #trigger>
-                <NButton size="small" type="error" secondary>
-                  <template #icon>
-                    <TrashOutline />
-                  </template>
-                  Delete
-                </NButton>
+            <NButton
+              class="action-delete"
+              size="small"
+              type="error"
+              secondary
+              aria-label="Delete key"
+              @click="openConfirm('delete', k)"
+            >
+              <template #icon>
+                <TrashOutline />
               </template>
-              Permanently delete "{{ k.name || k.key_id }}" from Server {{ k.server }}? This cannot be undone.
-            </NPopconfirm>
+              <span class="btn-text">Delete</span>
+            </NButton>
           </div>
         </div>
       </div>
@@ -424,6 +484,50 @@ defineExpose({
           </NButton>
         </div>
       </NForm>
+    </NModal>
+
+    <!-- Confirm Extend / Delete -->
+    <NModal
+      v-model:show="confirmOpen"
+      preset="card"
+      :bordered="false"
+      :auto-focus="false"
+      :mask-closable="!confirmBusy"
+      class="confirm-modal"
+      style="max-width: 400px; width: calc(100vw - 32px);"
+    >
+      <div class="confirm-body">
+        <div class="confirm-icon" :class="confirmAction">
+          <CalendarOutline v-if="confirmAction === 'extend'" />
+          <TrashOutline v-else />
+        </div>
+        <h3 class="confirm-title">{{ confirmTitle }}</h3>
+        <p class="confirm-desc">
+          <span class="confirm-key-name">{{ confirmTarget?.name || confirmTarget?.key_id }}</span>
+          <template v-if="confirmAction === 'extend'">
+            gets 30 more days on Server {{ confirmTarget?.server }}<template v-if="newExpiryText">
+            — new expiry {{ newExpiryText }}.</template
+            >
+          </template>
+          <template v-else>
+            will be permanently removed from Server {{ confirmTarget?.server }}.
+            This cannot be undone.
+          </template>
+        </p>
+      </div>
+      <div class="confirm-actions">
+        <NButton class="confirm-cancel" :disabled="confirmBusy" @click="closeConfirm">
+          Cancel
+        </NButton>
+        <NButton
+          class="confirm-ok"
+          :type="confirmAction === 'delete' ? 'error' : 'primary'"
+          :loading="confirmBusy"
+          @click="runConfirm"
+        >
+          {{ confirmVerb }}
+        </NButton>
+      </div>
     </NModal>
   </div>
 </template>
@@ -515,30 +619,56 @@ defineExpose({
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.key-card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
 }
 
 .key-main {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
 
 .key-identity {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
 }
 
 .key-name {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-1);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.key-tags {
+.key-meta {
   display: flex;
+  align-items: center;
   gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-4);
+  min-width: 0;
+}
+
+.meta-server {
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.meta-sep {
+  color: var(--text-4);
 }
 
 .key-expiry {
@@ -551,9 +681,10 @@ defineExpose({
 .expiry-pill {
   font-size: 11px;
   font-weight: 600;
-  padding: 1px 8px;
+  padding: 2px 9px;
   border-radius: 10px;
-  margin-left: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .expiry-pill.expired {
@@ -607,11 +738,11 @@ defineExpose({
 }
 
 .expiry-label {
-  color: var(--text-3);
+  color: var(--text-4);
 }
 
 .expiry-val {
-  color: var(--accent);
+  color: var(--text-2);
   font-weight: 600;
 }
 
@@ -619,9 +750,184 @@ defineExpose({
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .font-mono {
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Confirm dialog (extend / delete) ───────────────────────────── */
+.confirm-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 6px 4px 2px;
+}
+
+.confirm-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.confirm-icon :deep(svg) {
+  width: 20px;
+  height: 20px;
+}
+
+.confirm-icon.extend {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
+  color: var(--accent);
+}
+
+.confirm-icon.delete {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  color: var(--danger-soft);
+}
+
+.confirm-title {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.confirm-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.confirm-key-name {
+  display: block;
+  color: var(--text-1);
+  font-weight: 600;
+  margin-bottom: 2px;
+  word-break: break-word;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.confirm-cancel,
+.confirm-ok {
+  flex: 1;
+}
+
+/* ── Mobile (Telegram Mini App width) ───────────────────────────── */
+@media (max-width: 767px) {
+  .keys-view {
+    padding: 12px;
+  }
+
+  .view-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .page-title {
+    font-size: 18px;
+  }
+
+  .provision-btn {
+    width: 100%;
+  }
+
+  .filter-card {
+    margin-bottom: 14px;
+  }
+
+  .filters-row {
+    gap: 8px;
+  }
+
+  .search-input {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .status-select,
+  .server-select {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .filter-summary {
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .keys-list-wrap {
+    gap: 10px;
+  }
+
+  /* With flex-wrap: wrap on a column container, align-items: stretch does not
+     size the items — pin children to 100% so long names truncate instead of
+     pushing the expiry pill outside the card. */
+  .key-card {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .key-main,
+  .key-actions {
+    width: 100%;
+  }
+
+  .key-identity {
+    overflow: hidden;
+  }
+
+  .key-name {
+    font-size: 14px;
+  }
+
+  /* Copy/Delete become icon-only; Extend keeps its label and takes the slack */
+  .key-actions {
+    display: grid;
+    grid-template-columns: 46px 1fr 46px;
+    gap: 8px;
+  }
+
+  .key-actions :deep(.n-button) {
+    width: 100%;
+    height: 40px;
+    padding-inline: 0;
+    justify-content: center;
+  }
+
+  .action-copy :deep(.n-button__content),
+  .action-delete :deep(.n-button__content) {
+    display: none;
+  }
+
+  .pagination-bar {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .pagination-bar :deep(.n-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 }
 </style>

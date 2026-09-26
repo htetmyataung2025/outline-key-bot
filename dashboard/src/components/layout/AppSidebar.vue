@@ -11,7 +11,6 @@ import {
   GiftOutline,
   PeopleOutline,
   ChevronBackOutline,
-  ChevronForwardOutline,
   CloudDoneOutline,
   SettingsOutline,
 } from '@vicons/ionicons5'
@@ -42,61 +41,57 @@ function navigate(path: string) {
 <template>
   <aside class="app-sidebar" :class="{ collapsed: isCollapsed }">
     <div class="nav-menu">
-      <div v-if="!isCollapsed" class="menu-section-label">
+      <div class="menu-section-label">
         MANAGEMENT
       </div>
 
-      <template v-for="item in navItems" :key="item.path">
-        <!-- If collapsed, wrap with right-aligned tooltip -->
-        <NTooltip v-if="isCollapsed" placement="right" trigger="hover">
-          <template #trigger>
-            <button
-              class="nav-item"
-              :class="{ active: route.path.startsWith(item.path) }"
-              @click="navigate(item.path)"
-            >
-              <div class="nav-icon-wrap">
-                <component :is="item.icon" class="nav-icon" />
-              </div>
-              <span v-if="item.badge && item.badge > 0" class="collapsed-badge-dot"></span>
-            </button>
-          </template>
-          <div class="tooltip-content">
-            <span class="tooltip-title">{{ item.label }}</span>
-            <span v-if="item.badge && item.badge > 0" class="tooltip-badge">
-              {{ item.badge }} Pending
-            </span>
-          </div>
-        </NTooltip>
+      <!-- Stable DOM: the tooltip wrapper is always present and only disabled
+           while expanded, so toggling never unmounts/remounts the buttons. -->
+      <NTooltip
+        v-for="item in navItems"
+        :key="item.path"
+        placement="right"
+        trigger="hover"
+        :disabled="!isCollapsed"
+      >
+        <template #trigger>
+          <button
+            class="nav-item"
+            :class="{ active: route.path.startsWith(item.path) }"
+            @click="navigate(item.path)"
+          >
+            <div class="nav-icon-wrap">
+              <component :is="item.icon" class="nav-icon" />
+            </div>
+            <div class="nav-text-block">
+              <span class="nav-label">{{ item.label }}</span>
+              <span class="nav-hint">{{ item.hint }}</span>
+            </div>
 
-        <!-- If expanded, render normal full button -->
-        <button
-          v-else
-          class="nav-item"
-          :class="{ active: route.path.startsWith(item.path) }"
-          @click="navigate(item.path)"
-        >
-          <div class="nav-icon-wrap">
-            <component :is="item.icon" class="nav-icon" />
-          </div>
-          <div class="nav-text-block">
-            <span class="nav-label">{{ item.label }}</span>
-            <span class="nav-hint">{{ item.hint }}</span>
-          </div>
-
-          <NBadge
-            v-if="item.badge && item.badge > 0"
-            :value="item.badge"
-            type="warning"
-            class="nav-badge"
-          />
-        </button>
-      </template>
+            <NBadge
+              v-if="item.badge && item.badge > 0"
+              :value="item.badge"
+              type="warning"
+              class="nav-badge"
+            />
+            <span
+              v-if="item.badge && item.badge > 0"
+              class="collapsed-badge-dot"
+            ></span>
+          </button>
+        </template>
+        <div class="tooltip-content">
+          <span class="tooltip-title">{{ item.label }}</span>
+          <span v-if="item.badge && item.badge > 0" class="tooltip-badge">
+            {{ item.badge }} Pending
+          </span>
+        </div>
+      </NTooltip>
     </div>
 
     <!-- Sidebar Footer -->
     <div class="sidebar-footer">
-      <div v-if="!isCollapsed" class="footer-card">
+      <div class="footer-card">
         <div class="footer-status-row">
           <CloudDoneOutline class="sync-icon" />
           <span class="footer-title">Sync Online</span>
@@ -106,11 +101,8 @@ function navigate(path: string) {
 
       <!-- Quick Collapse Toggle at bottom -->
       <button class="collapse-toggle-btn" @click="toggleSidebar">
-        <ChevronForwardOutline v-if="isCollapsed" class="collapse-icon" />
-        <template v-else>
-          <ChevronBackOutline class="collapse-icon" />
-          <span class="collapse-text">Collapse Menu</span>
-        </template>
+        <ChevronBackOutline class="collapse-icon" :class="{ flipped: isCollapsed }" />
+        <span class="collapse-text">Collapse Menu</span>
       </button>
     </div>
   </aside>
@@ -130,6 +122,7 @@ function navigate(path: string) {
   top: 64px;
   transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), padding 0.22s ease;
   user-select: none;
+  overflow: hidden;
 }
 
 .app-sidebar.collapsed {
@@ -149,6 +142,23 @@ function navigate(path: string) {
   letter-spacing: 0.8px;
   color: var(--text-4);
   padding: 4px 10px 8px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  /* On expand: fade in only after the width animation has mostly finished */
+  transition:
+    opacity 0.18s ease 0.14s,
+    max-height 0.22s ease 0.14s,
+    padding 0.22s ease 0.14s;
+  max-height: 32px;
+}
+
+.collapsed .menu-section-label {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  /* On collapse: vanish immediately while the sidebar shrinks */
+  transition-delay: 0s;
 }
 
 .nav-item {
@@ -210,6 +220,22 @@ function navigate(path: string) {
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  /* On expand: fade in after the width animation has mostly finished */
+  transition:
+    opacity 0.18s ease 0.14s,
+    transform 0.22s ease 0.14s,
+    flex-grow 0.22s ease 0.14s;
+}
+
+.collapsed .nav-text-block {
+  opacity: 0;
+  transform: translateX(-8px);
+  pointer-events: none;
+  /* Collapse the flex track to 0 so the icon stays centered (flex-basis is 0%) */
+  flex-grow: 0;
+  /* On collapse: vanish immediately while the sidebar shrinks */
+  transition-delay: 0s;
 }
 
 .nav-label {
@@ -217,6 +243,9 @@ function navigate(path: string) {
   font-weight: 600;
   color: inherit;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-hint {
@@ -236,6 +265,19 @@ function navigate(path: string) {
 .nav-badge {
   margin-left: auto;
   flex-shrink: 0;
+  transition: opacity 0.15s ease 0.14s;
+}
+
+.collapsed .nav-badge {
+  opacity: 0;
+  /* With no default slot, the badge pill is a static 19px flex item that
+     would absorb space and push the icon off-center — take it out of flow;
+     the collapsed-badge-dot shows the pending count instead. */
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  margin-left: 0;
+  transition-delay: 0s;
 }
 
 .collapsed-badge-dot {
@@ -247,6 +289,13 @@ function navigate(path: string) {
   background-color: var(--warn);
   border-radius: 50%;
   border: 2px solid var(--surface-2);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.collapsed .collapsed-badge-dot {
+  opacity: 1;
+  transition-delay: 0.14s;
 }
 
 .sidebar-footer {
@@ -265,6 +314,24 @@ function navigate(path: string) {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  overflow: hidden;
+  max-height: 90px;
+  /* On expand: fade in after the width animation has mostly finished */
+  transition:
+    opacity 0.18s ease 0.14s,
+    max-height 0.22s ease 0.14s,
+    padding 0.22s ease 0.14s,
+    border-color 0.22s ease 0.14s;
+}
+
+.collapsed .footer-card {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-color: transparent;
+  /* On collapse: vanish immediately while the sidebar shrinks */
+  transition-delay: 0s;
 }
 
 .footer-status-row {
@@ -313,9 +380,36 @@ function navigate(path: string) {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+.collapsed .collapse-toggle-btn {
+  gap: 0;
+}
+
 .collapse-icon {
   width: 15px;
   height: 15px;
+  flex-shrink: 0;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collapse-icon.flipped {
+  transform: rotate(180deg);
+}
+
+.collapse-text {
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 120px;
+  /* On expand: fade in after the width animation has mostly finished */
+  transition:
+    opacity 0.18s ease 0.14s,
+    max-width 0.22s ease 0.14s;
+}
+
+.collapsed .collapse-text {
+  opacity: 0;
+  max-width: 0;
+  /* On collapse: vanish immediately while the sidebar shrinks */
+  transition-delay: 0s;
 }
 
 .tooltip-content {

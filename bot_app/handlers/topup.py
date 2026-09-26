@@ -9,9 +9,9 @@ from bot_app.helpers.callback_guard import is_callback_processed
 from bot_app.helpers.payment_text import get_payment_instruction_text
 from bot_app.keyboards import get_topup_amounts_keyboard
 from bot_app.services.billing import update_user_balance
-from bot_app.services.ocr import generate_order_id_from_slip
+from bot_app.services.ocr import extract_order_id_and_tx
 from bot_app.services.orders import load_all_users, save_user_id
-from bot_app.services.slips import record_slip
+from bot_app.services.slips import record_slip, review_slip
 from bot_app.services.states import (
     get_broadcast_state,
     get_topup_state, set_broadcast_state, set_custom_topup_state, set_topup_state,
@@ -77,19 +77,24 @@ def handle_approve_topup(call):
     amount = int(parts[3])
     topup_id = parts[4]
 
-    new_balance, _ = update_user_balance(target_chat_id, amount)
-
-    user_noti = (
-        f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
-        f"🧾 Top-Up ID: <code>{topup_id}</code>\n\n"
-        f"💵 ဖြည့်သွင်းငွေ: <b>+{amount:,} MMK</b>\n\n"
-        f"💳 လက်ရှိ Wallet လက်ကျန်ငွေ: <b>{new_balance:,} MMK</b>\n\n"
-        f"'🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး စိတ်ကြိုက် ချက်ချင်း ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
-    )
-    try:
-        bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
-    except:
-        pass
+    # Single source of truth: mark the queue slip APPROVED (which also
+    # credits the wallet, notifies the user and audit-logs) so the admin
+    # dashboard reflects a Telegram-side approval live. Only if the slip is
+    # not in the queue (legacy orders) do we credit directly.
+    result = review_slip(topup_id, "APPROVE", reviewed_by=call.from_user.id or "Telegram Admin")
+    if not result.get("success") and result.get("code") == 404:
+        new_balance, _ = update_user_balance(target_chat_id, amount)
+        user_noti = (
+            f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
+            f"🧾 Top-Up ID: <code>{topup_id}</code>\n\n"
+            f"💵 ဖြည့်သွင်းငွေ: <b>+{amount:,} MMK</b>\n\n"
+            f"💳 လက်ရှိ Wallet လက်ကျန်ငွေ: <b>{new_balance:,} MMK</b>\n\n"
+            f"'🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး စိတ်ကြိုက် ချက်ချင်း ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
+        )
+        try:
+            bot.send_message(target_chat_id, user_noti, parse_mode="HTML")
+        except:
+            pass
 
     updated_caption = call.message.caption + f"\n\n✅ <b>APPROVED (+{amount:,} MMK)</b>"
     try:
@@ -137,13 +142,14 @@ def handle_photo_messages(message):
     set_custom_topup_state(chat_id, False)
 
     photo_file = bot.get_file(message.photo[-1].file_id)
-    topup_id = generate_order_id_from_slip(photo_file.file_path)
+    topup_id, tx_ref = extract_order_id_and_tx(photo_file.file_path)
     record_slip(
         slip_id=topup_id,
         chat_id=chat_id,
         amount=topup_amt,
         username=username,
         file_id=message.photo[-1].file_id,
+        extracted_tx_id=tx_ref,
     )
 
 

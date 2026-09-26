@@ -1,10 +1,14 @@
 """Admin REST API routes for Control Center and Telegram Mini App."""
 
 from datetime import datetime, timedelta
-from flask import Blueprint, g, jsonify, request
 
+import requests
+from flask import Blueprint, Response, g, jsonify, request
+
+from bot_app.config import TELEGRAM_TOKEN
 from bot_app.helpers.auth import require_admin_api
 from bot_app.services.admin_telemetry import get_admin_overview_telemetry, reset_telemetry_cache
+from bot_app.storage.versioning import get_data_version
 from bot_app.services.billing import load_all_wallets, update_user_balance
 from bot_app.services.orders import (
     load_all_users,
@@ -37,6 +41,20 @@ def get_overview():
 
 
 # ---------------------------------------------------------------------------
+# 1b. Live-refresh data version
+# ---------------------------------------------------------------------------
+@admin_bp.route("/version", methods=["GET"])
+def get_version():
+    """Cheap monotonic counter bumped on every shared-state write.
+
+    The dashboard polls this every few seconds and only re-fetches real
+    data when it changes, so Telegram-side actions (new slip, approve)
+    and dashboard-side actions propagate without a manual refresh.
+    """
+    return jsonify({"version": get_data_version()}), 200
+
+
+# ---------------------------------------------------------------------------
 # 2. Slips & Payment Verification Queue
 # ---------------------------------------------------------------------------
 @admin_bp.route("/slips", methods=["GET"])
@@ -54,6 +72,43 @@ def get_slip(slip_id):
     if not slip:
         return jsonify({"error": "Slip not found"}), 404
     return jsonify(slip), 200
+
+
+@admin_bp.route("/slips/<slip_id>/image", methods=["GET"])
+def slip_image(slip_id):
+    """Stream the receipt photo stored as a Telegram ``file_id``.
+
+    The dashboard cannot put auth headers on a plain ``<img src>``, so the
+    image is proxied through this authenticated endpoint and consumed as a
+    blob. Telegram download links expire after ~1h, hence the per-request
+    ``get_file`` call; the response is cached privately for an hour.
+    """
+    slip = get_slip_by_id(slip_id)
+    if not slip:
+        return jsonify({"error": "Slip not found"}), 404
+
+    file_id = (slip.get("file_id") or "").strip()
+    if not file_id:
+        return jsonify({"error": "This slip has no stored receipt image"}), 404
+
+    try:
+        from bot_app.extensions import bot
+        tg_file = bot.get_file(file_id)
+        file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{tg_file.file_path}"
+        resp = requests.get(file_url, timeout=15)
+    except Exception as e:
+        return jsonify({"error": f"Could not fetch receipt from Telegram: {e}"}), 502
+
+    if resp.status_code != 200 or not resp.content:
+        return jsonify({"error": f"Telegram refused the file download (HTTP {resp.status_code})"}), 502
+
+    ext = str(tg_file.file_path or "").rsplit(".", 1)[-1].lower()
+    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/jpeg")
+
+    out = Response(resp.content, mimetype=mime)
+    out.headers["Cache-Control"] = "private, max-age=3600"
+    return out
 
 
 @admin_bp.route("/slips/<slip_id>/review", methods=["POST"])

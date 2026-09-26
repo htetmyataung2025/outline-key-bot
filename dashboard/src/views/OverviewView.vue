@@ -87,6 +87,7 @@ async function loadData(force = false, isRetry = false) {
 }
 
 function handleManualRefresh() {
+  if (loading.value) return
   triggerHaptic('light')
   loadData(true)
 }
@@ -129,8 +130,9 @@ defineExpose({
       <div class="header-btns">
         <NTooltip trigger="hover">
           <template #trigger>
-            <button class="btn-secondary" @click="handleManualRefresh">
-              <RefreshOutline class="btn-icon" :class="{ spin: loading }" />
+            <button class="btn-secondary" :disabled="loading" @click="handleManualRefresh">
+              <span v-if="loading" class="btn-spinner" />
+              <RefreshOutline v-else class="btn-icon" />
               <span>Sync</span>
             </button>
           </template>
@@ -512,12 +514,23 @@ defineExpose({
   height: 14px;
 }
 
-.btn-icon.spin {
-  animation: spin 0.8s linear infinite;
+.btn-secondary:disabled {
+  opacity: 0.7;
+  cursor: default;
 }
 
-@keyframes spin {
-  100% { transform: rotate(360deg); }
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(148, 163, 184, 0.25);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: loader-rotate 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes loader-rotate {
+  to { transform: rotate(360deg); }
 }
 
 /* Overview Grid */

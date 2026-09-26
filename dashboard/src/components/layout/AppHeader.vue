@@ -12,11 +12,13 @@ import {
   KeyOutline,
 } from '@vicons/ionicons5'
 
+defineProps<{
+  refreshing?: boolean
+}>()
 const emit = defineEmits(['refresh', 'logout'])
 const { isCollapsed, toggle: toggleSidebar } = useSidebar()
 
 const yangonTime = ref('')
-const isRefreshing = ref(false)
 let timer: any = null
 
 function updateClock() {
@@ -32,11 +34,7 @@ function updateClock() {
 
 function handleRefresh() {
   triggerHaptic('light')
-  isRefreshing.value = true
   emit('refresh')
-  setTimeout(() => {
-    isRefreshing.value = false
-  }, 600)
 }
 
 function handleLogout() {
@@ -114,10 +112,12 @@ onUnmounted(() => {
         <template #trigger>
           <button
             class="action-icon-btn"
-            :class="{ spinning: isRefreshing }"
+            :disabled="refreshing"
+            :aria-busy="refreshing"
             @click="handleRefresh"
           >
-            <RefreshOutline class="btn-icon" />
+            <span v-if="refreshing" class="btn-spinner" />
+            <RefreshOutline v-else class="btn-icon" />
           </button>
         </template>
         Quick Refresh
@@ -156,6 +156,11 @@ onUnmounted(() => {
   .app-header {
     height: 52px;
     padding: 0 12px;
+    /* Solid background: the translucent + blurred header lets scrolling
+       cards bleed through, which reads as a hazy navbar on mobile. */
+    background: #0d1322;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
@@ -346,17 +351,28 @@ onUnmounted(() => {
   border-color: rgba(239, 68, 68, 0.3);
 }
 
+.action-icon-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
 .btn-icon {
   width: 15px;
   height: 15px;
 }
 
-.spinning .btn-icon {
-  animation: spin 0.6s linear;
+.btn-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(148, 163, 184, 0.25);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: loader-rotate 0.7s linear infinite;
+  flex-shrink: 0;
 }
 
-@keyframes spin {
-  100% { transform: rotate(360deg); }
+@keyframes loader-rotate {
+  to { transform: rotate(360deg); }
 }
 
 /* Visibility helpers */

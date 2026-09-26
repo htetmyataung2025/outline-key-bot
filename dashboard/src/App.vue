@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import {
   NConfigProvider,
   NMessageProvider,
@@ -15,7 +15,7 @@ import { themeOverrides } from '@/theme'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import MobileNav from '@/components/layout/MobileNav.vue'
-import { fetchOverview, fetchSlips } from '@/api'
+import { fetchOverview, fetchSlips, fetchDataVersion } from '@/api'
 
 const pendingSlipsCount = ref(0)
 const currentViewRef = ref<any>(null)
@@ -41,10 +41,18 @@ async function refreshPendingCount() {
   }
 }
 
-function handleGlobalRefresh() {
-  refreshPendingCount()
-  if (currentViewRef.value?.loadData) {
-    currentViewRef.value.loadData(true)
+const globalRefreshing = ref(false)
+
+async function handleGlobalRefresh() {
+  if (globalRefreshing.value) return
+  globalRefreshing.value = true
+  try {
+    await Promise.all([
+      refreshPendingCount(),
+      currentViewRef.value?.loadData?.(true),
+    ])
+  } finally {
+    globalRefreshing.value = false
   }
 }
 
@@ -98,11 +106,44 @@ onMounted(() => {
     refreshPendingCount()
   }
 
-  setInterval(() => {
-    if (isAuthenticated.value) {
-      refreshPendingCount()
+  startLiveSync()
+})
+
+// ── Live sync ─────────────────────────────────────────────────────────────
+// Poll only a monotonic version counter every 5s; when any state changes
+// server-side (new slip from Telegram, approve/reject from either surface,
+// key/balance/settings edits) the counter moves and we refresh the sidebar
+// badge plus the current view — no manual refresh needed.
+const knownVersion = ref<number | null>(null)
+let liveSyncTimer: ReturnType<typeof setInterval> | null = null
+
+async function pollDataVersion() {
+  if (!isAuthenticated.value || document.hidden) return
+  try {
+    const version = await fetchDataVersion()
+    if (knownVersion.value === null) {
+      knownVersion.value = version
+      return
     }
-  }, 15000)
+    if (version !== knownVersion.value) {
+      knownVersion.value = version
+      await Promise.all([
+        refreshPendingCount(),
+        currentViewRef.value?.loadData?.(),
+      ])
+    }
+  } catch (e) {
+    // Transient poll failures are fine; next tick retries. 401 handled in refreshPendingCount.
+  }
+}
+
+function startLiveSync() {
+  if (liveSyncTimer) return
+  liveSyncTimer = setInterval(pollDataVersion, 5000)
+}
+
+onUnmounted(() => {
+  if (liveSyncTimer) clearInterval(liveSyncTimer)
 })
 </script>
 
@@ -111,7 +152,7 @@ onMounted(() => {
     <NMessageProvider>
       <NDialogProvider>
         <div class="app-layout">
-          <AppHeader @refresh="handleGlobalRefresh" @logout="handleLogout" />
+          <AppHeader :refreshing="globalRefreshing" @refresh="handleGlobalRefresh" @logout="handleLogout" />
 
           <div class="layout-main">
             <!-- Desktop Sidebar -->

@@ -135,6 +135,10 @@ def save_system_settings(new_settings: dict, updated_by: str = "Admin") -> dict:
     if is_supabase_configured():
         supabase_upsert("system_settings", payload_rows, on_conflict="key")
 
+    # Supabase writes skip redis_set, so bump the live-refresh version here.
+    from bot_app.storage.versioning import bump_data_version
+    bump_data_version()
+
     invalidate_settings_cache()
     return get_system_settings(force_refresh=True)
 

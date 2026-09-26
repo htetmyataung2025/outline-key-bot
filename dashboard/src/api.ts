@@ -73,8 +73,31 @@ export const fetchOverview = (force = false) =>
     .get('/overview', { params: force ? { refresh: 1 } : {}, timeout: 20000 })
     .then((r) => r.data)
 export const fetchSlips = (status = 'PENDING') => api.get(`/slips?status=${status}`).then((r) => r.data)
+// Slip ids contain "#" (e.g. #AU27OA) — an unencoded "#" is treated as a URL
+// fragment by the browser and truncates the path, so ids must be escaped.
 export const reviewSlip = (slipId: string, action: 'APPROVE' | 'REJECT', reason = '') =>
-  api.post(`/slips/${slipId}/review`, { action, reason }).then((r) => r.data)
+  api.post(`/slips/${encodeURIComponent(slipId)}/review`, { action, reason }).then((r) => r.data)
+
+// Live-refresh: cheap monotonic counter bumped server-side on every
+// shared-state write (new slip, review, balance/key/settings change).
+export const fetchDataVersion = () => api.get('/version', { timeout: 8000 }).then((r) => r.data.version as number)
+
+// Receipt images are stored as Telegram file_ids and proxied through the
+// authenticated /image endpoint; <img> tags cannot send auth headers, so
+// we fetch them as blobs and cache object URLs per slip id.
+const slipImageCache = new Map<string, string>()
+export async function fetchSlipImage(slipId: string): Promise<string> {
+  const cached = slipImageCache.get(slipId)
+  if (cached) return cached
+  try {
+    const r = await api.get(`/slips/${encodeURIComponent(slipId)}/image`, { responseType: 'blob', timeout: 20000 })
+    const url = URL.createObjectURL(r.data)
+    slipImageCache.set(slipId, url)
+    return url
+  } catch (e) {
+    return ''
+  }
+}
 
 export const fetchKeys = (params?: { server_id?: string; search?: string; page?: number; page_size?: number }) =>
   api.get('/keys', { params }).then((r) => r.data)
