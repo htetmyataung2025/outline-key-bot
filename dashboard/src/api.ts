@@ -194,4 +194,6 @@ export const adjustBalance = (chatId: string, payload: { adjustment_type: 'TOPUP
 export const fetchSettings = () => api.get('/settings').then((r) => r.data)
 export const updateSettings = (payload: any) => api.post('/settings', payload).then((r) => r.data)
 export const testOutlineServer = (apiUrl: string) => api.post('/settings/test-server', { api_url: apiUrl }).then((r) => r.data)
+// Configured Outline servers (id + name) — the only ones UI dropdowns may offer.
+export const fetchServers = () => api.get('/servers').then((r) => r.data)
 

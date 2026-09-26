@@ -18,16 +18,17 @@ from bot_app.utils import bytes_to_gb, clean_ss_url, extract_chat_id_from_key_na
 
 
 def get_configured_servers():
-    """Return the configured server list from dynamic settings, or the env fallback."""
+    """Return the servers that are actually usable (with a non-empty API URL).
+
+    The dynamic settings store (Settings page / Supabase) is the source of
+    truth; its defaults derive from the environment (.env). Rows saved without
+    an API URL — mid-edit in Settings, or legacy rows — are filtered out so
+    provisioning, telemetry and the dashboard filters never see a phantom
+    server that isn't configured anywhere.
+    """
     from bot_app.services.settings import get_system_settings
     configured = get_system_settings().get("servers") or []
-    if not configured:
-        configured = [
-            {"id": 1, "name": "Server 1 (SG-1)", "api_url": OUTLINE_API_URL_1},
-            {"id": 2, "name": "Server 2 (SG-2)", "api_url": OUTLINE_API_URL_2},
-            {"id": 3, "name": "Server 3 (VIP)", "api_url": OUTLINE_API_URL_3},
-        ]
-    return configured
+    return [srv for srv in configured if (srv.get("api_url") or "").strip()]
 
 
 def get_server_api_url(server_id):

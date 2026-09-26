@@ -9,6 +9,22 @@ from bot_app.storage.kv import redis_get, redis_set
 from bot_app.storage.paths import PERSISTENT_KEYS_FILE
 
 
+# Outline stores one free-text `name` per key, so historically the display
+# name, the owner's (chat_id) and the expiry date were all packed into it
+# (e.g. "FAFAFA OFFICIAL 🧢 (7672856636) 26.10.2026"). The dashboard now keeps
+# server / expiry / owner in their own columns, so for display we strip the
+# embedded (chat_id) and trailing date back down to just the human label. The
+# raw name is left untouched on the server and in the registry (it stays the
+# disaster-recovery source of truth and keeps the regex parsers working).
+def clean_key_label(name: str) -> str:
+    if not name:
+        return ""
+    label = re.sub(r'\(\s*\d+\s*\)', '', name)                      # drop (chat_id)
+    label = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', '', label)   # drop DD.MM.YYYY
+    label = re.sub(r'\s{2,}', ' ', label).strip(' -–—·|')           # tidy leftovers
+    return label.strip() or name.strip()
+
+
 def load_persistent_keys():
     data = redis_get("persistent_keys_registry")
     if data is not None:

@@ -1,12 +1,19 @@
 """Dynamic System Settings Service.
 
 Allows Outline Servers, Payment Phones, Required Channel, OCR Key, and Plans
-to be managed in real-time from the Admin Control Center and persisted in
-Supabase, removing the need to edit `.env` or redeploy on configuration changes.
+to be managed in real-time from the Admin Control Center, removing the need to
+edit `.env` or redeploy on configuration changes.
+
+Persistence backend (first available wins):
+  1. Supabase `system_settings` table — used only when SUPABASE_URL/KEY are set
+     (kept so existing Supabase deployments keep working unchanged).
+  2. KV (Upstash Redis) `system_settings_data` key — the single-store default.
+  3. In-memory fallback / env defaults — local dev and tests.
 """
 
 import time
 import requests
+from bot_app.storage.kv import redis_get, redis_set
 from bot_app.storage.supabase import is_supabase_configured, supabase_get, supabase_upsert
 from bot_app.timeutil import myanmar_now
 
@@ -15,6 +22,9 @@ _SETTINGS_CACHE: dict | None = None
 _LAST_CACHE_TIME: float = 0.0
 _CACHE_TTL_SECONDS: float = 45.0
 _FALLBACK_SETTINGS: dict | None = None
+
+# KV key holding the whole settings dict when running KV-only (no Supabase).
+_KV_SETTINGS_KEY = "system_settings_data"
 
 
 def _get_default_settings() -> dict:
@@ -32,10 +42,17 @@ def _get_default_settings() -> dict:
         REQUIRED_CHANNEL,
     )
 
+    # Only servers actually configured in the environment become part of the
+    # baseline: an unset OUTLINE_API_URL_* must never surface as a phantom
+    # server in the dashboard, the bot, or the Supabase seed.
     servers = [
-        {"id": 1, "name": "Server 1 (SG-1)", "api_url": OUTLINE_API_URL_1},
-        {"id": 2, "name": "Server 2 (SG-2)", "api_url": OUTLINE_API_URL_2},
-        {"id": 3, "name": "Server 3 (VIP)", "api_url": OUTLINE_API_URL_3},
+        {"id": server_id, "name": name, "api_url": url}
+        for server_id, name, url in (
+            (1, "Server 1 (SG-1)", OUTLINE_API_URL_1),
+            (2, "Server 2 (SG-2)", OUTLINE_API_URL_2),
+            (3, "Server 3 (VIP)", OUTLINE_API_URL_3),
+        )
+        if url
     ]
 
     return {
@@ -67,6 +84,14 @@ def get_system_settings(force_refresh: bool = False) -> dict:
     defaults = _get_default_settings()
 
     if not is_supabase_configured():
+        # KV-only mode: settings persist in the same Redis store as everything
+        # else. Missing keys fall back to env/in-memory defaults.
+        kv_data = redis_get(_KV_SETTINGS_KEY)
+        if isinstance(kv_data, dict) and kv_data:
+            merged = {k: kv_data.get(k, defaults[k]) for k in defaults}
+            _SETTINGS_CACHE = merged
+            _LAST_CACHE_TIME = now
+            return _SETTINGS_CACHE
         _SETTINGS_CACHE = defaults
         _LAST_CACHE_TIME = now
         return _SETTINGS_CACHE
@@ -134,10 +159,13 @@ def save_system_settings(new_settings: dict, updated_by: str = "Admin") -> dict:
 
     if is_supabase_configured():
         supabase_upsert("system_settings", payload_rows, on_conflict="key")
-
-    # Supabase writes skip redis_set, so bump the live-refresh version here.
-    from bot_app.storage.versioning import bump_data_version
-    bump_data_version()
+        # Supabase writes skip redis_set, so bump the live-refresh version here.
+        from bot_app.storage.versioning import bump_data_version
+        bump_data_version()
+    else:
+        # KV-only mode: persist the whole settings dict. redis_set bumps the
+        # live-refresh data version itself (no separate bump needed).
+        redis_set(_KV_SETTINGS_KEY, _FALLBACK_SETTINGS)
 
     invalidate_settings_cache()
     return get_system_settings(force_refresh=True)

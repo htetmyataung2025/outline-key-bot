@@ -35,11 +35,24 @@ def registered_app():
 
 @pytest.fixture(autouse=True)
 def disable_external_network(monkeypatch):
-    """Ensure tests never attempt external network calls."""
-    monkeypatch.delenv("SUPABASE_URL", raising=False)
-    monkeypatch.delenv("SUPABASE_KEY", raising=False)
-    monkeypatch.delenv("KV_REST_API_URL", raising=False)
-    monkeypatch.delenv("KV_REST_API_TOKEN", raising=False)
+    """Ensure tests never attempt external network calls.
+
+    Strip every KV / Redis / Supabase env var (including the KV_URL / KV_TOKEN
+    / REDIS_URL aliases that ``bot_app.storage.kv._kv_config`` falls back to),
+    so a populated local ``.env`` — e.g. real Upstash credentials added for
+    manual inspection — can never make the suite read or WRITE production data.
+    """
+    for var in (
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+        "KV_REST_API_URL",
+        "KV_REST_API_TOKEN",
+        "KV_REST_API_READ_ONLY_TOKEN",
+        "KV_URL",
+        "KV_TOKEN",
+        "REDIS_URL",
+    ):
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture()

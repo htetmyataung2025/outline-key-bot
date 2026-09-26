@@ -19,7 +19,7 @@ from bot_app.services.orders import (
     load_redeem_codes,
     save_redeem_codes,
 )
-from bot_app.services.registry import load_persistent_keys, save_persistent_key, delete_persistent_key
+from bot_app.services.registry import clean_key_label, load_persistent_keys, save_persistent_key, delete_persistent_key
 from bot_app.services.slips import get_slip_by_id, get_slips_list, load_audit_logs, record_audit_log, review_slip
 from bot_app.timeutil import myanmar_now
 from bot_app.utils import generate_random_redeem_code
@@ -220,6 +220,10 @@ def list_keys():
     total = len(items)
     start = (page - 1) * page_size
     paged_items = items[start : start + page_size]
+
+    # Attach a clean display label (raw packed name kept intact for recovery).
+    for k in paged_items:
+        k["label"] = clean_key_label(k.get("name", ""))
 
     return jsonify({"total": total, "page": page, "page_size": page_size, "items": paged_items}), 200
 
@@ -468,11 +472,13 @@ def list_customers():
         all_users.add(str(uid))
 
     # Count Outline keys per user from the cached registry (no live server sync).
+    # Users who only own a key (no wallet / no profile yet) are pulled in too.
     keys_by_user = {}
     for k in load_persistent_keys().values():
         cid = str(k.get("chat_id") or "").strip()
         if cid:
             keys_by_user[cid] = keys_by_user.get(cid, 0) + 1
+            all_users.add(cid)
 
     customers = []
     for uid in sorted(all_users):
@@ -507,7 +513,8 @@ def get_customer_detail(chat_id):
 
     # Access keys (from cached registry, filtered to this user)
     keys = [
-        k for k in load_persistent_keys().values()
+        {**k, "label": clean_key_label(k.get("name", ""))}
+        for k in load_persistent_keys().values()
         if str(k.get("chat_id") or "").strip() == uid
     ]
 
@@ -603,6 +610,22 @@ def adjust_customer_balance(chat_id):
 # ---------------------------------------------------------------------------
 # 6. Dynamic System Settings (Supabase-backed)
 # ---------------------------------------------------------------------------
+@admin_bp.route("/servers", methods=["GET"])
+def list_servers():
+    """Configured Outline servers (id + name only) for dashboard filters/forms.
+
+    Mirrors exactly what the bot can use — servers whose API URL is configured
+    in Settings (Supabase) or .env — so UI dropdowns can never offer a server
+    that does not exist.
+    """
+    from bot_app.services.outline import get_configured_servers
+    servers = [
+        {"id": srv.get("id"), "name": srv.get("name") or f"Server {srv.get('id')}"}
+        for srv in get_configured_servers()
+    ]
+    return jsonify({"servers": servers}), 200
+
+
 @admin_bp.route("/settings", methods=["GET"])
 def get_settings_endpoint():
     from bot_app.services.settings import get_system_settings

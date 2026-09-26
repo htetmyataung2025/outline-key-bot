@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from bot_app.timeutil import myanmar_now
-from bot_app.config import OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
 from bot_app.services.orders import load_all_users, load_sales_history
 from bot_app.services.registry import load_persistent_keys
 from bot_app.services.slips import get_slips_list
@@ -174,17 +173,11 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
     current_year = now.year
     current_month = now.month
 
-    # 1. Server telemetries (dynamically loaded from Supabase settings or fallback).
+    # 1. Server telemetries — the single configured-server source of truth
+    #    (Settings/Supabase values, falling back to .env-configured servers).
     #    Probed concurrently and cached for SERVER_TELEMETRY_TTL seconds.
-    from bot_app.services.settings import get_system_settings
-    dyn_settings = get_system_settings()
-    configured_servers = dyn_settings.get("servers", [])
-    if not configured_servers:
-        configured_servers = [
-            {"id": 1, "name": "Server 1 (SG-1)", "api_url": OUTLINE_API_URL_1},
-            {"id": 2, "name": "Server 2 (SG-2)", "api_url": OUTLINE_API_URL_2},
-            {"id": 3, "name": "Server 3 (VIP)", "api_url": OUTLINE_API_URL_3},
-        ]
+    from bot_app.services.outline import get_configured_servers
+    configured_servers = get_configured_servers()
 
     servers = get_servers_telemetry(configured_servers, force_refresh=force_refresh)
 

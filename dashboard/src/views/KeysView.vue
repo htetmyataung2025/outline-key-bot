@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import {
   fetchKeys,
+  fetchServers,
   createKey,
   extendKey,
   deleteKey,
@@ -147,12 +148,37 @@ const createForm = ref({
   assign_to_user_id: '',
 })
 
-const serverOptions = [
+// Server dropdowns are driven by the backend's configured server list
+// (Settings / .env) — never a hardcoded set, so unconfigured servers
+// (e.g. a deleted "Server 3") cannot appear as filter or target options.
+const configuredServers = ref<{ id: number | string; name: string }[]>([])
+
+const serverOptions = computed(() => [
   { label: 'All Servers', value: '' },
-  { label: 'Server 1 (SG-1)', value: '1' },
-  { label: 'Server 2 (SG-2)', value: '2' },
-  { label: 'Server 3 (VIP)', value: '3' },
-]
+  ...configuredServers.value.map((s) => ({ label: s.name, value: String(s.id) })),
+])
+
+const provisionServerOptions = computed(() =>
+  configuredServers.value.map((s) => ({ label: s.name, value: String(s.id) })),
+)
+
+async function loadServers() {
+  try {
+    const res = await fetchServers()
+    configuredServers.value = res.servers || []
+  } catch {
+    configuredServers.value = []
+  }
+  // Keep the current selections valid if the configured set changed.
+  if (!configuredServers.value.some((s) => String(s.id) === String(selectedServer.value))) {
+    selectedServer.value = ''
+  }
+  if (!configuredServers.value.some((s) => String(s.id) === createForm.value.server_id)) {
+    createForm.value.server_id = configuredServers.value[0]
+      ? String(configuredServers.value[0].id)
+      : '1'
+  }
+}
 
 
 async function loadKeys(opts?: { silent?: boolean }) {
@@ -294,6 +320,7 @@ async function handleCreateKey() {
 
 onMounted(() => {
   loadKeys()
+  loadServers()
 })
 
 defineExpose({
@@ -361,7 +388,7 @@ defineExpose({
         <div v-for="k in pagedKeys" :key="`${k.server}_${k.key_id}`" class="key-card">
           <div class="key-main">
             <div class="key-identity">
-              <span class="key-name">{{ k.name }}</span>
+              <span class="key-name">{{ k.label || k.name }}</span>
               <span class="expiry-pill" :class="expiryClass(k.expire_date)">
                 {{ expiryLabel(k.expire_date) }}
               </span>
@@ -456,11 +483,7 @@ defineExpose({
         <NFormItem label="Target Server">
           <NSelect
             v-model:value="createForm.server_id"
-            :options="[
-              { label: 'Server 1 (SG-1)', value: '1' },
-              { label: 'Server 2 (SG-2)', value: '2' },
-              { label: 'Server 3 (VIP)', value: '3' },
-            ]"
+            :options="provisionServerOptions"
           />
         </NFormItem>
 

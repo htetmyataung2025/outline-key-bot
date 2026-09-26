@@ -5,7 +5,28 @@ import pytest
 ADMIN_ID = 111000111
 
 
-def test_admin_overview_telemetry(client, make_telegram_init_data, monkeypatch):
+@pytest.fixture()
+def two_env_servers(monkeypatch):
+    """Pin exactly two .env-configured servers (OUTLINE_API_URL_3 unset).
+
+    Resets the settings + telemetry caches so the defaults are rebuilt from
+    these patched values and the probe results never leak between tests.
+    """
+    import bot_app.config as config
+    from bot_app.services.admin_telemetry import reset_telemetry_cache
+    from bot_app.services.settings import invalidate_settings_cache
+
+    monkeypatch.setattr(config, "OUTLINE_API_URL_1", "https://sg1.example.com/api")
+    monkeypatch.setattr(config, "OUTLINE_API_URL_2", "https://sg2.example.com/api")
+    monkeypatch.setattr(config, "OUTLINE_API_URL_3", "")
+    invalidate_settings_cache(reset_fallback=True)
+    reset_telemetry_cache()
+    yield
+    invalidate_settings_cache(reset_fallback=True)
+    reset_telemetry_cache()
+
+
+def test_admin_overview_telemetry(client, make_telegram_init_data, monkeypatch, two_env_servers):
     # Mock requests.get so no live network calls to Outline servers occur
     class FakeResponse:
         def __init__(self, status_code, json_data):
@@ -36,4 +57,6 @@ def test_admin_overview_telemetry(client, make_telegram_init_data, monkeypatch):
     assert "metrics" in data
     assert "traffic_trend" in data
     assert data["metrics"]["pending_slips"] == 0
-    assert len(data["servers"]) == 3
+    # Only the servers configured via the environment appear as nodes —
+    # an unset OUTLINE_API_URL_* must never surface as a phantom server.
+    assert {s["id"] for s in data["servers"]} == {1, 2}

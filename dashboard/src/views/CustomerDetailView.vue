@@ -196,7 +196,7 @@ defineExpose({ loadData: loadDetail })
                   </thead>
                   <tbody>
                     <tr v-for="k in keys" :key="`${k.server}_${k.key_id}`">
-                      <td class="rec-strong">{{ k.name || '—' }}</td>
+                      <td class="rec-strong">{{ k.label || k.name || '—' }}</td>
                       <td>Server {{ k.server }}</td>
                       <td class="font-mono">{{ k.expire_date || 'N/A' }}</td>
                       <td class="font-mono rec-muted">{{ k.key_id }}</td>
