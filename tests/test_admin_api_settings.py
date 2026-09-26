@@ -102,6 +102,8 @@ def test_default_settings_include_server_when_env_configured(monkeypatch):
     import bot_app.config as config
     from bot_app.services.settings import _get_default_settings
 
+    monkeypatch.setattr(config, "OUTLINE_API_URL_1", "https://sg1.example.com/api")
+    monkeypatch.setattr(config, "OUTLINE_API_URL_2", "https://sg2.example.com/api")
     monkeypatch.setattr(config, "OUTLINE_API_URL_3", "https://vip.example.com/api")
     servers = _get_default_settings()["servers"]
     assert [s["id"] for s in servers] == [1, 2, 3]

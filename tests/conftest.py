@@ -16,6 +16,10 @@ import os
 for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY"):
     os.environ.pop(_var, None)
 os.environ.setdefault("ADMIN_CHAT_IDS", "111000111,222000222")
+# Auth must verify with the SAME token the fixtures sign with; config's dummy
+# default already covers this, but set it explicitly so the env-less CI runner
+# and local .env setups behave identically.
+os.environ.setdefault("TELEGRAM_TOKEN", "0000000000:AAADummyTokenForTestsOnly00000000000")
 os.environ.setdefault("MY_PAYMENT_PHONES", "0999999999,9699999999")
 os.environ.setdefault("REQUIRED_CHANNEL", "@test_channel")
 
