@@ -528,7 +528,7 @@ onMounted(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .cloud-badge {
@@ -539,7 +539,7 @@ onMounted(() => {
 .page-subtitle {
   margin: 4px 0 0 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .header-actions {
@@ -565,7 +565,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-3);
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -578,8 +578,8 @@ onMounted(() => {
 }
 
 .server-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -594,7 +594,7 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 700;
   background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  color: var(--accent);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -612,7 +612,7 @@ onMounted(() => {
 
 .field-label {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-3);
   font-weight: 500;
 }
 
@@ -634,14 +634,14 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #10b981;
+  color: var(--accent);
 }
 
 .res-error {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #ef4444;
+  color: var(--danger);
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -669,7 +669,7 @@ onMounted(() => {
 
 .phone-index {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-3);
   width: 20px;
 }
 
@@ -679,14 +679,14 @@ onMounted(() => {
 
 .empty-hint {
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-4);
   font-style: italic;
 }
 
 /* Settings Card */
 .settings-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   max-width: 640px;
 }
@@ -700,7 +700,7 @@ onMounted(() => {
 .item-title {
   font-size: 13px;
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--text-1);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -709,7 +709,7 @@ onMounted(() => {
 .item-hint {
   font-size: 11px;
   font-weight: 400;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .mt-4 {
@@ -724,8 +724,8 @@ onMounted(() => {
 }
 
 .plan-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -771,12 +771,12 @@ onMounted(() => {
 .switch-status-label {
   font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-4);
   transition: color 0.15s ease;
 }
 
 .switch-status-label.is-manual {
-  color: #10b981;
+  color: var(--accent);
 }
 
 @media (max-width: 768px) {

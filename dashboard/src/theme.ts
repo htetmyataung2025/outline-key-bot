@@ -1,5 +1,7 @@
 import type { GlobalThemeOverrides } from 'naive-ui'
 
+// Naive UI overrides — mirrors the CSS tokens in src/styles/tokens.css.
+// Keep these hex values in sync with the :root variables there.
 export const themeOverrides: GlobalThemeOverrides = {
   common: {
     primaryColor: '#10b981',
@@ -12,7 +14,7 @@ export const themeOverrides: GlobalThemeOverrides = {
     errorColor: '#ef4444',
     bodyColor: '#080c14',
     cardColor: '#0e1526',
-    modalColor: '#0d1322',
+    modalColor: '#0e1526',
     popoverColor: '#0e1526',
     tableColor: '#0e1526',
     textColorBase: '#f8fafc',
@@ -33,7 +35,7 @@ export const themeOverrides: GlobalThemeOverrides = {
     borderRadius: '14px',
   },
   DataTable: {
-    headerColor: '#090e1a',
+    headerColor: '#0a1120',
     headerTextColor: '#94a3b8',
     borderColor: 'rgba(255, 255, 255, 0.07)',
     thFontWeight: '600',

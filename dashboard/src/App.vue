@@ -44,7 +44,7 @@ async function refreshPendingCount() {
 function handleGlobalRefresh() {
   refreshPendingCount()
   if (currentViewRef.value?.loadData) {
-    currentViewRef.value.loadData()
+    currentViewRef.value.loadData(true)
   }
 }
 
@@ -137,20 +137,20 @@ onMounted(() => {
           <!-- Desktop PIN Login Modal -->
           <NModal v-model:show="showLoginModal" :mask-closable="false" :close-on-esc="false">
             <NCard
-              style="width: 90vw; max-width: 420px; background: #0f172a; border: 1px solid #334155; border-radius: 12px;"
+              style="width: 90vw; max-width: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);"
               title="Admin Authentication"
               :bordered="false"
               size="huge"
             >
               <div style="display: flex; flex-direction: column; gap: 16px;">
                 <div style="display: flex; align-items: center; gap: 12px;">
-                  <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); display: flex; align-items: center; justify-content: center; color: #10b981;">
+                  <div style="width: 44px; height: 44px; border-radius: 10px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; color: var(--accent);">
                     <LockClosedOutline style="width: 22px; height: 22px;" />
                   </div>
                   <div>
-                    <span style="font-size: 14px; font-weight: 600; color: #f8fafc;">Control Center Access</span>
+                    <span style="font-size: 14px; font-weight: 600; color: var(--text-1);">Control Center Access</span>
                     <br />
-                    <span style="font-size: 12px; color: #94a3b8;">Enter Desktop Admin Secret PIN</span>
+                    <span style="font-size: 12px; color: var(--text-3);">Enter Desktop Admin Secret PIN</span>
                   </div>
                 </div>
 
@@ -164,16 +164,16 @@ onMounted(() => {
                     @keyup.enter="handleLogin"
                   >
                     <template #prefix>
-                      <KeyOutline style="width: 16px; height: 16px; color: #94a3b8;" />
+                      <KeyOutline style="width: 16px; height: 16px; color: var(--text-3);" />
                     </template>
                   </NInput>
-                  <span style="font-size: 11px; color: #64748b;">
+                  <span style="font-size: 12px; color: var(--text-4);">
                     Enter the secret key configured in .env (<code>ADMIN_SECRET_KEY</code>)
                   </span>
 
                 </div>
 
-                <div v-if="loginError" style="color: #ef4444; font-size: 12px; background: rgba(239, 68, 68, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                <div v-if="loginError" style="color: var(--danger); font-size: 12px; background: rgba(239, 68, 68, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2);">
                   {{ loginError }}
                 </div>
 
@@ -204,9 +204,9 @@ onMounted(() => {
 body {
   margin: 0;
   padding: 0;
-  background-color: #080c14;
-  color: #f8fafc;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-sans);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -217,7 +217,7 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #080c14;
+  background: var(--bg);
 }
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
@@ -233,7 +233,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #080c14;
+  background-color: var(--bg);
   background-image:
     radial-gradient(at 15% 15%, rgba(16, 185, 129, 0.04) 0px, transparent 45%),
     radial-gradient(at 85% 85%, rgba(14, 165, 233, 0.04) 0px, transparent 45%);

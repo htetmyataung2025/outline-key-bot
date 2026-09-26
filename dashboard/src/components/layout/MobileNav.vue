@@ -83,7 +83,7 @@ function navigate(path: string) {
   justify-content: center;
   background: transparent;
   border: none;
-  color: #64748b;
+  color: var(--text-4);
   gap: 3px;
   padding: 6px 8px;
   cursor: pointer;
@@ -92,7 +92,7 @@ function navigate(path: string) {
 }
 
 .mobile-nav-item.active {
-  color: #10b981;
+  color: var(--accent);
 }
 
 .icon-wrap {
@@ -119,7 +119,7 @@ function navigate(path: string) {
 }
 
 .item-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
 }
 </style>

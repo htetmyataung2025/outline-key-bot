@@ -154,12 +154,12 @@ onMounted(() => {
       style="max-width: 440px;"
     >
       <div v-if="selectedCustomer" style="margin-bottom: 16px;">
-        <span style="color: #94a3b8; font-size: 13px;">Target Chat ID: </span>
-        <span class="font-mono" style="color: #f8fafc; font-weight: 600;">
+        <span style="color: var(--text-3); font-size: 13px;">Target Chat ID: </span>
+        <span class="font-mono" style="color: var(--text-1); font-weight: 600;">
           {{ selectedCustomer.chat_id }}
         </span>
         <br />
-        <span style="color: #94a3b8; font-size: 13px;">Current Balance: </span>
+        <span style="color: var(--text-3); font-size: 13px;">Current Balance: </span>
         <span class="font-mono text-emerald" style="font-weight: 600;">
           {{ (selectedCustomer.wallet_balance || 0).toLocaleString() }} Ks
         </span>
@@ -205,18 +205,18 @@ onMounted(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .page-subtitle {
   margin: 4px 0 0 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .filter-card {
   margin-bottom: 20px;
-  background: #0f172a;
+  background: var(--surface-2);
 }
 
 .customers-grid {
@@ -226,8 +226,8 @@ onMounted(() => {
 }
 
 .customer-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
   display: flex;
@@ -251,12 +251,12 @@ onMounted(() => {
 }
 
 .user-label {
-  color: #94a3b8;
+  color: var(--text-3);
   font-size: 13px;
 }
 
 .user-val {
-  color: #f8fafc;
+  color: var(--text-1);
   font-weight: 600;
   font-size: 14px;
 }
@@ -274,11 +274,11 @@ onMounted(() => {
 .wallet-icon {
   width: 16px;
   height: 16px;
-  color: #10b981;
+  color: var(--accent);
 }
 
 .balance-val {
-  color: #10b981;
+  color: var(--accent);
   font-weight: 700;
   font-size: 14px;
 }
@@ -288,7 +288,7 @@ onMounted(() => {
 }
 
 .text-emerald {
-  color: #10b981;
+  color: var(--accent);
 }
 
 .empty-wrap {

@@ -260,7 +260,7 @@ onMounted(() => {
       type="error"
       @positive-click="confirmReject"
     >
-      <p style="color: #cbd5e1; font-size: 13px; margin-bottom: 12px;">
+      <p style="color: var(--text-2); font-size: 13px; margin-bottom: 12px;">
         User will be notified in Telegram that this slip was rejected.
       </p>
       <NInput
@@ -308,13 +308,13 @@ onMounted(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .page-subtitle {
   margin: 4px 0 0 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .filter-tabs {
@@ -336,7 +336,7 @@ onMounted(() => {
 .slip-id {
   font-size: 13px;
   font-weight: 600;
-  color: #cbd5e1;
+  color: var(--text-2);
 }
 
 .slip-preview {
@@ -346,8 +346,8 @@ onMounted(() => {
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   margin-bottom: 12px;
 }
 
@@ -367,7 +367,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  color: #f8fafc;
+  color: var(--text-1);
   font-size: 12px;
   opacity: 0;
   transition: opacity 0.2s ease;
@@ -402,11 +402,11 @@ onMounted(() => {
 }
 
 .info-label {
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .info-val {
-  color: #f8fafc;
+  color: var(--text-1);
   font-weight: 500;
 }
 
@@ -418,7 +418,7 @@ onMounted(() => {
 }
 
 .amount-val {
-  color: #10b981;
+  color: var(--accent);
   font-weight: 700;
   font-size: 14px;
 }
@@ -433,12 +433,12 @@ onMounted(() => {
 .time-icon {
   width: 14px;
   height: 14px;
-  color: #64748b;
+  color: var(--text-4);
 }
 
 .time-val {
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-4);
 }
 
 .slip-actions {
@@ -452,17 +452,17 @@ onMounted(() => {
   flex-direction: column;
   gap: 2px;
   padding: 8px;
-  background: #0f172a;
+  background: var(--surface-2);
   border-radius: 6px;
   font-size: 11px;
 }
 
 .reviewed-text {
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .reason-text {
-  color: #cbd5e1;
+  color: var(--text-2);
   font-style: italic;
 }
 

@@ -187,7 +187,7 @@ onMounted(() => {
       title="Generated Voucher Codes"
       style="max-width: 460px;"
     >
-      <p style="color: #94a3b8; font-size: 13px; margin-bottom: 12px;">
+      <p style="color: var(--text-3); font-size: 13px; margin-bottom: 12px;">
         Successfully generated {{ generatedCodes.length }} redeem codes:
       </p>
       <div class="codes-output-box">
@@ -226,13 +226,13 @@ onMounted(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .page-subtitle {
   margin: 4px 0 0 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .redeems-grid {
@@ -242,7 +242,7 @@ onMounted(() => {
 }
 
 .code-card {
-  border: 1px solid #334155;
+  border: 1px solid var(--border);
 }
 
 .code-header {
@@ -255,7 +255,7 @@ onMounted(() => {
 .code-val {
   font-size: 14px;
   font-weight: 700;
-  color: #10b981;
+  color: var(--accent);
 }
 
 .code-body {
@@ -272,22 +272,22 @@ onMounted(() => {
 }
 
 .val-label {
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .val-amount {
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .val-exp {
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-4);
 }
 
 .codes-output-box {
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
   max-height: 200px;
@@ -298,7 +298,7 @@ onMounted(() => {
 }
 
 .code-line {
-  color: #10b981;
+  color: var(--accent);
   font-size: 13px;
 }
 

@@ -4,14 +4,14 @@ from datetime import datetime, timedelta
 from flask import Blueprint, g, jsonify, request
 
 from bot_app.helpers.auth import require_admin_api
-from bot_app.services.admin_telemetry import get_admin_overview_telemetry
+from bot_app.services.admin_telemetry import get_admin_overview_telemetry, reset_telemetry_cache
 from bot_app.services.billing import load_all_wallets, update_user_balance
 from bot_app.services.orders import (
     load_all_users,
     load_redeem_codes,
     save_redeem_codes,
 )
-from bot_app.services.registry import load_persistent_keys, save_persistent_key
+from bot_app.services.registry import load_persistent_keys, save_persistent_key, delete_persistent_key
 from bot_app.services.slips import get_slip_by_id, get_slips_list, record_audit_log, review_slip
 from bot_app.timeutil import myanmar_now
 from bot_app.utils import generate_random_redeem_code
@@ -31,7 +31,8 @@ def authenticate_admin():
 # ---------------------------------------------------------------------------
 @admin_bp.route("/overview", methods=["GET"])
 def get_overview():
-    telemetry = get_admin_overview_telemetry()
+    force_refresh = request.args.get("refresh") in ("1", "true", "yes")
+    telemetry = get_admin_overview_telemetry(force_refresh=force_refresh)
     return jsonify(telemetry), 200
 
 
@@ -82,6 +83,15 @@ def list_keys():
     search = request.args.get("search", "").strip().lower()
     page = int(request.args.get("page", 1))
     page_size = int(request.args.get("page_size", 50))
+
+    # Pull live keys from the Outline servers into the registry so the list shows
+    # every key on the servers, not only the ones created through the dashboard.
+    if request.args.get("sync", "1") != "0":
+        try:
+            from bot_app.services.outline import refresh_registry_from_servers
+            refresh_registry_from_servers()
+        except Exception:
+            pass
 
     registry = load_persistent_keys()
     items = list(registry.values())
@@ -138,6 +148,40 @@ def create_key_endpoint():
     return jsonify({"success": True, "key": result}), 201
 
 
+def _persist_expiry_on_server(server_num, key_id, new_dt, entry):
+    """Best-effort: rewrite the key's expiry date in its name on the Outline server
+    so a manual extend survives the live re-sync in list_keys. Silent on failure."""
+    import re
+    import requests
+    from bot_app.services.outline import get_server_api_url
+
+    api_url = get_server_api_url(server_num)
+    if not api_url:
+        return
+
+    dotted = new_dt.strftime("%d.%m.%Y")
+    try:
+        resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
+        if resp.status_code != 200:
+            return
+        for k in resp.json().get("accessKeys", []):
+            if str(k.get("id")) == str(key_id):
+                name = k.get("name", "") or entry.get("name", "")
+                new_name = re.sub(r"\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})", dotted, name)
+                if new_name == name and dotted not in name:
+                    new_name = f"{name} {dotted}".strip()
+                requests.put(
+                    f"{api_url}/access-keys/{key_id}/name",
+                    data={"name": new_name},
+                    verify=False,
+                    timeout=6,
+                )
+                entry["name"] = new_name
+                break
+    except Exception:
+        pass
+
+
 @admin_bp.route("/keys/<key_id>/extend", methods=["POST"])
 def extend_key_endpoint(key_id):
     data = request.get_json(silent=True) or {}
@@ -173,7 +217,14 @@ def extend_key_endpoint(key_id):
     except Exception:
         base_date = now
 
-    new_exp_date = (base_date + timedelta(days=add_days)).strftime("%d/%m/%Y")
+    new_dt = base_date + timedelta(days=add_days)
+    new_exp_date = new_dt.strftime("%d/%m/%Y")
+
+    # Write the new expiry onto the Outline server key name so the extend is not
+    # reverted the next time list_keys re-syncs live server data.
+    server_num = str(matched_entry.get("server", "1"))
+    _persist_expiry_on_server(server_num, key_id, new_dt, matched_entry)
+
     matched_entry["expire_date"] = new_exp_date
     registry[matched_key] = matched_entry
 
@@ -199,6 +250,39 @@ def extend_key_endpoint(key_id):
     )
 
     return jsonify({"success": True, "new_expire_date": new_exp_date, "key": matched_entry}), 200
+
+
+@admin_bp.route("/keys/<server_id>/<key_id>", methods=["DELETE"])
+def delete_key_endpoint(server_id, key_id):
+    import requests
+    from bot_app.services.outline import get_server_api_url
+
+    api_url = get_server_api_url(server_id)
+    if not api_url:
+        return jsonify({"error": f"Server {server_id} is not configured"}), 400
+
+    # Delete the key on the Outline server. HTTP 404 means it is already gone,
+    # which we treat as success so the stale registry entry can be cleaned up.
+    try:
+        resp = requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+    except Exception as e:
+        return jsonify({"error": f"Could not reach server {server_id}: {e}"}), 502
+
+    if resp.status_code not in (200, 204, 404):
+        return jsonify({"error": f"Server refused deletion (HTTP {resp.status_code})"}), 502
+
+    delete_persistent_key(server_id, key_id)
+
+    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    record_audit_log(
+        admin_id=admin_id,
+        action="KEY_DELETE",
+        target_type="key",
+        target_id=str(key_id),
+        details={"server": str(server_id), "server_status": resp.status_code},
+    )
+
+    return jsonify({"success": True, "server_id": str(server_id), "key_id": str(key_id)}), 200
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +410,9 @@ def update_settings_endpoint():
     admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
 
     updated = save_system_settings(data, updated_by=admin_id)
+    # Server list / names may have changed — drop cached telemetry so the next
+    # overview reflects the new configuration immediately.
+    reset_telemetry_cache()
     record_audit_log(
         admin_id=admin_id,
         action="SETTINGS_UPDATE",

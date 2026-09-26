@@ -25,7 +25,7 @@ const router = useRouter()
 const { isCollapsed, toggle: toggleSidebar } = useSidebar()
 
 const navItems = computed(() => [
-  { path: '/overview', label: 'Overview', icon: SpeedometerOutline, hint: 'Cluster telemetry & KPIs' },
+  { path: '/overview', label: 'Overview', icon: SpeedometerOutline, hint: 'Dashboard & KPIs' },
   { path: '/slips', label: 'Slips Queue', icon: ReceiptOutline, badge: props.pendingSlipsCount, hint: 'Verify payment receipts' },
   { path: '/keys', label: 'Access Keys', icon: KeyOutline, hint: 'Manage & extend Outline keys' },
   { path: '/redeems', label: 'Redeem Codes', icon: GiftOutline, hint: 'Generate voucher codes' },
@@ -101,7 +101,7 @@ function navigate(path: string) {
           <CloudDoneOutline class="sync-icon" />
           <span class="footer-title">Sync Online</span>
         </div>
-        <span class="footer-desc">SG-1, SG-2 & VIP 3-Nodes Active</span>
+        <span class="footer-desc">All nodes synced</span>
       </div>
 
       <!-- Quick Collapse Toggle at bottom -->
@@ -144,10 +144,10 @@ function navigate(path: string) {
 }
 
 .menu-section-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.8px;
-  color: #475569;
+  color: var(--text-4);
   padding: 4px 10px 8px 10px;
 }
 
@@ -159,7 +159,7 @@ function navigate(path: string) {
   border-radius: 10px;
   background: transparent;
   border: 1px solid transparent;
-  color: #94a3b8;
+  color: var(--text-3);
   cursor: pointer;
   transition: all 0.18s ease;
   text-align: left;
@@ -175,13 +175,13 @@ function navigate(path: string) {
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.04);
-  color: #f8fafc;
+  color: var(--text-1);
   border-color: rgba(255, 255, 255, 0.06);
 }
 
 .nav-item.active {
   background: linear-gradient(90deg, rgba(16, 185, 129, 0.16) 0%, rgba(16, 185, 129, 0.04) 100%);
-  color: #10b981;
+  color: var(--accent);
   border: 1px solid rgba(16, 185, 129, 0.25);
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.08);
 }
@@ -220,8 +220,8 @@ function navigate(path: string) {
 }
 
 .nav-hint {
-  font-size: 10.5px;
-  color: #64748b;
+  font-size: 11.5px;
+  color: var(--text-4);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -229,7 +229,7 @@ function navigate(path: string) {
 }
 
 .nav-item.active .nav-hint {
-  color: #34d399;
+  color: var(--accent-hover);
   opacity: 0.8;
 }
 
@@ -244,9 +244,9 @@ function navigate(path: string) {
   right: 14px;
   width: 8px;
   height: 8px;
-  background-color: #f59e0b;
+  background-color: var(--warn);
   border-radius: 50%;
-  border: 2px solid #0f172a;
+  border: 2px solid var(--surface-2);
 }
 
 .sidebar-footer {
@@ -276,18 +276,18 @@ function navigate(path: string) {
 .sync-icon {
   width: 14px;
   height: 14px;
-  color: #10b981;
+  color: var(--accent);
 }
 
 .footer-title {
   font-size: 11px;
   font-weight: 700;
-  color: #10b981;
+  color: var(--accent);
 }
 
 .footer-desc {
-  font-size: 10px;
-  color: #64748b;
+  font-size: 11px;
+  color: var(--text-4);
 }
 
 .collapse-toggle-btn {
@@ -299,7 +299,7 @@ function navigate(path: string) {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
-  color: #64748b;
+  color: var(--text-4);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -309,7 +309,7 @@ function navigate(path: string) {
 
 .collapse-toggle-btn:hover {
   background: rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
+  color: var(--text-2);
   border-color: rgba(255, 255, 255, 0.12);
 }
 
@@ -327,12 +327,12 @@ function navigate(path: string) {
 .tooltip-title {
   font-size: 12px;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .tooltip-badge {
-  font-size: 10px;
-  color: #f59e0b;
+  font-size: 11px;
+  color: var(--warn);
   font-weight: 600;
 }
 </style>

@@ -1,6 +1,7 @@
 """Outline VPN server client: keys, usage, search, renew/create."""
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 import requests
@@ -14,6 +15,53 @@ from bot_app.services.registry import (load_persistent_keys, save_persistent_key
                                  sync_keys_to_persistent_registry,
                                  sync_legacy_redis_data_to_registry)
 from bot_app.utils import bytes_to_gb, clean_ss_url, extract_chat_id_from_key_name
+
+
+def get_configured_servers():
+    """Return the configured server list from dynamic settings, or the env fallback."""
+    from bot_app.services.settings import get_system_settings
+    configured = get_system_settings().get("servers") or []
+    if not configured:
+        configured = [
+            {"id": 1, "name": "Server 1 (SG-1)", "api_url": OUTLINE_API_URL_1},
+            {"id": 2, "name": "Server 2 (SG-2)", "api_url": OUTLINE_API_URL_2},
+            {"id": 3, "name": "Server 3 (VIP)", "api_url": OUTLINE_API_URL_3},
+        ]
+    return configured
+
+
+def get_server_api_url(server_id):
+    """Resolve the Outline API URL for a given server id, or None if not found."""
+    for srv in get_configured_servers():
+        if str(srv.get("id")) == str(server_id):
+            return srv.get("api_url", "") or None
+    return None
+
+
+def refresh_registry_from_servers():
+    """Fetch live access-keys from every configured server (in parallel) and sync
+    them into the persistent registry. Best-effort: unreachable servers are skipped."""
+    configured = get_configured_servers()
+
+    def fetch(srv):
+        server_num = str(srv.get("id"))
+        api_url = srv.get("api_url", "")
+        if not api_url:
+            return server_num, None
+        try:
+            resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
+            if resp.status_code == 200:
+                return server_num, resp.json().get("accessKeys", [])
+        except Exception:
+            pass
+        return server_num, None
+
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(configured)))) as executor:
+        results = list(executor.map(fetch, configured))
+
+    for server_num, keys in results:
+        if keys:
+            sync_keys_to_persistent_registry(server_num, keys)
 
 
 def get_servers_total_usage():

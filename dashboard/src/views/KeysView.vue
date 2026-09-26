@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   fetchKeys,
   createKey,
   extendKey,
+  deleteKey,
   triggerHaptic,
   triggerHapticNotification,
 } from '@/api'
@@ -18,6 +19,9 @@ import {
   NFormItem,
   NInputNumber,
   NSpin,
+  NPopconfirm,
+  NPagination,
+  NEmpty,
   useMessage,
 } from 'naive-ui'
 import {
@@ -25,16 +29,114 @@ import {
   SearchOutline,
   CopyOutline,
   CalendarOutline,
+  TrashOutline,
 } from '@vicons/ionicons5'
 
 const message = useMessage()
 
 const loading = ref(false)
-const keysList = ref<any[]>([])
+const allKeys = ref<any[]>([])
 const totalKeys = ref(0)
 
 const searchQuery = ref('')
 const selectedServer = ref<string>('')
+const statusFilter = ref<'all' | 'expiring' | 'expired' | 'active'>('all')
+const page = ref(1)
+const pageSize = ref(20)
+
+const statusOptions = [
+  { label: 'All Statuses', value: 'all' },
+  { label: 'Expiring Soon (≤7 days)', value: 'expiring' },
+  { label: 'Expired', value: 'expired' },
+  { label: 'Active', value: 'active' },
+]
+
+// Expiry dates arrive in mixed formats (DD.MM.YY, DD.MM.YYYY, DD/MM/YYYY).
+function parseExpiry(value?: string): Date | null {
+  if (!value) return null
+  const m = String(value).match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/)
+  if (!m) return null
+  let year = parseInt(m[3], 10)
+  if (year < 100) year += 2000
+  const dt = new Date(year, parseInt(m[2], 10) - 1, parseInt(m[1], 10))
+  return isNaN(dt.getTime()) ? null : dt
+}
+
+function daysLeft(value?: string): number | null {
+  const dt = parseExpiry(value)
+  if (!dt) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((dt.getTime() - today.getTime()) / 86400000)
+}
+
+function expiryLabel(value?: string): string {
+  const d = daysLeft(value)
+  if (d === null) return 'No expiry'
+  if (d < 0) return `Expired ${Math.abs(d)}d ago`
+  if (d === 0) return 'Expires today'
+  if (d === 1) return '1 day left'
+  return `${d} days left`
+}
+
+function expiryClass(value?: string): string {
+  const d = daysLeft(value)
+  if (d === null) return 'muted'
+  if (d < 0) return 'expired'
+  if (d <= 7) return 'expiring'
+  return 'active'
+}
+
+const expiringSoonCount = computed(
+  () => allKeys.value.filter((k) => { const d = daysLeft(k.expire_date); return d !== null && d >= 0 && d <= 7 }).length,
+)
+
+const filteredKeys = computed(() => {
+  let list = allKeys.value
+  if (selectedServer.value) {
+    list = list.filter((k) => String(k.server) === String(selectedServer.value))
+  }
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(
+      (k) =>
+        String(k.name || '').toLowerCase().includes(q) ||
+        String(k.chat_id || '').toLowerCase().includes(q) ||
+        String(k.key_id || '').toLowerCase().includes(q),
+    )
+  }
+  if (statusFilter.value !== 'all') {
+    list = list.filter((k) => {
+      const d = daysLeft(k.expire_date)
+      if (statusFilter.value === 'expired') return d !== null && d < 0
+      if (statusFilter.value === 'expiring') return d !== null && d >= 0 && d <= 7
+      return d === null || d > 7
+    })
+  }
+  return [...list].sort((a, b) => {
+    const da = daysLeft(a.expire_date)
+    const db = daysLeft(b.expire_date)
+    if (da === null && db === null) return 0
+    if (da === null) return 1
+    if (db === null) return -1
+    return da - db
+  })
+})
+
+const filteredCount = computed(() => filteredKeys.value.length)
+
+const pagedKeys = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filteredKeys.value.slice(start, start + pageSize.value)
+})
+
+const rangeStart = computed(() => (filteredCount.value === 0 ? 0 : (page.value - 1) * pageSize.value + 1))
+const rangeEnd = computed(() => Math.min(page.value * pageSize.value, filteredCount.value))
+
+// Any filter or page-size change returns to the first page.
+watch([searchQuery, selectedServer, statusFilter, pageSize], () => {
+  page.value = 1
+})
 
 // Create modal
 const showCreateModal = ref(false)
@@ -58,12 +160,11 @@ const serverOptions = [
 async function loadKeys() {
   loading.value = true
   try {
-    const res = await fetchKeys({
-      server_id: selectedServer.value || undefined,
-      search: searchQuery.value || undefined,
-    })
-    keysList.value = res.items || []
-    totalKeys.value = res.total || 0
+    // Fetch the full set once; search, server, status filtering and pagination
+    // are all handled client-side for instant response (no per-keystroke round trip).
+    const res = await fetchKeys({ page_size: 1000 })
+    allKeys.value = res.items || []
+    totalKeys.value = res.total || allKeys.value.length
   } catch (err: any) {
     message.error(err?.response?.data?.error || 'Failed to load access keys')
   } finally {
@@ -90,6 +191,21 @@ function copyKeyUrl(url: string) {
   triggerHaptic('light')
   navigator.clipboard.writeText(url)
   message.info('Key access URL copied to clipboard!')
+}
+
+async function handleDelete(row: any) {
+  triggerHaptic('medium')
+  try {
+    const res = await deleteKey(row.server, row.key_id)
+    if (res.success) {
+      triggerHapticNotification('success')
+      message.success(`Deleted key ${row.name || row.key_id}`)
+      await loadKeys()
+    }
+  } catch (err: any) {
+    triggerHapticNotification('error')
+    message.error(err?.response?.data?.error || 'Failed to delete key')
+  }
 }
 
 async function handleCreateKey() {
@@ -124,6 +240,10 @@ async function handleCreateKey() {
 onMounted(() => {
   loadKeys()
 })
+
+defineExpose({
+  loadData: loadKeys,
+})
 </script>
 
 <template>
@@ -149,7 +269,6 @@ onMounted(() => {
           placeholder="Search by key name, chat ID, key ID..."
           clearable
           class="search-input"
-          @update:value="loadKeys"
         >
           <template #prefix>
             <SearchOutline />
@@ -157,19 +276,34 @@ onMounted(() => {
         </NInput>
 
         <NSelect
+          v-model:value="statusFilter"
+          :options="statusOptions"
+          class="status-select"
+        />
+
+        <NSelect
           v-model:value="selectedServer"
           :options="serverOptions"
           placeholder="Filter by Server"
           class="server-select"
-          @update:value="loadKeys"
         />
+      </div>
+
+      <div class="filter-summary">
+        <span>{{ totalKeys }} total keys</span>
+        <span v-if="expiringSoonCount > 0" class="summary-warn">
+          {{ expiringSoonCount }} expiring within 7 days
+        </span>
+        <span v-if="filteredCount !== totalKeys" class="summary-muted">
+          {{ filteredCount }} match current filters
+        </span>
       </div>
     </NCard>
 
     <!-- Keys List / Table -->
     <NSpin :show="loading">
-      <div class="keys-list-wrap">
-        <div v-for="k in keysList" :key="k.key_id" class="key-card">
+      <div v-if="pagedKeys.length > 0" class="keys-list-wrap">
+        <div v-for="k in pagedKeys" :key="`${k.server}_${k.key_id}`" class="key-card">
           <div class="key-main">
             <div class="key-identity">
               <span class="key-name">{{ k.name }}</span>
@@ -186,6 +320,9 @@ onMounted(() => {
               <CalendarOutline class="cal-icon" />
               <span class="expiry-label">Expires:</span>
               <span class="expiry-val font-mono">{{ k.expire_date || 'N/A' }}</span>
+              <span class="expiry-pill" :class="expiryClass(k.expire_date)">
+                {{ expiryLabel(k.expire_date) }}
+              </span>
             </div>
           </div>
 
@@ -202,16 +339,46 @@ onMounted(() => {
               Copy Link
             </NButton>
 
-            <NButton
-              size="small"
-              type="primary"
-              secondary
-              @click="handleExtend(k)"
-            >
-              +30 Days Extend
-            </NButton>
+            <NPopconfirm @positive-click="handleExtend(k)">
+              <template #trigger>
+                <NButton size="small" type="primary" secondary>
+                  +30 Days Extend
+                </NButton>
+              </template>
+              Extend "{{ k.name || k.key_id }}" by 30 days?
+            </NPopconfirm>
+
+            <NPopconfirm @positive-click="handleDelete(k)">
+              <template #trigger>
+                <NButton size="small" type="error" secondary>
+                  <template #icon>
+                    <TrashOutline />
+                  </template>
+                  Delete
+                </NButton>
+              </template>
+              Permanently delete "{{ k.name || k.key_id }}" from Server {{ k.server }}? This cannot be undone.
+            </NPopconfirm>
           </div>
         </div>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="filteredCount > 0" class="pagination-bar">
+        <span class="result-count">
+          Showing {{ rangeStart }}–{{ rangeEnd }} of {{ filteredCount }}
+        </span>
+        <NPagination
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :item-count="filteredCount"
+          :page-sizes="[10, 20, 50]"
+          show-size-picker
+        />
+      </div>
+
+      <div v-else class="empty-wrap">
+        <NEmpty description="No keys match the current filters" />
       </div>
     </NSpin>
 
@@ -279,18 +446,18 @@ onMounted(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .page-subtitle {
   margin: 4px 0 0 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .filter-card {
   margin-bottom: 20px;
-  background: #0f172a;
+  background: var(--surface-2);
 }
 
 .filters-row {
@@ -304,9 +471,32 @@ onMounted(() => {
   min-width: 220px;
 }
 
+.status-select {
+  flex: 1;
+  min-width: 170px;
+}
+
 .server-select {
   flex: 1;
   min-width: 180px;
+}
+
+.filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.summary-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.summary-muted {
+  color: var(--text-4);
 }
 
 .keys-list-wrap {
@@ -316,8 +506,8 @@ onMounted(() => {
 }
 
 .key-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
   display: flex;
@@ -343,7 +533,7 @@ onMounted(() => {
 .key-name {
   font-size: 15px;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .key-tags {
@@ -358,18 +548,70 @@ onMounted(() => {
   font-size: 12px;
 }
 
+.expiry-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+.expiry-pill.expired {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.expiry-pill.expiring {
+  color: var(--warn);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.expiry-pill.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
+}
+
+.expiry-pill.muted {
+  color: var(--text-4);
+  background: var(--fill-subtle);
+  border: 1px solid var(--border);
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.result-count {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.empty-wrap {
+  padding: 48px 0;
+  display: flex;
+  justify-content: center;
+}
+
 .cal-icon {
   width: 14px;
   height: 14px;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .expiry-label {
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .expiry-val {
-  color: #10b981;
+  color: var(--accent);
   font-weight: 600;
 }
 

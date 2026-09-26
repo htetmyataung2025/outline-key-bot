@@ -1,6 +1,9 @@
 """Admin Telemetry and KPI Metrics service."""
 
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import requests
 
 from bot_app.timeutil import myanmar_now
@@ -9,6 +12,17 @@ from bot_app.services.orders import load_all_users, load_sales_history
 from bot_app.services.registry import load_persistent_keys
 from bot_app.services.slips import get_slips_list
 from bot_app.utils import bytes_to_gb
+
+
+# Live server probing is the slow part of the overview payload (each server does
+# blocking HTTP calls). Cache the probed result and serve it stale-while-revalidate
+# so the dashboard responds instantly after warm-up and a slow/offline VPN server
+# can never make the whole overview time out. The cheap local KPIs stay fresh.
+SERVER_TELEMETRY_TTL = 30  # seconds until a cached probe is considered stale
+_server_cache = {"key": None, "data": None, "ts": 0.0}
+_server_cache_lock = threading.Lock()
+_refresh_lock = threading.Lock()
+_refreshing = {"active": False}
 
 
 def get_server_metrics(server_id: int, name: str, api_url: str) -> dict:
@@ -26,7 +40,7 @@ def get_server_metrics(server_id: int, name: str, api_url: str) -> dict:
 
     start_time = time.time()
     try:
-        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
+        keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=3)
         latency_ms = int((time.time() - start_time) * 1000)
 
         if keys_resp.status_code != 200:
@@ -44,7 +58,7 @@ def get_server_metrics(server_id: int, name: str, api_url: str) -> dict:
         total_keys = len(keys_data)
 
         # Get data transfer metrics
-        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=4)
+        metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=3)
         total_bytes = 0
         if metrics_resp.status_code == 200:
             bytes_dict = metrics_resp.json().get("bytesTransferredByUserId", {})
@@ -73,14 +87,95 @@ def get_server_metrics(server_id: int, name: str, api_url: str) -> dict:
         }
 
 
-def get_admin_overview_telemetry() -> dict:
+def _probe_all_servers(configured_servers: list) -> list:
+    """Probe every configured server concurrently, preserving input order."""
+    if not configured_servers:
+        return []
+
+    with ThreadPoolExecutor(max_workers=min(8, len(configured_servers))) as executor:
+        futures = [
+            executor.submit(
+                get_server_metrics,
+                srv.get("id", idx),
+                srv.get("name", f"Server {idx}"),
+                srv.get("api_url", ""),
+            )
+            for idx, srv in enumerate(configured_servers, 1)
+        ]
+        # Iterating the futures list keeps results in the original server order.
+        return [f.result() for f in futures]
+
+
+def _store_servers(cache_key, servers) -> None:
+    with _server_cache_lock:
+        _server_cache["key"] = cache_key
+        _server_cache["data"] = servers
+        _server_cache["ts"] = time.time()
+
+
+def _refresh_in_background(configured_servers, cache_key) -> None:
+    """Probe servers in a daemon thread (single-flight) and update the cache."""
+    with _refresh_lock:
+        if _refreshing["active"]:
+            return
+        _refreshing["active"] = True
+
+    def worker():
+        try:
+            _store_servers(cache_key, _probe_all_servers(configured_servers))
+        except Exception:
+            pass
+        finally:
+            with _refresh_lock:
+                _refreshing["active"] = False
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def get_servers_telemetry(configured_servers: list, force_refresh: bool = False) -> list:
+    """Return server telemetry using a stale-while-revalidate cache.
+
+    - fresh cache  -> return immediately
+    - stale cache  -> return stale immediately, refresh in the background
+    - cold / forced -> probe synchronously (the only blocking path)
+    """
+    cache_key = tuple((s.get("id"), s.get("api_url", "")) for s in configured_servers)
+
+    with _server_cache_lock:
+        cached = _server_cache["data"] if _server_cache["key"] == cache_key else None
+        age = time.time() - _server_cache["ts"]
+
+    if force_refresh or cached is None:
+        servers = _probe_all_servers(configured_servers)
+        _store_servers(cache_key, servers)
+        return servers
+
+    if age >= SERVER_TELEMETRY_TTL:
+        # Serve the stale copy now; refresh for the next caller in the background.
+        _refresh_in_background(configured_servers, cache_key)
+
+    return cached
+
+
+def reset_telemetry_cache() -> None:
+    """Clear the cached server telemetry (used by tests / after settings changes)."""
+    with _server_cache_lock:
+        _server_cache["key"] = None
+        _server_cache["data"] = None
+        _server_cache["ts"] = 0.0
+    with _refresh_lock:
+        _refreshing["active"] = False
+
+
+def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
     """Aggregate live telemetry, KPIs, and revenue metrics."""
     now = myanmar_now()
     today_str = now.strftime("%Y-%m-%d")
     current_year = now.year
     current_month = now.month
 
-    # 1. Server telemetries (dynamically loaded from Supabase settings or fallback)
+    # 1. Server telemetries (dynamically loaded from Supabase settings or fallback).
+    #    Probed concurrently and cached for SERVER_TELEMETRY_TTL seconds.
     from bot_app.services.settings import get_system_settings
     dyn_settings = get_system_settings()
     configured_servers = dyn_settings.get("servers", [])
@@ -91,10 +186,7 @@ def get_admin_overview_telemetry() -> dict:
             {"id": 3, "name": "Server 3 (VIP)", "api_url": OUTLINE_API_URL_3},
         ]
 
-    servers = [
-        get_server_metrics(srv.get("id", idx), srv.get("name", f"Server {idx}"), srv.get("api_url", ""))
-        for idx, srv in enumerate(configured_servers, 1)
-    ]
+    servers = get_servers_telemetry(configured_servers, force_refresh=force_refresh)
 
     # 2. Sales and revenue calculation
     sales_history = load_sales_history()

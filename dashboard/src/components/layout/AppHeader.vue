@@ -81,7 +81,7 @@ onUnmounted(() => {
             <span class="app-title">Control Center</span>
             <span class="version-tag desktop-only">v2.1</span>
           </div>
-          <span class="app-subtitle desktop-only">H & E Premium VPN Infrastructure</span>
+          <span class="app-subtitle desktop-only">H &amp; E Premium VPN</span>
         </div>
       </div>
     </div>
@@ -90,7 +90,7 @@ onUnmounted(() => {
       <!-- Live Indicator -->
       <div class="status-pill">
         <span class="pulse-dot"></span>
-        <span class="status-label desktop-only">CLUSTER LIVE</span>
+        <span class="status-label desktop-only">LIVE</span>
         <span class="status-label mobile-only">LIVE</span>
       </div>
 
@@ -106,7 +106,7 @@ onUnmounted(() => {
         <template #icon>
           <ShieldCheckmarkOutline />
         </template>
-        NOC Admin
+        Admin
       </NTag>
 
       <!-- Refresh Button -->
@@ -172,7 +172,7 @@ onUnmounted(() => {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-  color: #94a3b8;
+  color: var(--text-3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -182,7 +182,7 @@ onUnmounted(() => {
 
 .sidebar-toggle-btn:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
+  color: var(--text-1);
   border-color: rgba(255, 255, 255, 0.15);
 }
 
@@ -212,7 +212,7 @@ onUnmounted(() => {
 .brand-key-icon {
   width: 17px;
   height: 17px;
-  color: #10b981;
+  color: var(--accent);
 }
 
 .brand-text {
@@ -229,15 +229,15 @@ onUnmounted(() => {
 .app-title {
   font-size: 14.5px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
   letter-spacing: -0.2px;
   white-space: nowrap;
 }
 
 .version-tag {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
-  color: #10b981;
+  color: var(--accent);
   background: rgba(16, 185, 129, 0.12);
   border: 1px solid rgba(16, 185, 129, 0.25);
   padding: 1px 4px;
@@ -245,8 +245,8 @@ onUnmounted(() => {
 }
 
 .app-subtitle {
-  font-size: 10.5px;
-  color: #64748b;
+  font-size: 11.5px;
+  color: var(--text-4);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -270,9 +270,9 @@ onUnmounted(() => {
 .pulse-dot {
   width: 6px;
   height: 6px;
-  background-color: #10b981;
+  background-color: var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 6px #10b981;
+  box-shadow: 0 0 6px var(--accent);
   animation: pulse 2s infinite;
 }
 
@@ -283,9 +283,9 @@ onUnmounted(() => {
 }
 
 .status-label {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
-  color: #10b981;
+  color: var(--accent);
   letter-spacing: 0.4px;
 }
 
@@ -298,7 +298,7 @@ onUnmounted(() => {
   padding: 4px 8px;
   border-radius: 7px;
   font-size: 11.5px;
-  color: #cbd5e1;
+  color: var(--text-2);
   font-family: 'JetBrains Mono', monospace;
 }
 
@@ -311,12 +311,12 @@ onUnmounted(() => {
 .clock-icon {
   width: 12px;
   height: 12px;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .tz-label {
-  font-size: 9.5px;
-  color: #64748b;
+  font-size: 11px;
+  color: var(--text-4);
   font-weight: 600;
 }
 
@@ -326,7 +326,7 @@ onUnmounted(() => {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-  color: #94a3b8;
+  color: var(--text-3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -336,13 +336,13 @@ onUnmounted(() => {
 
 .action-icon-btn:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
+  color: var(--text-1);
   border-color: rgba(255, 255, 255, 0.15);
 }
 
 .action-icon-btn.danger:hover {
   background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  color: var(--danger-soft);
   border-color: rgba(239, 68, 68, 0.3);
 }
 

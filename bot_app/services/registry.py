@@ -90,6 +90,31 @@ def sync_keys_to_persistent_registry(server_num, keys_data):
         except:
             pass
 
+def delete_persistent_key(server_num, key_id):
+    """Remove a key from the persistent registry. Returns True if an entry was removed."""
+    registry = load_persistent_keys()
+    uid = f"{server_num}_{key_id}"
+    removed = registry.pop(uid, None)
+
+    if removed is None:
+        # Fallback: match by key_id + server across differently-keyed entries.
+        for k in list(registry.keys()):
+            v = registry[k]
+            if str(v.get("key_id")) == str(key_id) and str(v.get("server")) == str(server_num):
+                removed = registry.pop(k)
+                break
+
+    if removed is not None:
+        redis_set("persistent_keys_registry", registry)
+        try:
+            with open(PERSISTENT_KEYS_FILE, 'w') as f:
+                json.dump(registry, f)
+        except:
+            pass
+
+    return removed is not None
+
+
 def sync_legacy_redis_data_to_registry():
     registry = load_persistent_keys()
     changed = False

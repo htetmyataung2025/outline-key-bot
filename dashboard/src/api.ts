@@ -66,7 +66,12 @@ api.interceptors.request.use((config) => {
 export default api
 
 // API functions
-export const fetchOverview = () => api.get('/overview').then((r) => r.data)
+// Overview probes live VPN servers on a cold cache, so give it a longer ceiling
+// than the default 10s to avoid a spurious timeout on the first load.
+export const fetchOverview = (force = false) =>
+  api
+    .get('/overview', { params: force ? { refresh: 1 } : {}, timeout: 20000 })
+    .then((r) => r.data)
 export const fetchSlips = (status = 'PENDING') => api.get(`/slips?status=${status}`).then((r) => r.data)
 export const reviewSlip = (slipId: string, action: 'APPROVE' | 'REJECT', reason = '') =>
   api.post(`/slips/${slipId}/review`, { action, reason }).then((r) => r.data)
@@ -79,6 +84,9 @@ export const createKey = (payload: { server_id: string; name: string; data_limit
 
 export const extendKey = (keyId: string, addDays: number) =>
   api.post(`/keys/${keyId}/extend`, { add_days: addDays }).then((r) => r.data)
+
+export const deleteKey = (serverId: string | number, keyId: string | number) =>
+  api.delete(`/keys/${serverId}/${keyId}`).then((r) => r.data)
 
 export const fetchRedeems = () => api.get('/redeems').then((r) => r.data)
 export const createRedeemBatch = (payload: { amount_ks: number; mode: 'single' | 'shared'; valid_days: number; count: number }) =>

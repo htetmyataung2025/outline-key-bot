@@ -55,13 +55,31 @@ const avgPingLatency = computed(() => {
   return Math.round(sum / active.length)
 })
 
-async function loadData() {
+// Compact 1-2 letter badge derived from a server's name (no hardcoded flag).
+function serverInitials(name?: string): string {
+  if (!name) return 'SV'
+  const words = name.trim().split(/[\s\-_]+/).filter(Boolean)
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase()
+  }
+  return name.trim().slice(0, 2).toUpperCase()
+}
+
+async function loadData(force = false, isRetry = false) {
   loading.value = true
   try {
-    overviewData.value = await fetchOverview()
+    overviewData.value = await fetchOverview(force)
     const now = new Date()
     lastRefreshedAt.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch (err: any) {
+    // A cold cache triggers a live server probe that can occasionally be slow.
+    // Retry once quietly (the background refresh usually warms the cache), and
+    // never wipe already-loaded data just because a refresh failed.
+    if (!isRetry && !overviewData.value) {
+      loading.value = false
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+      return loadData(false, true)
+    }
     message.error(err?.response?.data?.error || 'Failed to load telemetry data')
   } finally {
     loading.value = false
@@ -70,7 +88,7 @@ async function loadData() {
 
 function handleManualRefresh() {
   triggerHaptic('light')
-  loadData()
+  loadData(true)
 }
 
 function goToSlips() {
@@ -103,9 +121,9 @@ defineExpose({
       <div class="header-titles">
         <div class="breadcrumb-tag desktop-only">
           <PulseOutline class="tag-icon" />
-          <span>NETWORK OPERATIONS CENTER</span>
+          <span>OVERVIEW</span>
         </div>
-        <h1 class="view-title">Cluster Overview</h1>
+        <h1 class="view-title">Dashboard</h1>
       </div>
 
       <div class="header-btns">
@@ -198,17 +216,17 @@ defineExpose({
           </div>
         </div>
 
-        <!-- ROW 2: Split Layout (Left: Server Cluster Nodes, Right: Quick Panel) -->
+        <!-- ROW 2: Split Layout (Left: Servers, Right: Quick Panel) -->
         <div class="main-split-layout">
-          <!-- Left: Server Cluster Nodes -->
+          <!-- Left: Servers -->
           <div class="cluster-section">
             <div class="section-title-bar">
               <div class="title-left">
                 <ServerOutline class="sec-icon" />
-                <h2 class="sec-title">Server Cluster Nodes</h2>
+                <h2 class="sec-title">Servers</h2>
                 <span class="sec-count">{{ activeServersCount }}/{{ totalServersCount }} Online</span>
               </div>
-              <span class="sec-hint desktop-only">Shadowsocks Management API</span>
+              <span class="sec-hint desktop-only">Outline VPN servers</span>
             </div>
 
             <!-- Server Node Cards List -->
@@ -222,7 +240,7 @@ defineExpose({
                 <!-- Node Header Row -->
                 <div class="node-main">
                   <div class="node-identity">
-                    <div class="flag-badge">🇸🇬 SG</div>
+                    <div class="flag-badge">{{ serverInitials(srv.name) }}</div>
                     <div>
                       <div class="node-name-text">
                         {{ srv.name }}
@@ -296,7 +314,7 @@ defineExpose({
           <div class="side-panel">
             <!-- Cluster Status Card -->
             <div class="panel-card">
-              <h3 class="panel-heading">Cluster Telemetry</h3>
+              <h3 class="panel-heading">Network Summary</h3>
 
               <div class="telemetry-items">
                 <div class="telemetry-row">
@@ -416,10 +434,10 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.6px;
-  color: #10b981;
+  color: var(--accent);
   margin-bottom: 2px;
 }
 
@@ -432,7 +450,7 @@ defineExpose({
   margin: 0;
   font-size: 20px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
   letter-spacing: -0.3px;
   line-height: 1.2;
 }
@@ -457,7 +475,7 @@ defineExpose({
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 7px;
-  color: #cbd5e1;
+  color: var(--text-2);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -466,7 +484,7 @@ defineExpose({
 
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .btn-primary {
@@ -474,10 +492,10 @@ defineExpose({
   align-items: center;
   gap: 5px;
   padding: 6px 12px;
-  background: #10b981;
-  border: 1px solid #10b981;
+  background: var(--accent);
+  border: 1px solid var(--accent);
   border-radius: 7px;
-  color: #041f14;
+  color: var(--accent-contrast);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -485,8 +503,8 @@ defineExpose({
 }
 
 .btn-primary:hover {
-  background: #34d399;
-  border-color: #34d399;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .btn-icon {
@@ -524,27 +542,27 @@ defineExpose({
 }
 
 .kpi-card {
-  background: #0d131f;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
-  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   cursor: pointer;
   transition: all 0.15s ease;
-  min-height: 82px;
+  min-height: 94px;
 }
 
 @media (max-width: 767px) {
   .kpi-card {
-    padding: 10px 11px;
-    min-height: 74px;
+    padding: 13px 14px;
+    min-height: 82px;
   }
 }
 
 .kpi-card:hover {
-  background: #111827;
+  background: var(--surface-hover);
   border-color: rgba(255, 255, 255, 0.14);
 }
 
@@ -562,23 +580,23 @@ defineExpose({
 .kpi-label {
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .kpi-icon {
   width: 15px;
   height: 15px;
-  color: #64748b;
+  color: var(--text-4);
 }
 
-.kpi-icon.emerald { color: #10b981; }
-.kpi-icon.blue { color: #0ea5e9; }
-.kpi-icon.amber { color: #f59e0b; }
+.kpi-icon.emerald { color: var(--accent); }
+.kpi-icon.blue { color: var(--info); }
+.kpi-icon.amber { color: var(--warn); }
 
 .kpi-value {
   font-size: 21px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
   line-height: 1.1;
   margin: 4px 0 2px 0;
 }
@@ -592,7 +610,7 @@ defineExpose({
 .kpi-unit {
   font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--text-3);
   margin-left: 2px;
 }
 
@@ -600,25 +618,25 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10.5px;
-  color: #64748b;
+  font-size: 11.5px;
+  color: var(--text-4);
 }
 
 .alert-text {
-  color: #f59e0b;
+  color: var(--warn);
   font-weight: 600;
 }
 
 .sub-arrow {
   width: 11px;
   height: 11px;
-  color: #64748b;
+  color: var(--text-4);
   transition: transform 0.15s ease;
 }
 
 .kpi-card:hover .sub-arrow {
   transform: translateX(2px);
-  color: #cbd5e1;
+  color: var(--text-2);
 }
 
 /* 2. Split Layout: 1fr on mobile, 1fr 320px on desktop */
@@ -652,20 +670,20 @@ defineExpose({
 .sec-icon {
   width: 16px;
   height: 16px;
-  color: #10b981;
+  color: var(--accent);
 }
 
 .sec-title {
   margin: 0;
   font-size: 14.5px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .sec-count {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--text-3);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 1px 6px;
@@ -674,7 +692,7 @@ defineExpose({
 
 .sec-hint {
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-4);
 }
 
 /* Node Cards List */
@@ -685,13 +703,13 @@ defineExpose({
 }
 
 .node-row-card {
-  background: #0d131f;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
-  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 15px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
   transition: all 0.15s ease;
 }
 
@@ -702,7 +720,7 @@ defineExpose({
 }
 
 .node-row-card:hover {
-  background: #101625;
+  background: var(--surface-hover);
   border-color: rgba(255, 255, 255, 0.12);
 }
 
@@ -726,38 +744,38 @@ defineExpose({
 .flag-badge {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 5px;
   border-radius: 5px;
-  color: #e2e8f0;
+  color: var(--text-2);
 }
 
 .node-name-text {
   font-size: 13.5px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .node-id-tag {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-4);
 }
 
 .node-endpoint-text {
-  font-size: 10.5px;
-  color: #64748b;
+  font-size: 11.5px;
+  color: var(--text-4);
 }
 
 .node-status-tag {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
   padding: 2px 7px;
@@ -766,13 +784,13 @@ defineExpose({
 
 .node-status-tag.online {
   background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  color: var(--accent);
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .node-status-tag.offline {
   background: rgba(239, 68, 68, 0.1);
-  color: #f87171;
+  color: var(--danger-soft);
   border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
@@ -801,23 +819,23 @@ defineExpose({
 }
 
 .m-label {
-  font-size: 10px;
-  color: #64748b;
+  font-size: 11px;
+  color: var(--text-4);
   font-weight: 500;
 }
 
 .m-val {
   font-size: 12px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--text-2);
   display: flex;
   align-items: center;
   gap: 3px;
 }
 
-.m-val.emerald { color: #10b981; }
-.m-val.amber { color: #f59e0b; }
-.m-val.red { color: #ef4444; }
+.m-val.emerald { color: var(--accent); }
+.m-val.amber { color: var(--warn); }
+.m-val.red { color: var(--danger); }
 
 .mini-icon {
   width: 11px;
@@ -842,7 +860,7 @@ defineExpose({
   gap: 3px;
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-3);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -851,7 +869,7 @@ defineExpose({
 }
 
 .node-filter-btn:hover:not(:disabled) {
-  color: #10b981;
+  color: var(--accent);
 }
 
 .node-filter-btn:disabled {
@@ -872,17 +890,17 @@ defineExpose({
 }
 
 .panel-card {
-  background: #0d131f;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
-  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
 }
 
 .panel-heading {
   margin: 0 0 10px 0;
   font-size: 12.5px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 .telemetry-items {
@@ -899,12 +917,12 @@ defineExpose({
 }
 
 .t-label {
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
 .t-val {
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-1);
 }
 
 /* Quick Actions List */
@@ -923,7 +941,7 @@ defineExpose({
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 7px;
-  color: #cbd5e1;
+  color: var(--text-2);
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
@@ -932,7 +950,7 @@ defineExpose({
 
 .quick-btn:hover {
   background: rgba(255, 255, 255, 0.06);
-  color: #f8fafc;
+  color: var(--text-1);
   border-color: rgba(255, 255, 255, 0.12);
 }
 
@@ -945,17 +963,17 @@ defineExpose({
 .q-icon {
   width: 14px;
   height: 14px;
-  color: #94a3b8;
+  color: var(--text-3);
 }
 
-.q-icon.amber { color: #f59e0b; }
-.q-icon.emerald { color: #10b981; }
-.q-icon.blue { color: #0ea5e9; }
+.q-icon.amber { color: var(--warn); }
+.q-icon.emerald { color: var(--accent); }
+.q-icon.blue { color: var(--info); }
 
 .q-badge {
-  background: #f59e0b;
-  color: #0f172a;
-  font-size: 9.5px;
+  background: var(--warn);
+  color: var(--surface-2);
+  font-size: 11px;
   font-weight: 800;
   padding: 1px 5px;
   border-radius: 8px;
@@ -964,7 +982,7 @@ defineExpose({
 .q-arrow {
   width: 11px;
   height: 11px;
-  color: #64748b;
+  color: var(--text-4);
 }
 
 /* Visibility helpers */
@@ -984,14 +1002,14 @@ defineExpose({
 }
 
 .text-emerald {
-  color: #10b981 !important;
+  color: var(--accent) !important;
 }
 
 .text-amber {
-  color: #f59e0b !important;
+  color: var(--warn) !important;
 }
 
 .text-muted {
-  color: #64748b !important;
+  color: var(--text-4) !important;
 }
 </style>
