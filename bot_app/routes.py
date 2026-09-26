@@ -114,9 +114,35 @@ def _diag_payload():
     }
 
 
+from bot_app.routes_admin import admin_bp
+
+# Register Admin REST API Blueprint
+app.register_blueprint(admin_bp)
+
+
+class VercelPathFixMiddleware:
+    """Restores real request path from Vercel rewrite headers if rewritten to /api/index.py."""
+
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        matched = environ.get("HTTP_X_MATCHED_PATH") or environ.get("HTTP_X_FORWARDED_URI")
+        if matched and environ.get("PATH_INFO") in ("/api/index.py", "/index.py"):
+            environ["PATH_INFO"] = matched
+        return self.wsgi_app(environ, start_response)
+
+
+app.wsgi_app = VercelPathFixMiddleware(app.wsgi_app)
+
+
 @app.route("/", defaults={"path": ""}, methods=["GET", "POST"])
 @app.route("/<path:path>", methods=["GET", "POST"])
 def entry(path=""):
+    # If an admin API request was routed here (unmatched admin sub-path), return 404 JSON
+    if request.path.startswith("/api/admin") or path.startswith("api/admin"):
+        return jsonify({"error": "Admin endpoint not found"}), 404
+
     if request.method == "POST":
         return _process_update()
 
@@ -133,5 +159,6 @@ def entry(path=""):
         return jsonify({"status": "not found"}), 404
 
     return "Bot is running perfectly!", 200
+
 
 

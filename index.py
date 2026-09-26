@@ -82,10 +82,11 @@ def main() -> None:
     from bot_app.helpers.webhook_guard import polling_conflict
 
     parser = argparse.ArgumentParser(description="Outline Key Bot runner")
-    parser.add_argument("--mode", choices=["polling", "webhook"],
-                        default=os.environ.get("BOT_MODE", "polling"),
-                        help="polling: Telegram long-polling (local test အတွက်လွယ်), "
-                             "webhook: Flask server")
+    parser.add_argument("--mode", choices=["polling", "webhook", "hybrid"],
+                        default=os.environ.get("BOT_MODE", "webhook"),
+                        help="polling: Telegram long-polling, "
+                             "webhook: Flask API server, "
+                             "hybrid: Flask API server + bot polling thread")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "5000")))
     parser.add_argument("--webhook-url", default=os.environ.get("WEBHOOK_URL", ""),
                         help="webhook mode မှာ Telegram ကို setWebhook လုပ်မည့် public URL "
@@ -115,6 +116,17 @@ def main() -> None:
         except Exception as e:
             print(f"remove_webhook သတိပေးချက်: {e}")
         bot.infinity_polling(skip_pending=True, timeout=30)
+    elif args.mode == "hybrid":
+        import threading
+        print("🤖 Background Bot Polling စတင်နေသည်...")
+        try:
+            bot.remove_webhook()
+        except Exception:
+            pass
+        t = threading.Thread(target=lambda: bot.infinity_polling(skip_pending=False, timeout=30), daemon=True)
+        t.start()
+        print(f"🌐 Flask API server running on http://127.0.0.1:{args.port} (Dashboard backend)")
+        app.run(host="0.0.0.0", port=args.port, debug=False)
     else:
         if args.webhook_url:
             try:
@@ -125,6 +137,7 @@ def main() -> None:
                 print(f"⚠️ setWebhook မအောင်မြင်ပါ: {e}")
         print(f"🌐 Webhook Flask server on port {args.port} ...")
         app.run(host="0.0.0.0", port=args.port, debug=False)
+
 
 
 

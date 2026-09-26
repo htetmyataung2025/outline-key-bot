@@ -43,10 +43,44 @@ def clean_ocr_text_thoroughly(text):
         text = text.replace(mm_char, en_char)
     return text
 
+# Labels that mark the transaction-reference line on KBZPay / Wave Money /
+# AYA Pay / CB receipts — English and Burmese variants the OCR tends to emit.
+TX_KEYWORDS = [
+    "transaction", "trx", "txn", "reference", "ref", "receipt", "invoice",
+    "statement", "လုပ်ဆောင်ချက်", "လုပ်ဆောင်မှု", "ကိုးကား", "အတည်ပြုကုဒ်", "အမှတ်",
+]
+
+# Myanmar mobile numbers: 09 + 7-9 digits, or 94-99 + 6-9 digits. The bare
+# fallback must never mistake one for a transaction id (that produced ids
+# like #912520 taken from the recipient phone line).
+_PHONE_LIKE = re.compile(r'^0?9[4-9]\d{6,9}$')
+# 8-digit dates DDMMYYYY / YYYYMMDD (e.g. "29/08/2026" after dash cleanup).
+_DATE_LIKE = re.compile(
+    r'^(?:[0-2]?\d|3[01])(?:0[1-9]|1[0-2])(?:19|20)\d{2}$'
+    r'|^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:[0-2]?\d|3[01])$'
+)
+
+
+def _digits_after_keyword(clean_line):
+    """Digits that appear AFTER the keyword inside one cleaned line.
+
+    Position-aware so a phone number sitting before the label on the same
+    line ("Receiver 09xxx Transaction 112233445566") is not picked up.
+    """
+    lowered = clean_line.lower()
+    for kw in TX_KEYWORDS:
+        idx = lowered.find(kw)
+        if idx != -1:
+            digits = re.findall(r'\d{6,24}', clean_line[idx + len(kw):])
+            if digits:
+                return digits[0][-6:]
+    return None
+
+
 def extract_transaction_last6(ocr_text):
     if not ocr_text:
         return None
-        
+
     normalized_text = clean_ocr_text_thoroughly(ocr_text)
     for ph in MY_PAYMENT_PHONES:
         normalized_text = normalized_text.replace(ph, "")
@@ -54,34 +88,46 @@ def extract_transaction_last6(ocr_text):
     lines = normalized_text.splitlines()
     for i, line in enumerate(lines):
         clean_l = line.replace(" ", "").replace("-", "")
-        if any(k in clean_l.lower() for k in ["transaction", "trx", "လုပ်ဆောင်ချက်", "လုပ်ဆောင်မှု", "အိုင်ဒီ", "အမှတ်"]):
-            digits = re.findall(r'\d{6,24}', clean_l)
-            if digits:
-                return digits[0][-6:]
-            if i + 1 < len(lines):
-                next_l = lines[i+1].replace(" ", "").replace("-", "")
-                next_digits = re.findall(r'\d{6,24}', next_l)
-                if next_digits:
-                    return next_digits[0][-6:]
+        hit = _digits_after_keyword(clean_l)
+        if hit:
+            return hit
+        if any(k in clean_l.lower() for k in TX_KEYWORDS) and i + 1 < len(lines):
+            next_l = lines[i + 1].replace(" ", "").replace("-", "")
+            next_digits = re.findall(r'\d{6,24}', next_l)
+            if next_digits:
+                return next_digits[0][-6:]
 
-    kpay_match = re.search(r'\b(010\d{13,20})\b', normalized_text.replace(" ", ""))
+    # KBZPay statement refs start with "010" and are 15-23 digits long.
+    kpay_match = re.search(r'(?<!\d)(010\d{12,20})(?!\d)', normalized_text.replace(" ", ""))
     if kpay_match:
         return kpay_match.group(1)[-6:]
 
-    all_numbers = re.findall(r'\b\d{8,15}\b', normalized_text.replace("-", " "))
-    for num in all_numbers:
-        if not num.startswith("09") and not num.startswith("9699"):
-            return num[-6:]
+    # Last resort: first long digit run that is not a phone number or a date.
+    for num in re.findall(r'(?<!\d)\d{8,15}(?!\d)', normalized_text.replace("-", " ")):
+        if _PHONE_LIKE.match(num) or _DATE_LIKE.match(num):
+            continue
+        return num[-6:]
 
     return None
 
-def generate_order_id_from_slip(file_path=None):
+
+def extract_order_id_and_tx(file_path=None):
+    """Return ``(order_id, tx_last6)``.
+
+    ``tx_last6`` is the transaction reference the id was derived from
+    (empty string when the id fell back to random) so the dashboard can
+    show and audit what OCR actually read.
+    """
     if file_path:
         ocr_text = parse_slip_ocr(file_path)
         last6 = extract_transaction_last6(ocr_text)
         if last6 and len(last6) == 6:
-            return f"#{last6}"
-            
+            return f"#{last6}", last6
+
     chars = string.ascii_uppercase + string.digits
     rand_part = ''.join(random.choices(chars, k=6))
-    return f"#{rand_part}"
+    return f"#{rand_part}", ""
+
+
+def generate_order_id_from_slip(file_path=None):
+    return extract_order_id_and_tx(file_path)[0]

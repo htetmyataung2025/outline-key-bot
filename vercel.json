@@ -4,10 +4,28 @@
       "maxDuration": 60
     }
   },
+  "buildCommand": "cd dashboard && npm install && npm run build",
+  "outputDirectory": "dashboard/dist",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
       "destination": "/api/index.py"
+    },
+    {
+      "source": "/webhook",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/cron-check",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/diag",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "crons": [

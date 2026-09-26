@@ -1,0 +1,119 @@
+"""Authentication and cryptographic security helpers for Admin Control Center.
+
+Supports:
+1. Zero-click Telegram Mini App authentication via cryptographic HMAC-SHA256
+   validation of Telegram WebApp ``initData``.
+2. Desktop Web browser fallback via Bearer token / Admin secret PIN.
+3. Flask route protection decorator ``@require_admin_api``.
+"""
+
+from functools import wraps
+import hashlib
+import hmac
+import json
+import os
+from urllib.parse import parse_qsl
+
+from flask import g, jsonify, request
+
+from bot_app.config import is_admin
+
+
+def get_telegram_token() -> str:
+    """Retrieve current Telegram bot token from environment or config."""
+    return os.environ.get("TELEGRAM_TOKEN", "")
+
+
+def get_admin_secret_key() -> str:
+    """Retrieve desktop admin fallback secret key strictly from environment.
+
+    Never fallback to a default password. If unset, desktop Bearer auth is disabled.
+    """
+    return os.environ.get("ADMIN_SECRET_KEY", "").strip()
+
+
+def verify_telegram_init_data(init_data_raw: str, bot_token: str | None = None) -> dict | None:
+    """Validate raw Telegram WebApp initData query string.
+
+    Returns the parsed data dictionary (with 'user' parsed as a dict) if the
+    HMAC-SHA256 signature is valid, or None if invalid or tampered.
+    """
+    if not init_data_raw:
+        return None
+
+    token = bot_token or get_telegram_token()
+    if not token:
+        return None
+
+    try:
+        parsed_items = dict(parse_qsl(init_data_raw, keep_blank_values=True))
+        hash_check = parsed_items.pop("hash", None)
+        if not hash_check:
+            return None
+
+        # Sort alphabetically and format as key=value separated by newlines
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed_items.items()))
+
+        # Secret key is HMAC-SHA256 of bot token with key b"WebAppData"
+        secret_key = hmac.new(b"WebAppData", token.encode("utf-8"), hashlib.sha256).digest()
+        computed_hash = hmac.new(
+            secret_key, data_check_string.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+
+        if hmac.compare_digest(computed_hash.lower(), hash_check.lower()):
+            if "user" in parsed_items and isinstance(parsed_items["user"], str):
+                try:
+                    parsed_items["user"] = json.loads(parsed_items["user"])
+                except Exception:
+                    pass
+            return parsed_items
+    except Exception:
+        return None
+
+    return None
+
+
+def require_admin_api(f):
+    """Flask decorator protecting Admin REST API endpoints.
+
+    Requires either:
+    - ``X-Telegram-Init-Data`` header with valid signature and admin user ID.
+    - ``Authorization: Bearer <ADMIN_SECRET_KEY>`` header.
+
+    Attaches authenticated admin profile to ``flask.g.admin_user``.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 1. Check Telegram Mini App initData
+        tma_init_data = request.headers.get("X-Telegram-Init-Data")
+        if tma_init_data:
+            verified_data = verify_telegram_init_data(tma_init_data)
+            if not verified_data:
+                return jsonify({"error": "Invalid or tampered Telegram session"}), 401
+
+            user_obj = verified_data.get("user")
+            user_id = user_obj.get("id") if isinstance(user_obj, dict) else None
+
+            if not user_id or not is_admin(user_id):
+                return jsonify({"error": "Forbidden: Admin privileges required"}), 403
+
+            g.admin_user = user_obj
+            return f(*args, **kwargs)
+
+        # 2. Check Desktop Web Bearer token fallback
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+            secret = get_admin_secret_key()
+            if not secret:
+                return jsonify({"error": "Desktop admin access is not enabled. Set ADMIN_SECRET_KEY in .env"}), 403
+            if hmac.compare_digest(token, secret):
+                g.admin_user = {"id": "desktop_admin", "username": "Admin"}
+                return f(*args, **kwargs)
+            return jsonify({"error": "Invalid admin token"}), 401
+
+        # 3. Missing credentials
+        return jsonify({"error": "Unauthorized: Missing authentication"}), 401
+
+    return decorated_function
+

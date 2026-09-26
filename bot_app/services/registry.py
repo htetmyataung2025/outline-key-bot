@@ -9,6 +9,22 @@ from bot_app.storage.kv import redis_get, redis_set
 from bot_app.storage.paths import PERSISTENT_KEYS_FILE
 
 
+# Outline stores one free-text `name` per key, so historically the display
+# name, the owner's (chat_id) and the expiry date were all packed into it
+# (e.g. "FAFAFA OFFICIAL 🧢 (7672856636) 26.10.2026"). The dashboard now keeps
+# server / expiry / owner in their own columns, so for display we strip the
+# embedded (chat_id) and trailing date back down to just the human label. The
+# raw name is left untouched on the server and in the registry (it stays the
+# disaster-recovery source of truth and keeps the regex parsers working).
+def clean_key_label(name: str) -> str:
+    if not name:
+        return ""
+    label = re.sub(r'\(\s*\d+\s*\)', '', name)                      # drop (chat_id)
+    label = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', '', label)   # drop DD.MM.YYYY
+    label = re.sub(r'\s{2,}', ' ', label).strip(' -–—·|')           # tidy leftovers
+    return label.strip() or name.strip()
+
+
 def load_persistent_keys():
     data = redis_get("persistent_keys_registry")
     if data is not None:
@@ -49,6 +65,13 @@ def save_persistent_key(server_num, key_id, name, access_url, limit_bytes=None, 
         pass
 
 def sync_keys_to_persistent_registry(server_num, keys_data):
+    """Mirror live Outline keys into the persistent registry.
+
+    Writes (and therefore data-version bumps) happen only when an entry is
+    new or actually differs — a no-change re-sync triggered by read paths
+    (e.g. GET /keys) must not signal the dashboard that data changed,
+    otherwise every read would re-trigger every client's refresh forever.
+    """
     if not keys_data:
         return
     registry = load_persistent_keys()
@@ -63,14 +86,14 @@ def sync_keys_to_persistent_registry(server_num, keys_data):
         full_url = f"{raw_url}#{k_name}" if k_name else raw_url
         l_bytes = k.get("dataLimit", {}).get("bytes")
         ord_id = key_orders_map.get(k_name.strip().lower(), "N/A")
-        
+
         cid_match = re.search(r'\((\d+)\)', k_name)
         cid = cid_match.group(1) if cid_match else ""
 
         date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', k_name)
         exp_date = date_match.group(0) if date_match else "မသိရှိပါ"
 
-        registry[uid] = {
+        entry = {
             "server": str(server_num),
             "key_id": k_id,
             "name": k_name,
@@ -80,7 +103,9 @@ def sync_keys_to_persistent_registry(server_num, keys_data):
             "order_id": ord_id,
             "chat_id": cid
         }
-        changed = True
+        if registry.get(uid) != entry:
+            registry[uid] = entry
+            changed = True
 
     if changed:
         redis_set("persistent_keys_registry", registry)
@@ -89,6 +114,31 @@ def sync_keys_to_persistent_registry(server_num, keys_data):
                 json.dump(registry, f)
         except:
             pass
+
+def delete_persistent_key(server_num, key_id):
+    """Remove a key from the persistent registry. Returns True if an entry was removed."""
+    registry = load_persistent_keys()
+    uid = f"{server_num}_{key_id}"
+    removed = registry.pop(uid, None)
+
+    if removed is None:
+        # Fallback: match by key_id + server across differently-keyed entries.
+        for k in list(registry.keys()):
+            v = registry[k]
+            if str(v.get("key_id")) == str(key_id) and str(v.get("server")) == str(server_num):
+                removed = registry.pop(k)
+                break
+
+    if removed is not None:
+        redis_set("persistent_keys_registry", registry)
+        try:
+            with open(PERSISTENT_KEYS_FILE, 'w') as f:
+                json.dump(registry, f)
+        except:
+            pass
+
+    return removed is not None
+
 
 def sync_legacy_redis_data_to_registry():
     registry = load_persistent_keys()

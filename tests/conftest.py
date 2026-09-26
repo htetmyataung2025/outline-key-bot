@@ -13,7 +13,7 @@ Safety rules for the whole suite:
 import os
 
 # --- Must run BEFORE importing bot_app (config reads these at import time) ---
-for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN"):
+for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY"):
     os.environ.pop(_var, None)
 os.environ.setdefault("ADMIN_CHAT_IDS", "111000111,222000222")
 os.environ.setdefault("MY_PAYMENT_PHONES", "0999999999,9699999999")
@@ -27,7 +27,32 @@ def registered_app():
     """Import the app package once: registers Telegram handlers + Flask routes."""
     import bot_app
 
+    for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY"):
+        os.environ.pop(_var, None)
+
     return bot_app
+
+
+@pytest.fixture(autouse=True)
+def disable_external_network(monkeypatch):
+    """Ensure tests never attempt external network calls.
+
+    Strip every KV / Redis / Supabase env var (including the KV_URL / KV_TOKEN
+    / REDIS_URL aliases that ``bot_app.storage.kv._kv_config`` falls back to),
+    so a populated local ``.env`` — e.g. real Upstash credentials added for
+    manual inspection — can never make the suite read or WRITE production data.
+    """
+    for var in (
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+        "KV_REST_API_URL",
+        "KV_REST_API_TOKEN",
+        "KV_REST_API_READ_ONLY_TOKEN",
+        "KV_URL",
+        "KV_TOKEN",
+        "REDIS_URL",
+    ):
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture()
@@ -153,4 +178,36 @@ def client(isolated_state):
     from bot_app.extensions import flask_app
     flask_app.config["TESTING"] = True
     return flask_app.test_client()
+
+
+@pytest.fixture()
+def make_telegram_init_data():
+    """Generate cryptographically valid or tampered Telegram initData strings."""
+    import hashlib
+    import hmac
+    import json
+    from urllib.parse import urlencode
+
+    def _generator(user_id=111000111, username="admin_user", is_tampered=False, token=None):
+        bot_token = token or os.environ.get("TELEGRAM_TOKEN", "0000000000:AAADummyTokenForTestsOnly00000000000")
+        user_dict = {"id": user_id, "first_name": "Test", "username": username}
+        params = {
+            "auth_date": "1727260000",
+            "query_id": "AAHdF6IQAAAAAN0XohD5p8Zb",
+            "user": json.dumps(user_dict, separators=(",", ":")),
+        }
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+        secret_key = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
+        computed_hash = hmac.new(
+            secret_key, data_check_string.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+
+        if is_tampered:
+            computed_hash = "tampered_bad_hash_999999"
+
+        params["hash"] = computed_hash
+        return urlencode(params)
+
+    return _generator
+
 
