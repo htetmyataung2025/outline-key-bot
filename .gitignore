@@ -24,3 +24,5 @@ venv/
 htmlcov/
 
 backup_dd09255/
+# ZCode agent workspace
+.zcode/

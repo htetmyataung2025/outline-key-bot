@@ -1,13 +1,17 @@
 """Admin REST API routes for Control Center and Telegram Mini App."""
 
+import json
+import queue
 from datetime import datetime, timedelta
 
 import requests
-from flask import Blueprint, Response, g, jsonify, request
+from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 
 from bot_app.config import TELEGRAM_TOKEN
 from bot_app.helpers.auth import require_admin_api
+from bot_app.helpers.sse import consume_ticket, issue_ticket
 from bot_app.services.admin_telemetry import get_admin_overview_telemetry, reset_telemetry_cache
+from bot_app.storage import versioning
 from bot_app.storage.versioning import get_data_version
 from bot_app.services.billing import load_all_wallets, update_user_balance
 from bot_app.services.orders import (
@@ -16,18 +20,27 @@ from bot_app.services.orders import (
     save_redeem_codes,
 )
 from bot_app.services.registry import load_persistent_keys, save_persistent_key, delete_persistent_key
-from bot_app.services.slips import get_slip_by_id, get_slips_list, record_audit_log, review_slip
+from bot_app.services.slips import get_slip_by_id, get_slips_list, load_audit_logs, record_audit_log, review_slip
 from bot_app.timeutil import myanmar_now
 from bot_app.utils import generate_random_redeem_code
 
 admin_bp = Blueprint("admin_bp", __name__, url_prefix="/api/admin")
 
+# Route that authenticates with a one-time stream ticket instead of headers
+# (EventSource cannot attach custom headers). Checked by endpoint name below.
+SSE_STREAM_ENDPOINT = "admin_bp.sse_events"
+
 
 # Apply authentication to all admin routes in blueprint
 @admin_bp.before_request
-@require_admin_api
 def authenticate_admin():
-    pass
+    if request.endpoint == SSE_STREAM_ENDPOINT:
+        admin = consume_ticket(request.args.get("ticket", ""))
+        if not admin:
+            return jsonify({"error": "Invalid or expired stream ticket"}), 401
+        g.admin_user = admin
+        return None
+    return require_admin_api(lambda: None)()
 
 
 # ---------------------------------------------------------------------------
@@ -41,15 +54,57 @@ def get_overview():
 
 
 # ---------------------------------------------------------------------------
-# 1b. Live-refresh data version
+# 1b. Live change push (SSE) + version fallback
 # ---------------------------------------------------------------------------
+@admin_bp.route("/sse-ticket", methods=["POST"])
+def create_sse_ticket():
+    """Exchange the authenticated session for a one-time stream ticket.
+
+    EventSource cannot send auth headers, so the client calls this first
+    (with its normal headers) and opens ``GET /events?ticket=...`` with the
+    short-lived random token it returns.
+    """
+    return jsonify({"ticket": issue_ticket(g.admin_user)}), 200
+
+
+@admin_bp.route("/events", methods=["GET"])
+def sse_events():
+    """Server-Sent Events stream of data-version changes.
+
+    Push-based live sync for the dashboard: the connection stays open and
+    every shared-state write anywhere in this process (Telegram handler
+    thread or another dashboard request) emits the new version instantly —
+    no client-side polling in the normal path. A comment heartbeat keeps
+    intermediaries from closing an idle connection.
+    """
+    def stream():
+        q = versioning.subscribe()
+        try:
+            # Baseline lets a reconnecting client detect writes it missed
+            # while disconnected: if the current version is ahead of the one
+            # it last saw, it refreshes once on arrival.
+            yield f"data: {json.dumps({'version': get_data_version()})}\n\n"
+            while True:
+                try:
+                    version = q.get(timeout=20)
+                    yield f"data: {json.dumps({'version': version})}\n\n"
+                except queue.Empty:
+                    yield ": ping\n\n"
+        finally:
+            versioning.unsubscribe(q)
+
+    resp = Response(stream_with_context(stream()), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    return resp
+
+
 @admin_bp.route("/version", methods=["GET"])
 def get_version():
-    """Cheap monotonic counter bumped on every shared-state write.
+    """Cheap fallback for environments where SSE cannot stream (Vercel).
 
-    The dashboard polls this every few seconds and only re-fetches real
-    data when it changes, so Telegram-side actions (new slip, approve)
-    and dashboard-side actions propagate without a manual refresh.
+    The dashboard only uses this while its push channel is down: it asks
+    "did the version move?" and re-fetches real data solely on change.
     """
     return jsonify({"version": get_data_version()}), 200
 
@@ -401,20 +456,116 @@ def generate_redeem_batch():
 # ---------------------------------------------------------------------------
 @admin_bp.route("/customers", methods=["GET"])
 def list_customers():
+    from bot_app.services.profiles import backfill_profiles_from_history
+
+    profiles = backfill_profiles_from_history()
     wallets = load_all_wallets()
+
     all_users = set(load_all_users())
     for uid in wallets.keys():
         all_users.add(str(uid))
+    for uid in profiles.keys():
+        all_users.add(str(uid))
+
+    # Count Outline keys per user from the cached registry (no live server sync).
+    keys_by_user = {}
+    for k in load_persistent_keys().values():
+        cid = str(k.get("chat_id") or "").strip()
+        if cid:
+            keys_by_user[cid] = keys_by_user.get(cid, 0) + 1
 
     customers = []
     for uid in sorted(all_users):
-        balance = wallets.get(str(uid), 0)
+        profile = profiles.get(uid, {})
         customers.append({
-            "chat_id": str(uid),
-            "wallet_balance": balance,
+            "chat_id": uid,
+            "wallet_balance": wallets.get(uid, 0),
+            "username": profile.get("username", ""),
+            "full_name": profile.get("full_name", ""),
+            "first_seen": profile.get("first_seen", ""),
+            "last_seen": profile.get("last_seen", ""),
+            "keys_count": keys_by_user.get(uid, 0),
         })
 
     return jsonify({"total": len(customers), "customers": customers}), 200
+
+
+@admin_bp.route("/customers/<chat_id>", methods=["GET"])
+def get_customer_detail(chat_id):
+    """Full profile bundle for the customer detail page: identity, wallet
+    breakdown, and the five record collections (keys, purchases, slips,
+    redeems, audit) rendered in the right-hand tabs."""
+    from bot_app.services.billing import get_user_balance_breakdown
+    from bot_app.services.orders import get_user_combined_purchase_records, load_redeem_codes
+    from bot_app.services.profiles import backfill_profiles_from_history, get_user_profile
+
+    uid = str(chat_id)
+    backfill_profiles_from_history()
+    profile = get_user_profile(uid)
+
+    main_bal, bonus_bal, total_bal = get_user_balance_breakdown(uid)
+
+    # Access keys (from cached registry, filtered to this user)
+    keys = [
+        k for k in load_persistent_keys().values()
+        if str(k.get("chat_id") or "").strip() == uid
+    ]
+
+    # Purchase / plan history
+    try:
+        purchases = get_user_combined_purchase_records(uid)
+    except Exception:
+        purchases = []
+
+    # Payment slips submitted by this user (newest first)
+    slips = [s for s in get_slips_list() if str(s.get("chat_id")) == uid]
+
+    # Shared redeem codes this user has claimed (single-use codes are deleted on
+    # claim, so only shared codes leave a per-user trail).
+    redeems = []
+    for code, info in load_redeem_codes().items():
+        if uid in [str(u) for u in info.get("claimed_users", [])]:
+            redeems.append({
+                "code": code,
+                "amount": info.get("amount", 0),
+                "mode": info.get("mode", "shared"),
+                "valid_days": info.get("validity_days", info.get("valid_days", 0)),
+                "expires_at": info.get("expires_at", ""),
+            })
+
+    # Admin audit entries that targeted this user or their slips
+    slip_ids = {str(s.get("id")) for s in slips}
+    audit = []
+    for log in load_audit_logs():
+        target_type = log.get("target_type")
+        target_id = str(log.get("target_id", ""))
+        details = log.get("details", {}) or {}
+        if (
+            (target_type == "user" and target_id == uid)
+            or str(details.get("chat_id", "")) == uid
+            or (target_type == "slip" and target_id in slip_ids)
+        ):
+            audit.append(log)
+    audit.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
+    return jsonify({
+        "profile": {
+            "chat_id": uid,
+            "username": profile.get("username", ""),
+            "full_name": profile.get("full_name", ""),
+            "first_seen": profile.get("first_seen", ""),
+            "last_seen": profile.get("last_seen", ""),
+            "wallet_balance": total_bal,
+            "main_balance": main_bal,
+            "bonus_balance": bonus_bal,
+            "keys_count": len(keys),
+        },
+        "keys": keys,
+        "purchases": purchases,
+        "slips": slips,
+        "redeems": redeems,
+        "audit": audit,
+    }), 200
 
 
 @admin_bp.route("/customers/<chat_id>/balance", methods=["POST"])

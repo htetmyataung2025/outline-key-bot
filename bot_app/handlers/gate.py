@@ -7,6 +7,7 @@ from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.keyboards import get_main_menu_keyboard
 from bot_app.services.orders import save_user_id
+from bot_app.services.profiles import touch_user
 from bot_app.services.states import clear_all_states
 from bot_app.texts import welcome_back_text, welcome_text
 from bot_app.utils import is_user_subscribed
@@ -16,6 +17,7 @@ from bot_app.utils import is_user_subscribed
 def send_welcome(message):
     chat_id = message.chat.id
     save_user_id(chat_id)
+    touch_user(message.from_user)
     clear_all_states(chat_id)
 
     if not is_user_subscribed(chat_id):
@@ -44,6 +46,7 @@ def handle_verify_subscription(call):
     if is_user_subscribed(chat_id):
         bot.answer_callback_query(call.id, "✅ Verification အောင်မြင်ပါသည်။")
         save_user_id(chat_id)
+        touch_user(call.from_user)
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:

@@ -78,6 +78,19 @@ def get_slip_by_id(slip_id: str) -> dict | None:
     return slips.get(str(slip_id))
 
 
+def load_audit_logs() -> list:
+    logs = redis_get("admin_audit_logs")
+    if logs is not None and isinstance(logs, list):
+        return logs
+    if os.path.exists(AUDIT_LOGS_FILE):
+        try:
+            with open(AUDIT_LOGS_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
 def record_audit_log(admin_id: str | int, action: str, target_type: str, target_id: str, details: dict | None = None):
     try:
         logs = redis_get("admin_audit_logs") or []

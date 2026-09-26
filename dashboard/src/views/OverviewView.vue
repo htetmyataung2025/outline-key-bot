@@ -65,8 +65,13 @@ function serverInitials(name?: string): string {
   return name.trim().slice(0, 2).toUpperCase()
 }
 
-async function loadData(force = false, isRetry = false) {
-  loading.value = true
+async function loadData(opts?: { force?: boolean; isRetry?: boolean; silent?: boolean }) {
+  const force = opts?.force ?? false
+  const isRetry = opts?.isRetry ?? false
+  const silent = opts?.silent ?? false
+  // Silent mode = background refresh on a pushed change: never wipe the
+  // page into a spinner, just swap the data in when it arrives.
+  if (!silent) loading.value = true
   try {
     overviewData.value = await fetchOverview(force)
     const now = new Date()
@@ -78,18 +83,18 @@ async function loadData(force = false, isRetry = false) {
     if (!isRetry && !overviewData.value) {
       loading.value = false
       await new Promise((resolve) => setTimeout(resolve, 1200))
-      return loadData(false, true)
+      return loadData({ isRetry: true, silent })
     }
     message.error(err?.response?.data?.error || 'Failed to load telemetry data')
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
 function handleManualRefresh() {
   if (loading.value) return
   triggerHaptic('light')
-  loadData(true)
+  loadData({ force: true })
 }
 
 function goToSlips() {

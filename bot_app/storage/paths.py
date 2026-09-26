@@ -26,4 +26,5 @@ MANUAL_DISPATCH_STATE_FILE = "/tmp/admin_manual_dispatch_state.json"
 SLIPS_FILE = "/tmp/payment_slips.json"
 AUDIT_LOGS_FILE = "/tmp/audit_logs.json"
 DATA_VERSION_FILE = "/tmp/admin_data_version.json"
+USER_PROFILES_FILE = "/tmp/user_profiles.json"
 

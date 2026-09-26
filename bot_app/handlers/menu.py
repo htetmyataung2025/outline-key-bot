@@ -29,6 +29,7 @@ from bot_app.services.outline import (
 )
 from bot_app.services.registry import save_persistent_key
 from bot_app.services.reports import get_monthly_revenue_report
+from bot_app.services.profiles import touch_user
 from bot_app.services.states import (
     clear_all_states, get_admin_deduct_state, get_broadcast_state, get_custom_topup_state,
     get_manual_dispatch_state, get_redeem_state, get_replacement_state, get_search_state,
@@ -46,6 +47,7 @@ def handle_all_messages(message):
     input_value = message.text.strip()
     chat_id = message.chat.id
     save_user_id(chat_id)
+    touch_user(message.from_user)
 
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)

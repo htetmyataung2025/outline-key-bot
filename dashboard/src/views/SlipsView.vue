@@ -44,15 +44,18 @@ const imageLoading = ref(false)
 // slip.id → blob object URL, filled asynchronously via the authed proxy.
 const imageUrls = ref<Record<string, string>>({})
 
-async function loadSlips() {
-  loading.value = true
+async function loadSlips(opts?: { silent?: boolean }) {
+  // Silent mode = background refresh on a pushed change: no spinner overlay,
+  // the queue updates in place without dimming.
+  const silent = opts?.silent ?? false
+  if (!silent) loading.value = true
   try {
     slips.value = await fetchSlips(currentTab.value)
     prefetchImages()
   } catch (err: any) {
     message.error(err?.response?.data?.error || 'Failed to load slips queue')
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 

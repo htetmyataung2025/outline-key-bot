@@ -11,6 +11,7 @@ from bot_app.keyboards import get_topup_amounts_keyboard
 from bot_app.services.billing import update_user_balance
 from bot_app.services.ocr import extract_order_id_and_tx
 from bot_app.services.orders import load_all_users, save_user_id
+from bot_app.services.profiles import touch_user
 from bot_app.services.slips import record_slip, review_slip
 from bot_app.services.states import (
     get_broadcast_state,
@@ -107,6 +108,7 @@ def handle_approve_topup(call):
 def handle_photo_messages(message):
     chat_id = message.chat.id
     save_user_id(chat_id)
+    touch_user(message.from_user)
 
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)

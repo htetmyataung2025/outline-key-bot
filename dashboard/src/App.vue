@@ -15,7 +15,7 @@ import { themeOverrides } from '@/theme'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import MobileNav from '@/components/layout/MobileNav.vue'
-import { fetchOverview, fetchSlips, fetchDataVersion } from '@/api'
+import { fetchOverview, fetchSlips, fetchDataVersion, openVersionStream } from '@/api'
 
 const pendingSlipsCount = ref(0)
 const currentViewRef = ref<any>(null)
@@ -49,7 +49,7 @@ async function handleGlobalRefresh() {
   try {
     await Promise.all([
       refreshPendingCount(),
-      currentViewRef.value?.loadData?.(true),
+      currentViewRef.value?.loadData?.({ force: true }),
     ])
   } finally {
     globalRefreshing.value = false
@@ -81,6 +81,8 @@ async function handleLogin() {
 function handleLogout() {
   localStorage.removeItem('admin_token')
   isAuthenticated.value = false
+  stopFallbackPoll()
+  liveMode.value = 'off'
   showLoginModal.value = true
 }
 
@@ -106,44 +108,90 @@ onMounted(() => {
     refreshPendingCount()
   }
 
+  document.addEventListener('visibilitychange', onVisibilityChange)
   startLiveSync()
 })
 
-// ── Live sync ─────────────────────────────────────────────────────────────
-// Poll only a monotonic version counter every 5s; when any state changes
-// server-side (new slip from Telegram, approve/reject from either surface,
-// key/balance/settings edits) the counter moves and we refresh the sidebar
-// badge plus the current view — no manual refresh needed.
+// ── Live sync: server push (SSE), poll only as fallback ───────────────────
+// Primary path: the Flask server streams every data-version change over
+// Server-Sent Events the instant any shared state is written (slip arrives
+// via Telegram, approve/reject, key/balance/settings edit). No polling —
+// the dashboard just reacts to pushed events.
+// Fallback: while the stream cannot be held (serverless hosting, proxy
+// timeouts, network drops) a lightweight "did the version move?" request
+// runs every 15s and is dropped again the moment the stream recovers.
 const knownVersion = ref<number | null>(null)
-let liveSyncTimer: ReturnType<typeof setInterval> | null = null
+const liveMode = ref<'stream' | 'poll' | 'off'>('off')
+let fallbackTimer: ReturnType<typeof setInterval> | null = null
+let closeStream: (() => void) | null = null
 
-async function pollDataVersion() {
-  if (!isAuthenticated.value || document.hidden) return
-  try {
-    const version = await fetchDataVersion()
-    if (knownVersion.value === null) {
-      knownVersion.value = version
-      return
+async function applyExternalChange(version: number) {
+  knownVersion.value = version
+  // Don't fetch for a hidden tab; the visibility handler catches up.
+  if (document.hidden) return
+  await Promise.all([
+    refreshPendingCount(),
+    currentViewRef.value?.loadData?.({ silent: true }),
+  ])
+}
+
+function startFallbackPoll() {
+  if (fallbackTimer) return
+  fallbackTimer = setInterval(async () => {
+    if (!isAuthenticated.value || document.hidden) return
+    try {
+      const version = await fetchDataVersion()
+      if (knownVersion.value === null) {
+        knownVersion.value = version
+        return
+      }
+      if (version !== knownVersion.value) await applyExternalChange(version)
+    } catch {
+      // Transient poll failures are fine; next tick retries. 401 handled in refreshPendingCount.
     }
-    if (version !== knownVersion.value) {
-      knownVersion.value = version
-      await Promise.all([
-        refreshPendingCount(),
-        currentViewRef.value?.loadData?.(),
-      ])
-    }
-  } catch (e) {
-    // Transient poll failures are fine; next tick retries. 401 handled in refreshPendingCount.
+  }, 15000)
+}
+
+function stopFallbackPoll() {
+  if (fallbackTimer) {
+    clearInterval(fallbackTimer)
+    fallbackTimer = null
   }
 }
 
 function startLiveSync() {
-  if (liveSyncTimer) return
-  liveSyncTimer = setInterval(pollDataVersion, 5000)
+  if (closeStream) return
+  closeStream = openVersionStream({
+    onState: (up) => {
+      liveMode.value = up ? 'stream' : isAuthenticated.value ? 'poll' : 'off'
+      if (up) stopFallbackPoll()
+      else if (isAuthenticated.value) startFallbackPoll()
+    },
+    onVersion: (version) => {
+      // First event (or reconnect baseline) just primes the counter; a
+      // baseline ahead of what we last saw covers writes missed offline.
+      if (knownVersion.value === null) {
+        knownVersion.value = version
+        return
+      }
+      if (version !== knownVersion.value) applyExternalChange(version)
+    },
+  })
+}
+
+function onVisibilityChange() {
+  if (!document.hidden && isAuthenticated.value && currentViewRef.value) {
+    // Catch up on anything pushed (or missed) while the tab was hidden.
+    refreshPendingCount()
+    currentViewRef.value?.loadData?.({ silent: true })
+  }
 }
 
 onUnmounted(() => {
-  if (liveSyncTimer) clearInterval(liveSyncTimer)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  stopFallbackPoll()
+  closeStream?.()
+  closeStream = null
 })
 </script>
 
@@ -152,7 +200,12 @@ onUnmounted(() => {
     <NMessageProvider>
       <NDialogProvider>
         <div class="app-layout">
-          <AppHeader :refreshing="globalRefreshing" @refresh="handleGlobalRefresh" @logout="handleLogout" />
+          <AppHeader
+            :refreshing="globalRefreshing"
+            :live-mode="liveMode"
+            @refresh="handleGlobalRefresh"
+            @logout="handleLogout"
+          />
 
           <div class="layout-main">
             <!-- Desktop Sidebar -->

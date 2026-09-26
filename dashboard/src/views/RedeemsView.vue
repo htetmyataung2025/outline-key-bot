@@ -37,14 +37,15 @@ const batchForm = ref({
 const showResultModal = ref(false)
 const generatedCodes = ref<string[]>([])
 
-async function loadRedeems() {
-  loading.value = true
+async function loadRedeems(opts?: { silent?: boolean }) {
+  const silent = opts?.silent ?? false
+  if (!silent) loading.value = true
   try {
     redeemsList.value = await fetchRedeems()
   } catch (err: any) {
     message.error(err?.response?.data?.error || 'Failed to load redeem codes')
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 

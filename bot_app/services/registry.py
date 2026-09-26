@@ -49,6 +49,13 @@ def save_persistent_key(server_num, key_id, name, access_url, limit_bytes=None, 
         pass
 
 def sync_keys_to_persistent_registry(server_num, keys_data):
+    """Mirror live Outline keys into the persistent registry.
+
+    Writes (and therefore data-version bumps) happen only when an entry is
+    new or actually differs — a no-change re-sync triggered by read paths
+    (e.g. GET /keys) must not signal the dashboard that data changed,
+    otherwise every read would re-trigger every client's refresh forever.
+    """
     if not keys_data:
         return
     registry = load_persistent_keys()
@@ -63,14 +70,14 @@ def sync_keys_to_persistent_registry(server_num, keys_data):
         full_url = f"{raw_url}#{k_name}" if k_name else raw_url
         l_bytes = k.get("dataLimit", {}).get("bytes")
         ord_id = key_orders_map.get(k_name.strip().lower(), "N/A")
-        
+
         cid_match = re.search(r'\((\d+)\)', k_name)
         cid = cid_match.group(1) if cid_match else ""
 
         date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', k_name)
         exp_date = date_match.group(0) if date_match else "မသိရှိပါ"
 
-        registry[uid] = {
+        entry = {
             "server": str(server_num),
             "key_id": k_id,
             "name": k_name,
@@ -80,7 +87,9 @@ def sync_keys_to_persistent_registry(server_num, keys_data):
             "order_id": ord_id,
             "chat_id": cid
         }
-        changed = True
+        if registry.get(uid) != entry:
+            registry[uid] = entry
+            changed = True
 
     if changed:
         redis_set("persistent_keys_registry", registry)

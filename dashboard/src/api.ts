@@ -82,6 +82,76 @@ export const reviewSlip = (slipId: string, action: 'APPROVE' | 'REJECT', reason 
 // shared-state write (new slip, review, balance/key/settings change).
 export const fetchDataVersion = () => api.get('/version', { timeout: 8000 }).then((r) => r.data.version as number)
 
+// ── Push channel (SSE) ────────────────────────────────────────────────────
+// EventSource cannot attach auth headers, so the stream authenticates with
+// a one-time short-lived ticket exchanged over the normal authed channel.
+export const createSseTicket = () => api.post('/sse-ticket', {}, { timeout: 8000 }).then((r) => r.data.ticket as string)
+
+export interface VersionStreamHandlers {
+  onVersion: (version: number) => void
+  /** Connection state of the push channel (true = streaming). */
+  onState: (up: boolean) => void
+}
+
+/**
+ * Open the server-push version stream. Reconnects automatically with
+ * backoff (each attempt needs a fresh one-time ticket). Returns a close()
+ * that stops the stream and any pending reconnect.
+ */
+export function openVersionStream(handlers: VersionStreamHandlers): () => void {
+  let closed = false
+  let source: EventSource | null = null
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let attempt = 0
+
+  const backoffMs = () => Math.min(1500 * 2 ** Math.min(attempt, 3), 10000)
+
+  async function connect() {
+    if (closed) return
+    let ticket: string
+    try {
+      ticket = await createSseTicket()
+    } catch {
+      if (!closed) {
+        attempt += 1
+        handlers.onState(false)
+        reconnectTimer = setTimeout(connect, backoffMs())
+      }
+      return
+    }
+    if (closed) return
+
+    source = new EventSource(`/api/admin/events?ticket=${encodeURIComponent(ticket)}`)
+    source.onopen = () => {
+      attempt = 0
+      handlers.onState(true)
+    }
+    source.onmessage = (e) => {
+      try {
+        handlers.onVersion(JSON.parse(e.data).version)
+      } catch {
+        // Malformed frame — ignore, next event carries a full version.
+      }
+    }
+    source.onerror = () => {
+      source?.close()
+      source = null
+      handlers.onState(false)
+      if (!closed) {
+        attempt += 1
+        reconnectTimer = setTimeout(connect, backoffMs())
+      }
+    }
+  }
+
+  connect()
+  return () => {
+    closed = true
+    if (reconnectTimer) clearTimeout(reconnectTimer)
+    source?.close()
+  }
+}
+
 // Receipt images are stored as Telegram file_ids and proxied through the
 // authenticated /image endpoint; <img> tags cannot send auth headers, so
 // we fetch them as blobs and cache object URLs per slip id.
@@ -116,6 +186,8 @@ export const createRedeemBatch = (payload: { amount_ks: number; mode: 'single' |
   api.post('/redeems/batch', payload).then((r) => r.data)
 
 export const fetchCustomers = () => api.get('/customers').then((r) => r.data)
+export const fetchCustomerDetail = (chatId: string) =>
+  api.get(`/customers/${encodeURIComponent(chatId)}`).then((r) => r.data)
 export const adjustBalance = (chatId: string, payload: { adjustment_type: 'TOPUP' | 'DEDUCT'; amount_ks: number; reason?: string }) =>
   api.post(`/customers/${chatId}/balance`, payload).then((r) => r.data)
 

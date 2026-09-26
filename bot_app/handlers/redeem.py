@@ -6,6 +6,7 @@ from bot_app.handlers.common import send_force_join_message
 from bot_app.keyboards import get_back_inline_keyboard
 from bot_app.services.billing import get_user_balance_breakdown
 from bot_app.services.orders import save_user_id
+from bot_app.services.profiles import touch_user
 from bot_app.services.states import clear_all_states, set_redeem_state
 from bot_app.utils import is_user_subscribed
 
@@ -14,6 +15,7 @@ from bot_app.utils import is_user_subscribed
 def handle_redeem_command(message):
     chat_id = message.chat.id
     save_user_id(chat_id)
+    touch_user(message.from_user)
     clear_all_states(chat_id)
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)

@@ -155,8 +155,11 @@ const serverOptions = [
 ]
 
 
-async function loadKeys() {
-  loading.value = true
+async function loadKeys(opts?: { silent?: boolean }) {
+  // Silent mode = background refresh on a pushed change: update data in
+  // place without the NSpin overlay, so the list never dims or flickers.
+  const silent = opts?.silent ?? false
+  if (!silent) loading.value = true
   try {
     // Fetch the full set once; search, server, status filtering and pagination
     // are all handled client-side for instant response (no per-keystroke round trip).
@@ -166,7 +169,7 @@ async function loadKeys() {
   } catch (err: any) {
     message.error(err?.response?.data?.error || 'Failed to load access keys')
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 

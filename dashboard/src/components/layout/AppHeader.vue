@@ -14,6 +14,8 @@ import {
 
 defineProps<{
   refreshing?: boolean
+  /** Push-channel health: 'stream' = SSE live, 'poll' = fallback polling, 'off' = down. */
+  liveMode?: 'stream' | 'poll' | 'off'
 }>()
 const emit = defineEmits(['refresh', 'logout'])
 const { isCollapsed, toggle: toggleSidebar } = useSidebar()
@@ -85,12 +87,23 @@ onUnmounted(() => {
     </div>
 
     <div class="header-actions">
-      <!-- Live Indicator -->
-      <div class="status-pill">
-        <span class="pulse-dot"></span>
-        <span class="status-label desktop-only">LIVE</span>
-        <span class="status-label mobile-only">LIVE</span>
-      </div>
+      <!-- Live Indicator: reflects the actual push-channel state -->
+      <NTooltip trigger="hover">
+        <template #trigger>
+          <div class="status-pill" :class="`mode-${liveMode || 'off'}`">
+            <span class="pulse-dot"></span>
+            <span class="status-label desktop-only">{{ liveMode === 'poll' ? 'POLL' : liveMode === 'stream' ? 'LIVE' : 'OFF' }}</span>
+            <span class="status-label mobile-only">{{ liveMode === 'poll' ? 'POLL' : liveMode === 'stream' ? 'LIVE' : 'OFF' }}</span>
+          </div>
+        </template>
+        {{
+          liveMode === 'stream'
+            ? 'Live push connected — updates arrive instantly'
+            : liveMode === 'poll'
+              ? 'Push unavailable — checking for changes every 15s'
+              : 'Live sync offline'
+        }}
+      </NTooltip>
 
       <!-- Yangon Clock: Large Screen only -->
       <div class="clock-badge">
@@ -270,6 +283,33 @@ onUnmounted(() => {
   border: 1px solid rgba(16, 185, 129, 0.25);
   padding: 3px 8px;
   border-radius: 16px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+/* Push stream down → poll fallback (amber) or offline (gray) */
+.status-pill.mode-poll {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.status-pill.mode-poll .status-label,
+.status-pill.mode-poll .pulse-dot {
+  color: var(--warn);
+  background-color: var(--warn);
+  box-shadow: 0 0 6px var(--warn);
+}
+
+.status-pill.mode-off {
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+.status-pill.mode-off .status-label,
+.status-pill.mode-off .pulse-dot {
+  color: var(--text-3);
+  background-color: var(--text-3);
+  box-shadow: none;
+  animation: none;
 }
 
 .pulse-dot {
