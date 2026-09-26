@@ -1,6 +1,5 @@
 """Tests for Admin Customers and Wallet Balance adjustment endpoints."""
 
-import pytest
 from bot_app.services.billing import get_user_balance, update_user_balance
 
 ADMIN_ID = 111000111

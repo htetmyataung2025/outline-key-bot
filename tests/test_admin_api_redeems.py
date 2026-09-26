@@ -1,6 +1,5 @@
 """Tests for Admin Redeem Code Generation endpoints."""
 
-import pytest
 from bot_app.services.orders import load_redeem_codes
 
 ADMIN_ID = 111000111

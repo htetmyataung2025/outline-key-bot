@@ -56,7 +56,7 @@ def supabase_upsert(table: str, data: dict | list, on_conflict: str = "", timeou
         return None
     url, _ = get_supabase_config()
     headers = _headers()
-    headers["Prefer"] = f"resolution=merge-duplicates,return=representation"
+    headers["Prefer"] = "resolution=merge-duplicates,return=representation"
     params = {}
     if on_conflict:
         params["on_conflict"] = on_conflict

@@ -1,6 +1,5 @@
 """Tests for Admin Key Management endpoints."""
 
-import pytest
 from bot_app.services.registry import load_persistent_keys, save_persistent_key
 
 ADMIN_ID = 111000111

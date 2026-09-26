@@ -19,7 +19,7 @@ from bot_app.services.orders import (
     load_redeem_codes,
     save_redeem_codes,
 )
-from bot_app.services.registry import clean_key_label, load_persistent_keys, save_persistent_key, delete_persistent_key
+from bot_app.services.registry import clean_key_label, load_persistent_keys, delete_persistent_key
 from bot_app.services.slips import get_slip_by_id, get_slips_list, load_audit_logs, record_audit_log, review_slip
 from bot_app.timeutil import myanmar_now
 from bot_app.utils import generate_random_redeem_code

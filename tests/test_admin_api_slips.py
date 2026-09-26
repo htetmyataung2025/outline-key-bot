@@ -1,6 +1,5 @@
 """Tests for Admin Slips Verification Queue endpoints."""
 
-import pytest
 from bot_app.services.billing import get_user_balance
 from bot_app.services.slips import record_slip
 

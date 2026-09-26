@@ -1,7 +1,7 @@
 """One-click seed script to populate Supabase system_settings from current local env."""
 
 import sys
-from bot_app.storage.supabase import is_supabase_configured, supabase_get, supabase_upsert
+from bot_app.storage.supabase import is_supabase_configured, supabase_get
 from bot_app.services.settings import _get_default_settings, save_system_settings
 
 
