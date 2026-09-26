@@ -316,7 +316,7 @@ def handle_buy_with_wallet(call):
         try:
             bot.send_message(
                 aid,
-                f"🛍️ <b>Custromer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
+                f"🛍️ <b>Customer ကီးဝယ်ယူသွားပါပြီခင်ဗျာ။</b>\n\n"
                 f"🧾 Order ID: <code>{order_id}</code>\n"
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
