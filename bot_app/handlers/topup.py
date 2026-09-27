@@ -12,10 +12,10 @@ from bot_app.services.billing import update_user_balance
 from bot_app.services.ocr import extract_order_id_and_tx
 from bot_app.services.orders import load_all_users, save_user_id
 from bot_app.services.profiles import touch_user
-from bot_app.services.slips import record_audit_log, record_slip, review_slip
+from bot_app.services.slips import get_slip_by_id, record_audit_log, record_slip, review_slip
 from bot_app.services.states import (
     get_broadcast_state,
-    get_topup_state, set_broadcast_state, set_custom_topup_state, set_topup_state,
+    get_topup_state, set_admin_reject_state, set_broadcast_state, set_custom_topup_state, set_topup_state,
 )
 from bot_app.utils import is_user_subscribed
 
@@ -113,6 +113,37 @@ def handle_approve_topup(call):
         pass
 
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("reject_topup_"))
+def handle_reject_topup_start(call):
+    """First step of a Telegram-side rejection: park the slip in a per-admin
+    state and ask for the reason (the next text that admin sends). The actual
+    rejection runs in menu.handle_all_messages once the reason arrives —
+    review_slip then syncs every admin notification, notifies the customer
+    and audits SLIP_REJECT, exactly like the dashboard path."""
+    bot.answer_callback_query(call.id)
+
+    if str(call.message.chat.id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+
+    topup_id = call.data[len("reject_topup_"):]
+    slip = get_slip_by_id(topup_id)
+    if not slip:
+        bot.answer_callback_query(call.id, "⚠️ Slip ကို review queue ထဲ ရှာမတွေ့ပါခင်ဗျာ။", show_alert=True)
+        return
+    if slip.get("status") != "PENDING":
+        bot.answer_callback_query(call.id, f"⚠️ ဒီ slip ကို {slip.get('status')} အဖြစ် သတ်မှတ်ပြီးသား ဖြစ်ပါသည်။", show_alert=True)
+        return
+
+    set_admin_reject_state(call.from_user.id, {"slip_id": topup_id})
+    bot.send_message(
+        call.message.chat.id,
+        f"❌ <b>Top-Up ID: <code>{topup_id}</code> ကို ပယ်ဖျက်မည်။</b>\n\n"
+        f"👇 ပယ်ဖျက်ရခြင်း အကြောင်းပြချက် (Reason) ကို ရိုက်ပို့ပေးပါခင်ဗျာ။\n"
+        f"<i>နှင့်ထုတ်ရန် — <code>/cancel_reject</code> ဟု ရိုက်ပါ။</i>",
+        parse_mode="HTML",
+    )
+
+
 @bot.message_handler(content_types=['photo'])
 def handle_photo_messages(message):
     chat_id = message.chat.id
@@ -168,11 +199,12 @@ def handle_photo_messages(message):
         f"👤 အသုံးပြုသူ: {user_name} ({username})\n\n"
         f"💵 ဖြည့်သွင်းငွေပမာဏ: <b>{topup_amt:,} MMK</b>\n\n"
         f"🆔 User Chat ID: <code>{chat_id}</code>\n\n"
-        f"<i>စစ်ဆေးပြီးပါက အောက်ပါ Approve ခလုတ်ကို နှိပ်၍ ငွေထည့်သွင်းပေးပါခင်ဗျာ။</i>"
+        f"<i>စစ်ဆေးပြီးပါက အောက်ပါ Approve / Reject ခလုတ်များဖြင့် သတ်မှတ်ပေးပါခင်ဗျာ။</i>"
     )
-    
+
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(f"✅ Approve (+{topup_amt:,} MMK)", callback_data=f"approve_topup_{chat_id}_{topup_amt}_{topup_id}"))
+    markup.add(InlineKeyboardButton("❌ Reject", callback_data=f"reject_topup_{topup_id}"))
 
     admin_messages = []
     for aid in ADMIN_CHAT_IDS:

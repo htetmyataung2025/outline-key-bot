@@ -170,6 +170,8 @@ class BotMock:
 
     def _send_photo(self, chat_id, photo, *args, **kwargs):
         self.calls["send_photo"].append((chat_id, photo))
+        # Handlers attach the approve/reject inline keyboard here.
+        self.last_send_photo_kwargs = kwargs
         # Real TeleBot returns the sent Message; handlers may record its id.
         self._photo_seq = getattr(self, "_photo_seq", 0) + 1
         return SimpleNamespace(

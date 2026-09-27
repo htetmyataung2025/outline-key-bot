@@ -6,8 +6,10 @@ from types import SimpleNamespace
 
 from bot_app.services.billing import get_user_balance, update_user_balance
 from bot_app.services.orders import load_redeem_codes
-from bot_app.services.slips import load_audit_logs, record_slip
-from bot_app.services.states import set_admin_deduct_state, set_broadcast_state
+from bot_app.services.slips import get_slip_by_id, load_audit_logs, record_slip, review_slip
+from bot_app.services.states import (
+    get_admin_reject_state, set_admin_deduct_state, set_broadcast_state,
+)
 
 ADMIN_ID = 111000111
 CUSTOMER_ID = 555444333
@@ -154,3 +156,76 @@ def test_text_broadcast_audits_admin(mock_bot, isolated_state, monkeypatch):
     assert "📢 hello everyone" in user_received
     admin_received = [m[1] for m in mock_bot.calls["send_message"] if str(m[0]) == str(ADMIN_ID)]
     assert all("hello everyone" not in t for t in admin_received)
+
+
+# ── Telegram slip rejection (parity with the dashboard) ───────────────────
+
+def test_admin_notification_keyboard_has_reject_button(mock_bot, isolated_state, monkeypatch):
+    from bot_app.handlers import topup
+
+    monkeypatch.setattr(topup, "extract_order_id_and_tx", lambda file_path=None: ("#KKBTEST", "123456"))
+    photo_message = SimpleNamespace(
+        content_type="photo",
+        chat=SimpleNamespace(id=CUSTOMER_ID),
+        from_user=SimpleNamespace(id=CUSTOMER_ID, first_name="Buyer", last_name="", username="buyer"),
+        photo=[SimpleNamespace(file_id="photo-file-id")],
+        caption="receipt",
+    )
+    topup.handle_photo_messages(photo_message)
+
+    assert mock_bot.calls["send_photo"], "admin notification was not sent"
+    markup = mock_bot.last_send_photo_kwargs["reply_markup"]
+    buttons = [btn for row in markup.keyboard for btn in row]
+    assert any("Approve" in b.text for b in buttons)
+    assert any(b.text == "❌ Reject" and b.callback_data.startswith("reject_topup_") for b in buttons)
+
+
+def test_telegram_reject_flow_rejects_slip(mock_bot, isolated_state):
+    from bot_app.handlers.menu import handle_all_messages
+    from bot_app.handlers.topup import handle_reject_topup_start
+
+    record_slip(slip_id="SLIP-REJ-1", chat_id=CUSTOMER_ID, amount=4000, username="buyer")
+
+    # Step 1: pressing ❌ Reject parks the slip and asks for a reason.
+    handle_reject_topup_start(_admin_callback("reject_topup_SLIP-REJ-1", message_id=11))
+    assert get_admin_reject_state(ADMIN_ID) == {"slip_id": "SLIP-REJ-1"}
+
+    # Step 2: the admin's next text is the rejection reason.
+    handle_all_messages(_admin_message("ဘယ်သူ့မှ လွှဲထားတာ မတွေ့လို့ပါ"))
+
+    slip = get_slip_by_id("SLIP-REJ-1")
+    assert slip["status"] == "REJECTED"
+    assert slip["reviewed_by"] == str(ADMIN_ID)
+    assert get_user_balance(CUSTOMER_ID) == 0  # a reject must never credit
+    entry = _last_audit("SLIP_REJECT")
+    assert entry["admin_id"] == str(ADMIN_ID)
+    assert get_admin_reject_state(ADMIN_ID) is None
+    sent_to = [str(m[0]) for m in mock_bot.calls["send_message"]]
+    assert str(CUSTOMER_ID) in sent_to  # customer was notified
+
+
+def test_reject_start_on_reviewed_slip_shows_alert(mock_bot, isolated_state):
+    from bot_app.handlers.topup import handle_reject_topup_start
+
+    record_slip(slip_id="SLIP-REJ-2", chat_id=CUSTOMER_ID, amount=1000, username="buyer")
+    review_slip("SLIP-REJ-2", "APPROVE", reviewed_by=ADMIN_ID)
+
+    answers_before = len(mock_bot.calls["answer_callback"])
+    handle_reject_topup_start(_admin_callback("reject_topup_SLIP-REJ-2", message_id=12))
+
+    assert get_admin_reject_state(ADMIN_ID) is None
+    answers = mock_bot.calls["answer_callback"][answers_before:]
+    assert any("APPROVED" in str(a) for a in answers)
+
+
+def test_cancel_reject_keeps_slip_pending(mock_bot, isolated_state):
+    from bot_app.handlers.menu import handle_all_messages
+    from bot_app.handlers.topup import handle_reject_topup_start
+
+    record_slip(slip_id="SLIP-REJ-3", chat_id=CUSTOMER_ID, amount=2000, username="buyer")
+    handle_reject_topup_start(_admin_callback("reject_topup_SLIP-REJ-3", message_id=13))
+
+    handle_all_messages(_admin_message("/cancel_reject"))
+
+    assert get_admin_reject_state(ADMIN_ID) is None
+    assert get_slip_by_id("SLIP-REJ-3")["status"] == "PENDING"

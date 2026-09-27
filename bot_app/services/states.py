@@ -60,6 +60,23 @@ def get_admin_deduct_state(admin_id):
     states = _load_states("admin_deduct_state", DEDUCT_STATE_FILE)
     return states.get(str(admin_id))
 
+# Slip-reject reason dialog state. Defined here as a module-level *_FILE
+# constant (not in storage/paths.py) so the test suite's isolated_state
+# sweep patches it like every other state file.
+ADMIN_REJECT_STATE_FILE = os.path.join(os.path.dirname(DEDUCT_STATE_FILE), "admin_reject_state.json")
+
+def set_admin_reject_state(admin_id, state_dict=None):
+    states = _load_states("admin_reject_state", ADMIN_REJECT_STATE_FILE)
+    if state_dict:
+        states[str(admin_id)] = state_dict
+    else:
+        states.pop(str(admin_id), None)
+    _save_states("admin_reject_state", ADMIN_REJECT_STATE_FILE, states)
+
+def get_admin_reject_state(admin_id):
+    states = _load_states("admin_reject_state", ADMIN_REJECT_STATE_FILE)
+    return states.get(str(admin_id))
+
 def set_topup_state(chat_id, amount):
     states = _load_states("user_topup_state", TOPUP_STATE_FILE)
     if amount is not None:

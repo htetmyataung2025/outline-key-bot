@@ -28,14 +28,14 @@ from bot_app.services.outline import (
     fetch_key_from_server, get_customer_summary_stats, get_servers_total_usage,
     search_users_by_query,
 )
-from bot_app.services.slips import record_audit_log
+from bot_app.services.slips import record_audit_log, review_slip
 from bot_app.services.registry import save_persistent_key
 from bot_app.services.reports import get_monthly_revenue_report
 from bot_app.services.profiles import touch_user
 from bot_app.services.states import (
-    clear_all_states, get_admin_deduct_state, get_broadcast_state, get_custom_topup_state,
+    clear_all_states, get_admin_deduct_state, get_admin_reject_state, get_broadcast_state, get_custom_topup_state,
     get_manual_dispatch_state, get_redeem_state, get_replacement_state, get_search_state,
-    set_admin_deduct_state, set_broadcast_state, set_custom_topup_state,
+    set_admin_deduct_state, set_admin_reject_state, set_broadcast_state, set_custom_topup_state,
     set_manual_dispatch_state, set_redeem_state, set_replacement_state, set_search_state,
     set_topup_state,
 )
@@ -73,6 +73,33 @@ def handle_all_messages(message):
             return
         else:
             bot.reply_to(message, "❌ ဂဏန်းသီးသန့် (ဥပမာ- <code>15000</code>) သာ ရိုက်ထည့်ပေးပါခင်ဗျာ:", parse_mode="HTML")
+            return
+
+    # ❌ Admin Slip Reject Reason Handler — the second step of the Telegram
+    # reject flow started by the "❌ Reject" button (topup.handle_reject_topup_start).
+    if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        reject_state = get_admin_reject_state(chat_id)
+        if reject_state:
+            topup_id = reject_state.get("slip_id")
+            if input_value.strip() == "/cancel_reject":
+                set_admin_reject_state(chat_id, None)
+                bot.reply_to(message, "✅ Slip ပယ်ဖျက်ခြင်း ပယ်ဖျက်လိုက်ပါပြီခင်ဗျာ။", parse_mode="HTML")
+                return
+            set_admin_reject_state(chat_id, None)
+            result = review_slip(topup_id, "REJECT", reviewed_by=message.from_user.id, reason=input_value.strip())
+            if result.get("success"):
+                bot.reply_to(
+                    message,
+                    f"❌ <b>Top-Up ID: <code>{topup_id}</code> ကို ပယ်ဖျက်ပြီးပါပြီ။</b>\n"
+                    f"👤 Customer ထံ အသိပေးစာ ရောက်ရှိသွားပါမည်။",
+                    parse_mode="HTML",
+                )
+            else:
+                bot.reply_to(
+                    message,
+                    f"⚠️ ပယ်ဖျက်မရပါ — {result.get('error', 'unknown error')}",
+                    parse_mode="HTML",
+                )
             return
 
     # 💸 Admin ငွေနှုတ်သည့် Dialog State Handler
