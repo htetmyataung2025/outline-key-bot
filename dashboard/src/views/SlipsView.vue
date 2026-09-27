@@ -8,6 +8,7 @@ import {
   triggerHapticNotification,
 } from '@/api'
 import { formatAdminId } from '@/format'
+import { usePagedList } from '@/composables/usePagedList'
 import {
   NCard,
   NTabs,
@@ -17,6 +18,7 @@ import {
   NModal,
   NInput,
   NEmpty,
+  NPagination,
   useMessage,
 } from 'naive-ui'
 import {
@@ -30,6 +32,13 @@ const message = useMessage()
 const currentTab = ref('PENDING')
 const loading = ref(false)
 const slips = ref<any[]>([])
+
+// The queue accumulates APPROVED/REJECTED history — paginate like the
+// customer list instead of rendering every slip ever submitted.
+const {
+  page: slipPage, pageSize: slipPageSize, paged: pagedSlips,
+  count: slipCount, rangeStart: slipRangeStart, rangeEnd: slipRangeEnd,
+} = usePagedList(slips)
 
 // Reject modal state
 const showRejectModal = ref(false)
@@ -198,7 +207,7 @@ defineExpose({ loadData: loadSlips })
           <span class="cell c-actions">Actions</span>
         </div>
 
-        <div v-for="slip in slips" :key="slip.id" class="table-row">
+        <div v-for="slip in pagedSlips" :key="slip.id" class="table-row">
           <div class="cell c-slip">
             <button class="slip-thumb" aria-label="View receipt image" @click="viewImage(slip)">
               <img
@@ -274,6 +283,11 @@ defineExpose({ loadData: loadSlips })
               by {{ formatAdminId(slip.reviewed_by) }}<template v-if="slip.review_reason"> · “{{ slip.review_reason }}”</template>
             </span>
           </div>
+        </div>
+
+        <div v-if="slipCount > slipPageSize" class="pagination-bar">
+          <span class="result-count">Showing {{ slipRangeStart }}–{{ slipRangeEnd }} of {{ slipCount }}</span>
+          <NPagination v-model:page="slipPage" :item-count="slipCount" :page-size="slipPageSize" />
         </div>
       </div>
 
@@ -629,6 +643,20 @@ defineExpose({ loadData: loadSlips })
   padding: 48px 0;
   display: flex;
   justify-content: center;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.result-count {
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 /* ── Narrow column / tablet: drop the two secondary columns so the

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { fetchCustomerDetail, adjustBalance, triggerHaptic, triggerHapticNotification } from '@/api'
 import { avatarInitial, avatarGradient, displayName } from '@/composables/avatar'
 import { formatAdminId } from '@/format'
+import { usePagedList } from '@/composables/usePagedList'
 import {
   NButton,
   NSpin,
@@ -17,6 +18,7 @@ import {
   NRadioGroup,
   NRadioButton,
   NEmpty,
+  NPagination,
   useMessage,
 } from 'naive-ui'
 import {
@@ -41,6 +43,50 @@ const purchases = computed(() => detail.value?.purchases || [])
 const slips = computed(() => detail.value?.slips || [])
 const redeems = computed(() => detail.value?.redeems || [])
 const audit = computed(() => detail.value?.audit || [])
+
+// Paged record lists — every tab paginates at the bottom and scrolls inside
+// a fixed-height box, mirroring the customer list behaviour.
+const {
+  page: keysPage, pageSize: keysPageSize, paged: pagedKeys,
+  count: keysCount, rangeStart: keysRangeStart, rangeEnd: keysRangeEnd,
+} = usePagedList(keys)
+const {
+  page: purchasesPage, pageSize: purchasesPageSize, paged: pagedPurchases,
+  count: purchasesCount, rangeStart: purchasesRangeStart, rangeEnd: purchasesRangeEnd,
+} = usePagedList(purchases)
+const {
+  page: slipsPage, pageSize: slipsPageSize, paged: pagedSlips,
+  count: slipsCount, rangeStart: slipsRangeStart, rangeEnd: slipsRangeEnd,
+} = usePagedList(slips)
+const {
+  page: redeemsPage, pageSize: redeemsPageSize, paged: pagedRedeems,
+  count: redeemsCount, rangeStart: redeemsRangeStart, rangeEnd: redeemsRangeEnd,
+} = usePagedList(redeems)
+const {
+  page: auditPage, pageSize: auditPageSize, paged: pagedAudit,
+  count: auditCount, rangeStart: auditRangeStart, rangeEnd: auditRangeEnd,
+} = usePagedList(audit)
+
+// Compact human-readable summary of an audit entry's details across every
+// action type (amount/reason plus the newer telegram-side detail fields).
+function auditDetailsText(a: any): string {
+  const d = a?.details || {}
+  const parts: string[] = []
+  if (d.amount != null && d.amount !== '') parts.push(`${Number(d.amount).toLocaleString()} Ks`)
+  if (d.reason) parts.push(d.reason)
+  if (d.mode) parts.push(d.mode)
+  if (d.count != null) parts.push(`${d.count} code${Number(d.count) === 1 ? '' : 's'}`)
+  if (d.server) parts.push(`Server ${d.server}`)
+  if (d.gb != null) parts.push(`${d.gb} GB`)
+  if (d.days != null) parts.push(`${d.days} days`)
+  if (d.message_type) parts.push(d.message_type)
+  if (d.recipients != null) parts.push(`${d.sent ?? 0}/${d.recipients} sent`)
+  if (d.requested != null && Number(d.requested) !== Number(d.amount)) {
+    parts.push(`requested ${Number(d.requested).toLocaleString()} Ks`)
+  }
+  if (d.legacy) parts.push('legacy slip')
+  return parts.join(' · ')
+}
 
 // Adjust modal
 const showAdjustModal = ref(false)
@@ -209,7 +255,7 @@ defineExpose({ loadData: loadDetail })
                     <tr><th>Name</th><th>Server</th><th>Expires</th><th>Key ID</th><th></th></tr>
                   </thead>
                   <tbody>
-                    <tr v-for="k in keys" :key="`${k.server}_${k.key_id}`">
+                    <tr v-for="k in pagedKeys" :key="`${k.server}_${k.key_id}`">
                       <td class="rec-strong">{{ k.label || k.name || '—' }}</td>
                       <td>Server {{ k.server }}</td>
                       <td class="font-mono">{{ k.expire_date || 'N/A' }}</td>
@@ -223,7 +269,11 @@ defineExpose({ loadData: loadDetail })
                   </tbody>
                 </table>
               </div>
-              <NEmpty v-else description="No access keys for this user" class="rec-empty" />
+              <div v-if="keysCount > keysPageSize" class="rec-pagination">
+                <span class="rec-page-info">Showing {{ keysRangeStart }}–{{ keysRangeEnd }} of {{ keysCount }}</span>
+                <NPagination v-model:page="keysPage" :item-count="keysCount" :page-size="keysPageSize" simple />
+              </div>
+              <NEmpty v-else-if="!keys.length" description="No access keys for this user" class="rec-empty" />
             </NTabPane>
 
             <NTabPane name="purchases" :tab="`Purchases (${purchases.length})`">
@@ -233,7 +283,7 @@ defineExpose({ loadData: loadDetail })
                     <tr><th>Plan</th><th>Data</th><th>Months</th><th>Price</th><th>Expires</th><th>Date</th></tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(p, i) in purchases" :key="i">
+                    <tr v-for="(p, i) in pagedPurchases" :key="i">
                       <td class="rec-strong">{{ p.plan_name || '—' }}</td>
                       <td>{{ p.disp_gb || '—' }}</td>
                       <td>{{ p.months || 1 }}</td>
@@ -244,7 +294,11 @@ defineExpose({ loadData: loadDetail })
                   </tbody>
                 </table>
               </div>
-              <NEmpty v-else description="No purchase history" class="rec-empty" />
+              <div v-if="purchasesCount > purchasesPageSize" class="rec-pagination">
+                <span class="rec-page-info">Showing {{ purchasesRangeStart }}–{{ purchasesRangeEnd }} of {{ purchasesCount }}</span>
+                <NPagination v-model:page="purchasesPage" :item-count="purchasesCount" :page-size="purchasesPageSize" simple />
+              </div>
+              <NEmpty v-else-if="!purchases.length" description="No purchase history" class="rec-empty" />
             </NTabPane>
             <NTabPane name="slips" :tab="`Payment Slips (${slips.length})`">
               <div v-if="slips.length" class="rec-scroll">
@@ -253,7 +307,7 @@ defineExpose({ loadData: loadDetail })
                     <tr><th>Slip ID</th><th>Amount</th><th>Status</th><th>Tx ID</th><th>Submitted</th></tr>
                   </thead>
                   <tbody>
-                    <tr v-for="s in slips" :key="s.id">
+                    <tr v-for="s in pagedSlips" :key="s.id">
                       <td class="font-mono rec-strong">{{ s.id }}</td>
                       <td class="font-mono rec-amount">+{{ (s.amount || 0).toLocaleString() }}</td>
                       <td><span class="status-pill" :class="String(s.status).toLowerCase()">{{ s.status }}</span></td>
@@ -263,7 +317,11 @@ defineExpose({ loadData: loadDetail })
                   </tbody>
                 </table>
               </div>
-              <NEmpty v-else description="No payment slips" class="rec-empty" />
+              <div v-if="slipsCount > slipsPageSize" class="rec-pagination">
+                <span class="rec-page-info">Showing {{ slipsRangeStart }}–{{ slipsRangeEnd }} of {{ slipsCount }}</span>
+                <NPagination v-model:page="slipsPage" :item-count="slipsCount" :page-size="slipsPageSize" simple />
+              </div>
+              <NEmpty v-else-if="!slips.length" description="No payment slips" class="rec-empty" />
             </NTabPane>
 
             <NTabPane name="redeems" :tab="`Redeems (${redeems.length})`">
@@ -273,7 +331,7 @@ defineExpose({ loadData: loadDetail })
                     <tr><th>Code</th><th>Amount</th><th>Validity</th><th>Mode</th></tr>
                   </thead>
                   <tbody>
-                    <tr v-for="r in redeems" :key="r.code">
+                    <tr v-for="r in pagedRedeems" :key="r.code">
                       <td class="font-mono rec-strong">{{ r.code }}</td>
                       <td class="font-mono rec-amount">+{{ (r.amount || 0).toLocaleString() }}</td>
                       <td>{{ r.valid_days || 0 }} days</td>
@@ -282,7 +340,11 @@ defineExpose({ loadData: loadDetail })
                   </tbody>
                 </table>
               </div>
-              <NEmpty v-else description="No redeemed codes tracked" class="rec-empty" />
+              <div v-if="redeemsCount > redeemsPageSize" class="rec-pagination">
+                <span class="rec-page-info">Showing {{ redeemsRangeStart }}–{{ redeemsRangeEnd }} of {{ redeemsCount }}</span>
+                <NPagination v-model:page="redeemsPage" :item-count="redeemsCount" :page-size="redeemsPageSize" simple />
+              </div>
+              <NEmpty v-else-if="!redeems.length" description="No redeemed codes tracked" class="rec-empty" />
             </NTabPane>
 
             <NTabPane name="audit" :tab="`Audit Log (${audit.length})`">
@@ -292,11 +354,10 @@ defineExpose({ loadData: loadDetail })
                     <tr><th>Action</th><th>Details</th><th>By</th><th>Time</th></tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(a, i) in audit" :key="i">
+                    <tr v-for="a in pagedAudit" :key="a.timestamp + a.action + a.target_id">
                       <td><span class="action-pill">{{ a.action }}</span></td>
                       <td class="rec-muted rec-details">
-                        <template v-if="a.details && a.details.amount">{{ a.details.amount.toLocaleString() }} Ks</template>
-                        <template v-if="a.details && a.details.reason"> · {{ a.details.reason }}</template>
+                        <div class="clamp-2">{{ auditDetailsText(a) }}</div>
                       </td>
                       <td><span class="id-chip font-mono">{{ formatAdminId(a.admin_id) }}</span></td>
                       <td class="rec-muted">{{ a.timestamp }}</td>
@@ -304,7 +365,11 @@ defineExpose({ loadData: loadDetail })
                   </tbody>
                 </table>
               </div>
-              <NEmpty v-else description="No audit entries" class="rec-empty" />
+              <div v-if="auditCount > auditPageSize" class="rec-pagination">
+                <span class="rec-page-info">Showing {{ auditRangeStart }}–{{ auditRangeEnd }} of {{ auditCount }}</span>
+                <NPagination v-model:page="auditPage" :item-count="auditCount" :page-size="auditPageSize" simple />
+              </div>
+              <NEmpty v-else-if="!audit.length" description="No audit entries" class="rec-empty" />
             </NTabPane>
           </NTabs>
         </section>
@@ -627,6 +692,31 @@ defineExpose({ loadData: loadDetail })
 .rec-details {
   white-space: normal;
   min-width: 160px;
+  max-width: 420px;
+}
+
+/* Long details wrap to a second line, then truncate with an ellipsis */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.rec-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 2px;
+}
+
+.rec-page-info {
+  font-size: 12px;
+  color: var(--text-4);
+  white-space: nowrap;
 }
 
 .rec-empty {
