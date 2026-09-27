@@ -3,6 +3,7 @@
 import json
 import queue
 from datetime import datetime, timedelta
+from urllib.parse import unquote
 
 import requests
 from flask import Blueprint, Response, g, jsonify, request, stream_with_context
@@ -123,10 +124,19 @@ def list_slips():
 
 @admin_bp.route("/slips/<slip_id>", methods=["GET"])
 def get_slip(slip_id):
-    slip = get_slip_by_id(slip_id)
+    slip = get_slip_by_id(_real_slip_id(slip_id))
     if not slip:
         return jsonify({"error": "Slip not found"}), 404
     return jsonify(slip), 200
+
+
+def _real_slip_id(raw: str) -> str:
+    """Undo any residual percent-encoding of '#' in the path parameter.
+
+    Slip ids look like '#082412'; browsers send '%23', and some runtimes
+    (Vercel) hand the encoded segment to Flask untouched.
+    """
+    return unquote(raw or "")
 
 
 @admin_bp.route("/slips/<slip_id>/image", methods=["GET"])
@@ -138,7 +148,7 @@ def slip_image(slip_id):
     blob. Telegram download links expire after ~1h, hence the per-request
     ``get_file`` call; the response is cached privately for an hour.
     """
-    slip = get_slip_by_id(slip_id)
+    slip = get_slip_by_id(_real_slip_id(slip_id))
     if not slip:
         return jsonify({"error": "Slip not found"}), 404
 
@@ -176,7 +186,7 @@ def review_slip_endpoint(slip_id):
         return jsonify({"error": "Action must be 'APPROVE' or 'REJECT'"}), 400
 
     admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
-    result = review_slip(slip_id, action=action, reviewed_by=admin_id, reason=reason)
+    result = review_slip(_real_slip_id(slip_id), action=action, reviewed_by=admin_id, reason=reason)
 
     if not result.get("success"):
         return jsonify(result), result.get("code", 400)

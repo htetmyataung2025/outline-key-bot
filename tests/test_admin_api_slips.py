@@ -104,3 +104,69 @@ def test_slip_review_idempotency(client, make_telegram_init_data, mock_bot):
     )
     assert resp2.status_code == 400
     assert "already APPROVED" in resp2.json["error"]
+
+
+# --- Regression: '#' in slip ids must survive URL encoding on Vercel ---------
+# Browsers encode '#082412' as '%23082412'; Vercel hands the encoded segment
+# to Flask undecoded, so every slip lookup 404'd on production (image, detail,
+# review) even though the queue list worked.
+
+def test_hash_prefixed_slip_id_reached_encoded(client, make_telegram_init_data, mock_bot, monkeypatch):
+    from bot_app.routes_admin import requests as admin_requests
+
+    class _Resp:
+        status_code = 200
+        content = b"JPEGBYTES"
+
+    monkeypatch.setattr(admin_requests, "get", lambda url, **kw: _Resp())
+    init_data = make_telegram_init_data(user_id=ADMIN_ID)
+    headers = {"X-Telegram-Init-Data": init_data}
+
+    record_slip(slip_id="#082412", chat_id=CUSTOMER_ID, amount=2000,
+                username="@Ko_Nyein_Maung", file_id="AgACTESTFILEID")
+
+    resp = client.get("/api/admin/slips/%23082412", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json["id"] == "#082412"
+
+    resp_img = client.get("/api/admin/slips/%23082412/image", headers=headers)
+    assert resp_img.status_code == 200
+    assert resp_img.data == b"JPEGBYTES"
+
+    resp_review = client.post(
+        "/api/admin/slips/%23082412/review",
+        json={"action": "APPROVE", "reason": "ok"},
+        headers=headers,
+    )
+    assert resp_review.status_code == 200
+    assert resp_review.json["action"] == "APPROVED"
+
+
+def test_vercel_middleware_decodes_encoded_forwarded_path():
+    from bot_app.routes import VercelPathFixMiddleware
+
+    captured = {}
+
+    def fake_app(environ, start_response):
+        captured["path"] = environ["PATH_INFO"]
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [b"ok"]
+
+    wsgi = VercelPathFixMiddleware(fake_app)
+
+    # Vercel rewrite destination + raw (still-encoded) forwarded URI
+    environ = {"PATH_INFO": "/api/index.py",
+               "HTTP_X_MATCHED_PATH": "/api/admin/slips/%23082412/image"}
+    wsgi(environ, lambda *a: None)
+    assert captured["path"] == "/api/admin/slips/#082412/image"
+
+    # Already-decoded path must pass through untouched (no double decode)
+    environ2 = {"PATH_INFO": "/api/index.py",
+                "HTTP_X_MATCHED_PATH": "/api/admin/slips/#082412/image"}
+    wsgi(environ2, lambda *a: None)
+    assert captured["path"] == "/api/admin/slips/#082412/image"
+
+    # Non-rewrite paths are left alone
+    environ3 = {"PATH_INFO": "/api/admin/slips/%23082412/image"}
+    wsgi(environ3, lambda *a: None)
+    assert captured["path"] == "/api/admin/slips/%23082412/image"

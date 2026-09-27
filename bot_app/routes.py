@@ -153,6 +153,13 @@ class VercelPathFixMiddleware:
     def __call__(self, environ, start_response):
         matched = environ.get("HTTP_X_MATCHED_PATH") or environ.get("HTTP_X_FORWARDED_URI")
         if matched and environ.get("PATH_INFO") in ("/api/index.py", "/index.py"):
+            # Vercel forwards the RAW request-target, still percent-encoded
+            # (e.g. %23 for '#'). WSGI requires a DECODED PATH_INFO — Flask's
+            # own dev server decodes, which is why these routes worked locally
+            # but 404'd on production ("Slip not found" for id '#082412').
+            if "%" in matched:
+                from urllib.parse import unquote
+                matched = unquote(matched)
             environ["PATH_INFO"] = matched
         return self.wsgi_app(environ, start_response)
 
