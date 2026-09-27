@@ -12,6 +12,12 @@ from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 
 from bot_app.config import ADMIN_CHAT_IDS, TELEGRAM_TOKEN
 from bot_app.helpers.auth import check_admin_credentials, require_admin_api
+from bot_app.helpers.rate_limit import (
+    clear_login_attempts,
+    client_ip_from_headers,
+    login_rate_limit_window,
+    register_login_attempt,
+)
 from bot_app.helpers.sse import consume_ticket, issue_ticket
 from bot_app.services.admin_telemetry import get_admin_overview_telemetry, reset_telemetry_cache
 from bot_app.storage import versioning
@@ -65,8 +71,11 @@ def admin_login():
 
     The dashboard (browser AND Telegram Mini App) posts the Admin's Telegram
     ID plus the shared secret password here before storing the pair for its
-    authenticated API calls. Returns 403 for an unregistered ID, 401 for a
-    wrong password.
+    authenticated API calls. Brute-force guard: every attempt counts against
+    a per-IP fixed-window counter (Upstash INCR, in-memory fallback); once
+    over the limit the request is answered 429 before the password is even
+    compared, and a successful login clears the counter. Returns 403 for an
+    unregistered ID, 401 for a wrong password.
     """
     data = request.get_json(silent=True) or {}
     admin_id = str(data.get("admin_id", "")).strip()
@@ -74,9 +83,20 @@ def admin_login():
     if not admin_id or not password:
         return jsonify({"error": "admin_id and password are required"}), 400
 
+    ip = client_ip_from_headers(request.headers)
+    _count, exceeded = register_login_attempt(ip)
+    if exceeded:
+        minutes = max(1, login_rate_limit_window() // 60)
+        resp = jsonify({
+            "error": f"Too many login attempts. Try again in about {minutes} minute(s)."
+        })
+        resp.headers["Retry-After"] = str(login_rate_limit_window())
+        return resp, 429
+
     failure = check_admin_credentials(admin_id, password)
     if failure:
         return jsonify({"error": failure[1]}), failure[0]
+    clear_login_attempts(ip)
     return jsonify({"ok": True, "admin": {"id": admin_id}}), 200
 
 

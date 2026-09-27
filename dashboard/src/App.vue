@@ -41,6 +41,7 @@ function loginErrorMessage(err: any): string {
     return 'ဒီ Admin ID ကို ဝင်ရောက်ခွင့် မရှိပါ။'
   }
   if (status === 400) return err?.response?.data?.error || 'Admin ID နှင့် Password နှစ်ခုလုံး ဖြည့်သွင်းပါ။'
+  if (status === 429) return 'Login ကြိုးစားမှု များပြားနေပါသည်။ အချိန်အနည်းငယ် စောင့်ဆိုင်းပြီး ထပ်မံ ကြိုးစားပါ။'
   return err?.response?.data?.error || 'ဝင်ရောက်မှု မအောင်မြင်ပါ။ ထပ်မံ ကြိုးစားကြည့်ပါ။'
 }
 

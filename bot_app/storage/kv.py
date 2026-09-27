@@ -79,3 +79,50 @@ def redis_set(key, value):
     except Exception:
         return False
 
+
+def redis_increment_with_expiry(key, ttl_seconds):
+    """INCR ``key`` and keep a TTL on it (refreshed every call).
+
+    Used by rate limiting: the window then measures "since the last attempt",
+    and refreshing EXPIRE on every increment means a crash between the two
+    commands can never leave a TTL-less key behind (a permanent lockout).
+    Deliberately bypasses redis_set — counters must not bump the dashboard
+    data-version or trigger SSE refresh storms.
+
+    Returns the new count, or None when Redis is unconfigured/unreachable
+    (the caller decides how to degrade).
+    """
+    url, token = _kv_config()
+    if not url or not token:
+        return None
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        encoded_key = urllib.parse.quote(json.dumps(key), safe="")
+        res = get_session().post(f"{url}/incr/{encoded_key}", headers=headers, timeout=5)
+        if res.status_code != 200:
+            return None
+        count = int(res.json().get("result") or 0)
+        get_session().post(
+            f"{url}/expire/{encoded_key}/{int(ttl_seconds)}", headers=headers, timeout=5
+        )
+        return count
+    except Exception:
+        return None
+
+
+def redis_delete(key):
+    """DEL ``key``. True on success, False when unconfigured/unreachable."""
+    url, token = _kv_config()
+    if not url or not token:
+        return False
+    try:
+        encoded_key = urllib.parse.quote(json.dumps(key), safe="")
+        res = get_session().post(
+            f"{url}/del/{encoded_key}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        return res.status_code == 200
+    except Exception:
+        return False
+

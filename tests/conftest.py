@@ -60,6 +60,16 @@ def disable_external_network(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def reset_login_rate_limits():
+    """Keep the login rate limiter's in-memory counters from leaking between tests."""
+    from bot_app.helpers import rate_limit
+
+    rate_limit.reset_memory_store()
+    yield
+    rate_limit.reset_memory_store()
+
+
 @pytest.fixture()
 def isolated_state(tmp_path, monkeypatch):
     """Redirect every ``*_FILE`` constant to an empty tmp dir.
