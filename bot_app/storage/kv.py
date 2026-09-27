@@ -64,11 +64,15 @@ def redis_set(key, value):
     if not url or not token:
         return False
     try:
-        encoded_key = urllib.parse.quote(json.dumps(key))
-        encoded_val = urllib.parse.quote(json.dumps(value))
-        res = get_session().get(
-            f"{url}/set/{encoded_key}/{encoded_val}",
-            headers={"Authorization": f"Bearer {token}"},
+        # Value goes in the POST body, not the URL: urllib's percent-encoding
+        # leaves '/' intact by default, so any state blob whose content
+        # contains '/' made Upstash reject the GET command path with
+        # "ERR syntax error" and the write was silently lost.
+        encoded_key = urllib.parse.quote(json.dumps(key), safe="")
+        res = get_session().post(
+            f"{url}/set/{encoded_key}",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "text/plain"},
+            data=json.dumps(value),
             timeout=5,
         )
         return res.status_code == 200
