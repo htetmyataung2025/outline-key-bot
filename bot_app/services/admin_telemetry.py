@@ -183,15 +183,19 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
 
     # 2-4. Storage KPI reads are independent — fetch them concurrently
     #      (each is 1-2 KV round-trips; sequential they add up to seconds).
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    from bot_app.services.points import load_all_points
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
         f_sales = executor.submit(load_sales_history)
         f_keys = executor.submit(load_persistent_keys)
         f_users = executor.submit(load_all_users)
         f_slips = executor.submit(get_slips_list, "PENDING")
+        f_points = executor.submit(load_all_points)
         sales_history = f_sales.result()
         persistent_keys = f_keys.result()
         all_users = f_users.result()
         pending_slips_list = f_slips.result()
+        points_data = f_points.result()
 
     today_revenue = 0
     month_revenue = 0
@@ -223,6 +227,19 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
         {"timestamp": now.strftime("%Y-%m-%dT%H:00:00Z"), "used_gb": total_gb}
     ]
 
+    # 6. Loyalty-points KPIs (single cheap dict scan)
+    points_circulation = 0
+    points_holders = 0
+    points_starters_redeemed = 0
+    for rec in points_data.values():
+        if not isinstance(rec, dict):
+            continue
+        pts = int(rec.get("points", 0) or 0)
+        points_circulation += pts
+        if pts > 0:
+            points_holders += 1
+        points_starters_redeemed += int(rec.get("redeemed_count", 0) or 0)
+
     return {
         "servers": servers,
         "metrics": {
@@ -231,6 +248,9 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
             "pending_slips": pending_slips,
             "today_revenue_ks": today_revenue,
             "month_revenue_ks": month_revenue,
+            "points_circulation": points_circulation,
+            "points_holders": points_holders,
+            "points_starters_redeemed": points_starters_redeemed,
         },
         "traffic_trend": traffic_trend,
     }

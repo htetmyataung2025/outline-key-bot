@@ -221,6 +221,21 @@ defineExpose({
               <ArrowForwardOutline class="sub-arrow" />
             </div>
           </div>
+
+          <!-- KPI 5: Loyalty Points -->
+          <div class="kpi-card" @click="router.push('/customers')">
+            <div class="kpi-meta">
+              <span class="kpi-label">Points in Circulation</span>
+              <GiftOutline class="kpi-icon amber" />
+            </div>
+            <div class="kpi-value font-mono text-amber">
+              {{ (overviewData.metrics.points_circulation || 0).toLocaleString() }}
+            </div>
+            <div class="kpi-sub">
+              <span>{{ overviewData.metrics.points_holders || 0 }} holders · {{ overviewData.metrics.points_starters_redeemed || 0 }} redeemed</span>
+              <ArrowForwardOutline class="sub-arrow" />
+            </div>
+          </div>
         </div>
 
         <!-- ROW 2: Split Layout (Left: Servers, Right: Quick Panel) -->
@@ -545,11 +560,17 @@ defineExpose({
   gap: 16px;
 }
 
-/* 1. KPI Row: Desktop 4-col, Mobile 2x2 grid */
+/* 1. KPI Row: Desktop 5-col, Mobile 2x2 grid */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .kpi-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 @media (max-width: 900px) {

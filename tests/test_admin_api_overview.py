@@ -57,6 +57,9 @@ def test_admin_overview_telemetry(client, make_telegram_init_data, monkeypatch, 
     assert "metrics" in data
     assert "traffic_trend" in data
     assert data["metrics"]["pending_slips"] == 0
+    # Loyalty-points KPIs are always present in the metrics bundle.
+    for key in ("points_circulation", "points_holders", "points_starters_redeemed"):
+        assert key in data["metrics"]
     # Only the servers configured via the environment appear as nodes —
     # an unset OUTLINE_API_URL_* must never surface as a phantom server.
     assert {s["id"] for s in data["servers"]} == {1, 2}

@@ -183,14 +183,15 @@ Streak never expires the points, only affects that one bonus draw.
 
 1. **Core service + storage** (`points.py`, `paths.py`, config) + unit tests
    (cooldown math, weighted RNG bounds, cap/overflow, streak transitions,
-   top-up formula). Zero network.
-2. **Top-up hook** in `review_slip` + notice text + tests (approve credits
-   correct points, flips `has_topped_up`, dashboard path too).
+   top-up formula). Zero network. ✅ DONE
+2. **Top-up hook** in `review_slip` + notice text + tests. ✅ DONE
 3. **Bot claim + redeem UX** (keyboard, menu branch, callbacks, key
-   provisioning on redeem) + handler tests with `mock_bot`.
+   provisioning on redeem) + handler tests with `mock_bot`. ✅ DONE
 4. **Admin dashboard** (customer detail points + ledger + manual adjust
-   endpoint/modal, list column) + API tests.
-5. Overview KPI (optional), docs, deploy, live verify.
+   endpoint/modal, list column) + API tests. ✅ DONE (+ red Total Spent, UI
+   20k cap on grant, customer notification on admin adjust).
+5. Overview KPI (points circulation / holders / redeemed) ✅ DONE. Deploy +
+   live verify remain a manual step.
 
 ## 8. Open decisions
 

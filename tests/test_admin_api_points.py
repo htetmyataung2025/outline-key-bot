@@ -113,3 +113,19 @@ def test_admin_grant_on_admin_target_skips_notification(client, make_telegram_in
     assert resp.json["notified"] is False
     assert mock_bot.calls["send_message"] == []
 
+
+def test_overview_reports_points_kpis(client, make_telegram_init_data, mock_bot, monkeypatch):
+    # Neutralise live server probing so the overview endpoint stays network-free.
+    monkeypatch.setattr(
+        "bot_app.services.admin_telemetry.get_servers_telemetry", lambda *a, **k: []
+    )
+    credit_points(CUST_ID, 1200, "topup")
+    credit_points(999888777, 800, "topup")
+    resp = client.get("/api/admin/overview", headers=_hdr(make_telegram_init_data))
+    assert resp.status_code == 200
+    m = resp.json["metrics"]
+    assert m["points_circulation"] == 2000
+    assert m["points_holders"] == 2
+    assert m["points_starters_redeemed"] == 0
+
+
