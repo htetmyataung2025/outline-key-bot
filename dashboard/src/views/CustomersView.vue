@@ -882,7 +882,7 @@ defineExpose({ loadData: loadCustomers })
 }
 
 .spent-val {
-  color: var(--text-1);
+  color: #f87171;
   font-weight: 600;
   font-size: 13.5px;
 }

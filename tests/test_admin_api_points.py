@@ -84,3 +84,32 @@ def test_admin_grant_respects_cap(client, make_telegram_init_data, mock_bot):
     assert resp.status_code == 200
     assert resp.json["new_balance"] == POINTS_BALANCE_CAP
     assert resp.json["discarded"] == 400
+
+
+def test_admin_grant_notifies_customer(client, make_telegram_init_data, mock_bot):
+    resp = client.post(
+        f"/api/admin/customers/{CUST_ID}/points",
+        json={"adjustment_type": "GRANT", "amount": 300, "reason": "loyalty gift"},
+        headers=_hdr(make_telegram_init_data),
+    )
+    assert resp.status_code == 200
+    assert resp.json["notified"] is True
+    sent = mock_bot.calls["send_message"]
+    assert len(sent) == 1
+    chat_id, text = sent[0]
+    assert str(chat_id) == str(CUST_ID)
+    assert "Points ရရှိပါပြီ" in text
+    assert "+300" in text
+    assert "loyalty gift" in text
+
+
+def test_admin_grant_on_admin_target_skips_notification(client, make_telegram_init_data, mock_bot):
+    resp = client.post(
+        f"/api/admin/customers/{ADMIN_ID}/points",
+        json={"adjustment_type": "GRANT", "amount": 300},
+        headers=_hdr(make_telegram_init_data),
+    )
+    assert resp.status_code == 200
+    assert resp.json["notified"] is False
+    assert mock_bot.calls["send_message"] == []
+

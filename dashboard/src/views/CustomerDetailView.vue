@@ -137,10 +137,26 @@ const pointsForm = ref({
 })
 const isPointsDeduct = computed(() => pointsForm.value.adjustment_type === 'DEDUCT')
 const currentPoints = computed(() => Number(profile.value.points || 0))
-const pointsMax = computed(() => (isPointsDeduct.value ? currentPoints.value : 20000))
+const POINTS_CAP = 20000
+// Grant room left before hitting the 20,000 cap; deduct is bounded by balance.
+const pointsRoom = computed(() => Math.max(0, POINTS_CAP - currentPoints.value))
+const pointsMax = computed(() => (isPointsDeduct.value ? currentPoints.value : pointsRoom.value))
 const pointsDeductExceeds = computed(
   () => isPointsDeduct.value && Number(pointsForm.value.amount || 0) > currentPoints.value,
 )
+const pointsGrantExceeds = computed(
+  () => !isPointsDeduct.value && Number(pointsForm.value.amount || 0) > pointsRoom.value,
+)
+const pointsExceeds = computed(() => pointsDeductExceeds.value || pointsGrantExceeds.value)
+const pointsWarning = computed(() => {
+  if (pointsDeductExceeds.value)
+    return `⚠️ Points လက်ကျန် (${currentPoints.value.toLocaleString()}) ထက် ပို၍ နှုတ်ယူ၍ မရပါ။`
+  if (!isPointsDeduct.value && pointsRoom.value === 0)
+    return `⚠️ Points သည် အမြင့်ဆုံး ${POINTS_CAP.toLocaleString()} ပြည့်နေပြီ — ထပ်ထည့်၍ မရပါ။`
+  if (pointsGrantExceeds.value)
+    return `⚠️ Points သည် ${POINTS_CAP.toLocaleString()} ထက် မကျော်နိုင်ပါ (ထပ်ထည့်နိုင်သည်မှာ ${pointsRoom.value.toLocaleString()} သာ)။`
+  return ''
+})
 
 async function loadDetail(opts?: { silent?: boolean }) {
   const silent = opts?.silent ?? false
@@ -296,7 +312,7 @@ defineExpose({ loadData: loadDetail })
             </div>
             <div class="stat-row">
               <span class="stat-label"><CashOutline class="stat-icon" /> Total Spent</span>
-              <span class="stat-val text-emerald">{{ (profile.total_topup || 0).toLocaleString() }} MMK</span>
+              <span class="stat-val text-red">{{ (profile.total_topup || 0).toLocaleString() }} MMK</span>
             </div>
             <div class="stat-row">
               <span class="stat-label"><GiftOutline class="stat-icon" /> Points</span>
@@ -541,15 +557,15 @@ defineExpose({ loadData: loadDetail })
         <NFormItem label="Amount (pts)">
           <NInputNumber v-model:value="pointsForm.amount" :step="100" :min="1" :max="pointsMax" />
         </NFormItem>
-        <p v-if="pointsDeductExceeds" class="deduct-warning">
-          ⚠️ Points လက်ကျန် ({{ currentPoints.toLocaleString() }}) ထက် ပို၍ နှုတ်ယူ၍ မရပါ။
+        <p v-if="pointsWarning" class="deduct-warning">
+          {{ pointsWarning }}
         </p>
         <NFormItem label="Reason">
           <NInput v-model:value="pointsForm.reason" placeholder="e.g. Manual reward / correction" />
         </NFormItem>
         <div class="modal-actions">
           <NButton @click="showPointsModal = false">Cancel</NButton>
-          <NButton type="primary" :loading="pointsLoading" :disabled="pointsDeductExceeds" @click="handleAdjustPoints">
+          <NButton type="primary" :loading="pointsLoading" :disabled="pointsExceeds" @click="handleAdjustPoints">
             Confirm Adjustment
           </NButton>
         </div>
@@ -924,6 +940,11 @@ defineExpose({ loadData: loadDetail })
 
 .text-amber {
   color: #f59e0b;
+  font-weight: 600;
+}
+
+.text-red {
+  color: #f87171;
   font-weight: 600;
 }
 

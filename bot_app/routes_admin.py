@@ -873,13 +873,46 @@ def adjust_customer_points(chat_id):
 
     delta = amount if adj_type == "GRANT" else -amount
     result = admin_adjust_points(chat_id, delta, admin_id=current_admin_id(), reason=reason)
+    applied = int(result["applied"])
+
+    # Notify the customer on Telegram, just like a wallet top-up/deduct. Skipped
+    # for admin targets and no-op adjustments. Best-effort: a delivery failure
+    # must not fail the adjustment the admin already committed.
+    notified = False
+    reason_line = f"\n📝 အကြောင်းအရာ: {reason}" if reason and reason != "Admin manual points adjustment" else ""
+    if applied > 0:
+        notice = (
+            f"🎁 <b>Points ရရှိပါပြီ!</b>\n\n"
+            f"Admin မှ လူကြီးမင်း၏ account သို့ Points ထည့်သွင်းပေးလိုက်ပါသည်။\n\n"
+            f"➕ ရရှိသော Points: <b>+{applied:,}</b>\n"
+            f"💎 လက်ရှိ Points: <b>{result['new_balance']:,}</b>{reason_line}\n\n"
+            f"'🎁 Daily Reward' Menu မှ Points များ စစ်ဆေး၍ Starter Plan လဲယူနိုင်ပါသည်ခင်ဗျာ!"
+        )
+    elif applied < 0:
+        notice = (
+            f"⚠️ <b>Points ပြင်ဆင်မှု အသိပေးချက်</b>\n\n"
+            f"Admin မှ လူကြီးမင်း၏ Points မှ ပြန်လည် နှုတ်ယူလိုက်ပါသည်။\n\n"
+            f"➖ နှုတ်ယူ Points: <b>{abs(applied):,}</b>\n"
+            f"💎 လက်ရှိ Points: <b>{result['new_balance']:,}</b>{reason_line}"
+        )
+    else:
+        notice = ""
+
+    if notice and str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        try:
+            from bot_app.extensions import bot
+            bot.send_message(chat_id, notice, parse_mode="HTML")
+            notified = True
+        except Exception:
+            notified = False
 
     return jsonify({
         "success": True,
         "chat_id": str(chat_id),
         "new_balance": result["new_balance"],
-        "applied": result["applied"],
+        "applied": applied,
         "discarded": result["discarded"],
+        "notified": notified,
     }), 200
 
 
