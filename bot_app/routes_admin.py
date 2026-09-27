@@ -11,7 +11,7 @@ import requests
 from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 
 from bot_app.config import ADMIN_CHAT_IDS, TELEGRAM_TOKEN
-from bot_app.helpers.auth import check_admin_credentials, require_admin_api
+from bot_app.helpers.auth import check_admin_credentials, current_admin_id, require_admin_api
 from bot_app.helpers.rate_limit import (
     clear_login_attempts,
     client_ip_from_headers,
@@ -241,7 +241,7 @@ def review_slip_endpoint(slip_id):
     if not action or action.upper() not in ("APPROVE", "REJECT"):
         return jsonify({"error": "Action must be 'APPROVE' or 'REJECT'"}), 400
 
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
     result = review_slip(_real_slip_id(slip_id), action=action, reviewed_by=admin_id, reason=reason)
 
     if not result.get("success"):
@@ -339,7 +339,7 @@ def create_key_endpoint():
     if not result:
         return jsonify({"error": "Failed to create Outline key on server"}), 500
 
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
     record_audit_log(
         admin_id=admin_id,
         action="KEY_CREATE",
@@ -443,7 +443,7 @@ def extend_key_endpoint(key_id):
         pass
 
 
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
     record_audit_log(
         admin_id=admin_id,
         action="KEY_EXTEND",
@@ -476,7 +476,7 @@ def delete_key_endpoint(server_id, key_id):
 
     delete_persistent_key(server_id, key_id)
 
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
     record_audit_log(
         admin_id=admin_id,
         action="KEY_DELETE",
@@ -515,7 +515,7 @@ def delete_redeem_code(code):
         return jsonify({"error": "Redeem code not found"}), 404
     save_redeem_codes(codes)
 
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
     record_audit_log(
         admin_id=admin_id,
         action="REDEEM_DELETE",
@@ -539,7 +539,7 @@ def delete_redeem_batch():
         return jsonify({"error": "codes must be a non-empty list"}), 400
 
     codes = load_redeem_codes()
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
     deleted, not_found = [], []
     for code in targets:
         info = codes.pop(str(code), None)
@@ -602,7 +602,7 @@ def generate_redeem_batch():
 
     save_redeem_codes(codes_data)
 
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
     record_audit_log(
         admin_id=admin_id,
         action="REDEEM_BATCH_CREATE",
@@ -804,7 +804,7 @@ def adjust_customer_balance(chat_id):
         except Exception:
             notified = False
 
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
     record_audit_log(
         admin_id=admin_id,
         action=f"BALANCE_{adj_type}",
@@ -851,7 +851,7 @@ def get_settings_endpoint():
 def update_settings_endpoint():
     from bot_app.services.settings import save_system_settings
     data = request.get_json(silent=True) or {}
-    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    admin_id = current_admin_id()
 
     updated = save_system_settings(data, updated_by=admin_id)
     # Server list / names may have changed — drop cached telemetry so the next

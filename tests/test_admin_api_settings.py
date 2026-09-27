@@ -20,7 +20,7 @@ def test_settings_api_get_success(client, monkeypatch):
     monkeypatch.setenv("ADMIN_SECRET_KEY", "test-pin-123")
     resp = client.get(
         "/api/admin/settings",
-        headers={"Authorization": "Bearer test-pin-123"},
+        headers={"Authorization": "Bearer test-pin-123", "X-Admin-ID": "111000111"},
     )
     assert resp.status_code == 200
     data = resp.get_json()
@@ -41,7 +41,7 @@ def test_settings_api_update_success(client, monkeypatch):
     resp = client.post(
         "/api/admin/settings",
         json=update_payload,
-        headers={"Authorization": "Bearer test-pin-123"},
+        headers={"Authorization": "Bearer test-pin-123", "X-Admin-ID": "111000111"},
     )
     assert resp.status_code == 200
     res_data = resp.get_json()
@@ -57,7 +57,7 @@ def test_settings_api_test_server(client, monkeypatch):
     resp_invalid = client.post(
         "/api/admin/settings/test-server",
         json={"api_url": "ftp://bad-url"},
-        headers={"Authorization": "Bearer test-pin-123"},
+        headers={"Authorization": "Bearer test-pin-123", "X-Admin-ID": "111000111"},
     )
     assert resp_invalid.status_code == 200
     assert resp_invalid.get_json()["success"] is False
@@ -73,7 +73,7 @@ def test_settings_api_test_server(client, monkeypatch):
     resp_valid = client.post(
         "/api/admin/settings/test-server",
         json={"api_url": "https://sg1.example.com:443/secret"},
-        headers={"Authorization": "Bearer test-pin-123"},
+        headers={"Authorization": "Bearer test-pin-123", "X-Admin-ID": "111000111"},
     )
     assert resp_valid.status_code == 200
     assert resp_valid.get_json()["success"] is True
@@ -149,7 +149,7 @@ def test_servers_endpoint_lists_only_configured_servers(client, monkeypatch):
         },
     )
 
-    resp = client.get("/api/admin/servers", headers={"Authorization": "Bearer test-pin-123"})
+    resp = client.get("/api/admin/servers", headers={"Authorization": "Bearer test-pin-123", "X-Admin-ID": "111000111"})
     assert resp.status_code == 200
     servers = resp.get_json()["servers"]
     assert [s["id"] for s in servers] == [1, 2]

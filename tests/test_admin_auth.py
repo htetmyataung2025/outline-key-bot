@@ -93,19 +93,28 @@ def test_admin_api_unauthorized_when_no_auth_provided(auth_test_app):
 def test_admin_api_bearer_token_authentication(auth_test_app, monkeypatch):
     monkeypatch.setenv("ADMIN_SECRET_KEY", "super-secret-admin-pass-999")
 
-    # Valid secret
+    # The secret alone is no longer enough: the acting admin ID is mandatory
+    # so every audited action is attributable to a real admin.
     resp = auth_test_app.get(
         "/api/admin/test",
         headers={"Authorization": "Bearer super-secret-admin-pass-999"},
     )
-    assert resp.status_code == 200
-    assert resp.json["success"] is True
-    assert resp.json["admin"]["id"] == "desktop_admin"
+    assert resp.status_code == 403
+    assert "X-Admin-ID" in resp.json["error"]
 
-    # Invalid secret
+    # Secret + registered admin ID binds that identity.
+    resp_ok = auth_test_app.get(
+        "/api/admin/test",
+        headers={"Authorization": "Bearer super-secret-admin-pass-999", "X-Admin-ID": str(ADMIN_ID)},
+    )
+    assert resp_ok.status_code == 200
+    assert resp_ok.json["success"] is True
+    assert resp_ok.json["admin"]["id"] == str(ADMIN_ID)
+
+    # Invalid secret still rejected regardless of the header.
     resp_invalid = auth_test_app.get(
         "/api/admin/test",
-        headers={"Authorization": "Bearer wrong-password"},
+        headers={"Authorization": "Bearer wrong-password", "X-Admin-ID": str(ADMIN_ID)},
     )
     assert resp_invalid.status_code == 401
 

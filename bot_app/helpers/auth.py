@@ -120,12 +120,26 @@ def verify_telegram_init_data(init_data_raw: str, bot_token: str | None = None) 
     return None
 
 
+def current_admin_id() -> str:
+    """Actor ID for audit trails: the authenticated admin's Telegram ID.
+
+    Returns "unknown" only when no admin profile is bound to the request —
+    every ``@require_admin_api`` route binds one before the handler runs.
+    """
+    user = getattr(g, "admin_user", None)
+    if isinstance(user, dict) and user.get("id") is not None:
+        return str(user["id"])
+    return "unknown"
+
+
 def require_admin_api(f):
     """Flask decorator protecting Admin REST API endpoints.
 
     Requires either:
     - ``X-Telegram-Init-Data`` header with valid signature and admin user ID.
-    - ``Authorization: Bearer <ADMIN_SECRET_KEY>`` header.
+    - ``Authorization: Bearer <ADMIN_SECRET_KEY>`` header **plus**
+      ``X-Admin-ID`` naming a registered admin — so every audited action is
+      attributable to a real admin ID (no anonymous ``desktop_admin``).
 
     Attaches authenticated admin profile to ``flask.g.admin_user``.
     """
@@ -147,7 +161,7 @@ def require_admin_api(f):
             g.admin_user = user_obj
             return f(*args, **kwargs)
 
-        # 2. Check Desktop Web Bearer token fallback (+ optional Admin ID binding)
+        # 2. Check Desktop Web Bearer token fallback (must name the admin)
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
@@ -156,14 +170,13 @@ def require_admin_api(f):
                 return jsonify({"error": "Desktop admin access is not enabled. Set ADMIN_SECRET_KEY in .env"}), 403
             if hmac.compare_digest(token, secret):
                 admin_id = request.headers.get("X-Admin-ID", "").strip()
-                if admin_id:
-                    # The dashboard always identifies its logged-in admin; a
-                    # correct secret paired with a non-admin ID is rejected.
-                    if not admin_id.isdigit() or not is_admin(admin_id):
-                        return jsonify({"error": "Forbidden: This Admin ID is not authorized"}), 403
-                    g.admin_user = {"id": admin_id, "username": "Admin"}
-                else:
-                    g.admin_user = {"id": "desktop_admin", "username": "Admin"}
+                if not admin_id:
+                    return jsonify({
+                        "error": "X-Admin-ID header is required: log in via the Control Center (Admin ID + password)"
+                    }), 403
+                if not admin_id.isdigit() or not is_admin(admin_id):
+                    return jsonify({"error": "Forbidden: This Admin ID is not authorized"}), 403
+                g.admin_user = {"id": admin_id, "username": "Admin"}
                 return f(*args, **kwargs)
             return jsonify({"error": "Invalid admin token"}), 401
 
