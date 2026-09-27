@@ -197,6 +197,8 @@ export const fetchCustomerDetail = (chatId: string) =>
   api.get(`/customers/${encodeURIComponent(chatId)}`).then((r) => r.data)
 export const adjustBalance = (chatId: string, payload: { adjustment_type: 'TOPUP' | 'DEDUCT'; amount_ks: number; reason?: string }) =>
   api.post(`/customers/${chatId}/balance`, payload).then((r) => r.data)
+export const adjustPoints = (chatId: string, payload: { adjustment_type: 'GRANT' | 'DEDUCT'; amount: number; reason?: string }) =>
+  api.post(`/customers/${chatId}/points`, payload).then((r) => r.data)
 
 export const fetchSettings = () => api.get('/settings').then((r) => r.data)
 export const updateSettings = (payload: any) => api.post('/settings', payload).then((r) => r.data)

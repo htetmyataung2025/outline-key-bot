@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchCustomerDetail, adjustBalance, triggerHaptic, triggerHapticNotification } from '@/api'
+import { fetchCustomerDetail, adjustBalance, adjustPoints, triggerHaptic, triggerHapticNotification } from '@/api'
 import { avatarInitial, avatarGradient, displayName } from '@/composables/avatar'
 import { formatAdminId } from '@/format'
 import { usePagedList } from '@/composables/usePagedList'
@@ -28,6 +28,7 @@ import {
   CopyOutline,
   PersonOutline,
   TimeOutline,
+  GiftOutline,
 } from '@vicons/ionicons5'
 
 const props = defineProps<{ chatId: string }>()
@@ -43,6 +44,7 @@ const purchases = computed(() => detail.value?.purchases || [])
 const slips = computed(() => detail.value?.slips || [])
 const redeems = computed(() => detail.value?.redeems || [])
 const audit = computed(() => detail.value?.audit || [])
+const pointsLedger = computed(() => detail.value?.points_ledger || [])
 
 // Paged record lists — every tab paginates at the bottom and scrolls inside
 // a fixed-height box, mirroring the customer list behaviour.
@@ -66,6 +68,10 @@ const {
   page: auditPage, pageSize: auditPageSize, paged: pagedAudit,
   count: auditCount, rangeStart: auditRangeStart, rangeEnd: auditRangeEnd,
 } = usePagedList(audit)
+const {
+  page: ledgerPage, pageSize: ledgerPageSize, paged: pagedLedger,
+  count: ledgerCount, rangeStart: ledgerRangeStart, rangeEnd: ledgerRangeEnd,
+} = usePagedList(pointsLedger)
 
 // Compact human-readable summary of an audit entry's details across every
 // action type (amount/reason plus the newer telegram-side detail fields).
@@ -88,6 +94,22 @@ function auditDetailsText(a: any): string {
   return parts.join(' · ')
 }
 
+// Points ledger detail renderer: claims/top-up grants/redemptions/admin adjusts.
+function pointsDetailsText(a: any): string {
+  const d = a?.details || {}
+  const parts: string[] = []
+  if (d.awarded != null) parts.push(`+${Number(d.awarded).toLocaleString()} pts`)
+  else if (d.delta != null) parts.push(`${Number(d.delta) >= 0 ? '+' : ''}${Number(d.delta).toLocaleString()} pts`)
+  else if (d.amount != null) parts.push(`${Number(d.amount).toLocaleString()} pts`)
+  if (d.streak_days != null) parts.push(`streak ${d.streak_days}`)
+  if (d.streak_bonus) parts.push('🎉 bonus')
+  if (d.product) parts.push(String(d.product))
+  if (d.discarded) parts.push(`${Number(d.discarded).toLocaleString()} discarded (cap)`)
+  if (d.new_balance != null) parts.push(`→ ${Number(d.new_balance).toLocaleString()}`)
+  if (d.reason) parts.push(d.reason)
+  return parts.join(' · ')
+}
+
 // Adjust modal
 const showAdjustModal = ref(false)
 const adjustLoading = ref(false)
@@ -103,6 +125,21 @@ const currentBalance = computed(() => Number(profile.value.wallet_balance || 0))
 const amountMax = computed(() => (isDeduct.value ? currentBalance.value : undefined))
 const deductExceeds = computed(
   () => isDeduct.value && Number(adjustForm.value.amount_ks || 0) > currentBalance.value,
+)
+
+// Points adjust modal
+const showPointsModal = ref(false)
+const pointsLoading = ref(false)
+const pointsForm = ref({
+  adjustment_type: 'GRANT' as 'GRANT' | 'DEDUCT',
+  amount: 500,
+  reason: '',
+})
+const isPointsDeduct = computed(() => pointsForm.value.adjustment_type === 'DEDUCT')
+const currentPoints = computed(() => Number(profile.value.points || 0))
+const pointsMax = computed(() => (isPointsDeduct.value ? currentPoints.value : 20000))
+const pointsDeductExceeds = computed(
+  () => isPointsDeduct.value && Number(pointsForm.value.amount || 0) > currentPoints.value,
 )
 
 async function loadDetail(opts?: { silent?: boolean }) {
@@ -172,6 +209,38 @@ async function handleAdjustBalance() {
   }
 }
 
+function openPointsModal() {
+  triggerHaptic('light')
+  pointsForm.value.adjustment_type = 'GRANT'
+  pointsForm.value.amount = 500
+  pointsForm.value.reason = ''
+  showPointsModal.value = true
+}
+
+async function handleAdjustPoints() {
+  pointsLoading.value = true
+  try {
+    const res = await adjustPoints(props.chatId, {
+      adjustment_type: pointsForm.value.adjustment_type,
+      amount: pointsForm.value.amount,
+      reason: pointsForm.value.reason || undefined,
+    })
+    if (res.success) {
+      triggerHapticNotification('success')
+      let msg = `Points updated: ${Number(res.new_balance).toLocaleString()}`
+      if (res.discarded > 0) msg += ` (${Number(res.discarded).toLocaleString()} discarded — cap)`
+      message.success(msg)
+      showPointsModal.value = false
+      await loadDetail()
+    }
+  } catch (err: any) {
+    triggerHapticNotification('error')
+    message.error(err?.response?.data?.error || 'Failed to adjust points')
+  } finally {
+    pointsLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadDetail()
 })
@@ -230,6 +299,12 @@ defineExpose({ loadData: loadDetail })
               <span class="stat-val text-emerald">{{ (profile.total_topup || 0).toLocaleString() }} MMK</span>
             </div>
             <div class="stat-row">
+              <span class="stat-label"><GiftOutline class="stat-icon" /> Points</span>
+              <span class="stat-val text-amber">{{ (profile.points || 0).toLocaleString() }}
+                <small v-if="profile.points_streak" class="stat-sub">🔥{{ profile.points_streak }}d</small>
+              </span>
+            </div>
+            <div class="stat-row">
               <span class="stat-label"><PersonOutline class="stat-icon" /> First Seen</span>
               <span class="stat-val">{{ fmtDate(profile.first_seen) }}</span>
             </div>
@@ -242,6 +317,10 @@ defineExpose({ loadData: loadDetail })
           <NButton type="primary" block class="adjust-btn" @click="openAdjustModal">
             <template #icon><CashOutline /></template>
             Adjust Balance
+          </NButton>
+          <NButton block class="adjust-btn points-adjust-btn" @click="openPointsModal">
+            <template #icon><GiftOutline /></template>
+            Adjust Points
           </NButton>
         </aside>
 
@@ -371,6 +450,31 @@ defineExpose({ loadData: loadDetail })
               </div>
               <NEmpty v-else-if="!audit.length" description="No audit entries" class="rec-empty" />
             </NTabPane>
+
+            <NTabPane name="points" :tab="`Points (${pointsLedger.length})`">
+              <div v-if="pointsLedger.length" class="rec-scroll">
+                <table class="rec-table">
+                  <thead>
+                    <tr><th>Event</th><th>Details</th><th>By</th><th>Time</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(a, i) in pagedLedger" :key="a.timestamp + a.action + i">
+                      <td><span class="action-pill">{{ a.action }}</span></td>
+                      <td class="rec-muted rec-details">
+                        <div class="clamp-2">{{ pointsDetailsText(a) }}</div>
+                      </td>
+                      <td><span class="id-chip font-mono">{{ formatAdminId(a.admin_id) }}</span></td>
+                      <td class="rec-muted">{{ a.timestamp }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-if="ledgerCount > ledgerPageSize" class="rec-pagination">
+                <span class="rec-page-info">Showing {{ ledgerRangeStart }}–{{ ledgerRangeEnd }} of {{ ledgerCount }}</span>
+                <NPagination v-model:page="ledgerPage" :item-count="ledgerCount" :page-size="ledgerPageSize" simple />
+              </div>
+              <NEmpty v-else-if="!pointsLedger.length" description="No points activity yet" class="rec-empty" />
+            </NTabPane>
           </NTabs>
         </section>
       </div>
@@ -408,6 +512,44 @@ defineExpose({ loadData: loadDetail })
         <div class="modal-actions">
           <NButton @click="showAdjustModal = false">Cancel</NButton>
           <NButton type="primary" :loading="adjustLoading" :disabled="deductExceeds" @click="handleAdjustBalance">
+            Confirm Adjustment
+          </NButton>
+        </div>
+      </NForm>
+    </NModal>
+
+    <NModal
+      v-model:show="showPointsModal"
+      preset="card"
+      title="Adjust Customer Points"
+      style="max-width: 440px;"
+    >
+      <div class="modal-target">
+        <span class="modal-target-label">Target: </span>
+        <span class="font-mono modal-target-id">{{ profile.chat_id || chatId }}</span>
+        <br />
+        <span class="modal-target-label">Current Points: </span>
+        <span class="font-mono text-amber">{{ (profile.points || 0).toLocaleString() }}</span>
+      </div>
+      <NForm :model="pointsForm" label-placement="left" label-width="120">
+        <NFormItem label="Action">
+          <NRadioGroup v-model:value="pointsForm.adjustment_type">
+            <NRadioButton value="GRANT">Grant (+)</NRadioButton>
+            <NRadioButton value="DEDUCT">Deduct (-)</NRadioButton>
+          </NRadioGroup>
+        </NFormItem>
+        <NFormItem label="Amount (pts)">
+          <NInputNumber v-model:value="pointsForm.amount" :step="100" :min="1" :max="pointsMax" />
+        </NFormItem>
+        <p v-if="pointsDeductExceeds" class="deduct-warning">
+          ⚠️ Points လက်ကျန် ({{ currentPoints.toLocaleString() }}) ထက် ပို၍ နှုတ်ယူ၍ မရပါ။
+        </p>
+        <NFormItem label="Reason">
+          <NInput v-model:value="pointsForm.reason" placeholder="e.g. Manual reward / correction" />
+        </NFormItem>
+        <div class="modal-actions">
+          <NButton @click="showPointsModal = false">Cancel</NButton>
+          <NButton type="primary" :loading="pointsLoading" :disabled="pointsDeductExceeds" @click="handleAdjustPoints">
             Confirm Adjustment
           </NButton>
         </div>
@@ -778,6 +920,21 @@ defineExpose({ loadData: loadDetail })
 .text-emerald {
   color: var(--accent);
   font-weight: 600;
+}
+
+.text-amber {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.stat-sub {
+  font-size: 11px;
+  color: var(--text-4);
+  margin-left: 4px;
+}
+
+.points-adjust-btn {
+  margin-top: 8px;
 }
 
 .modal-target {

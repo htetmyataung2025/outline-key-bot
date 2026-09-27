@@ -621,25 +621,30 @@ def generate_redeem_batch():
 def list_customers():
     from bot_app.services.profiles import backfill_profiles_from_history
     from bot_app.services.slips import get_lifetime_topups_by_user
+    from bot_app.services.points import load_all_points
 
-    # The five reads are independent; together they dominate the endpoint's
+    # The six reads are independent; together they dominate the endpoint's
     # latency (sequential KV round-trips). Run them concurrently.
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         f_profiles = executor.submit(backfill_profiles_from_history)
         f_wallets = executor.submit(load_all_wallets)
         f_users = executor.submit(load_all_users)
         f_keys = executor.submit(load_persistent_keys)
         f_topups = executor.submit(get_lifetime_topups_by_user)
+        f_points = executor.submit(load_all_points)
         profiles = f_profiles.result()
         wallets = f_wallets.result()
         all_users_list = f_users.result()
         registry = f_keys.result()
         topups = f_topups.result()
+        points_data = f_points.result()
 
     all_users = set(all_users_list)
     for uid in wallets.keys():
         all_users.add(str(uid))
     for uid in profiles.keys():
+        all_users.add(str(uid))
+    for uid in points_data.keys():
         all_users.add(str(uid))
 
     # Count Outline keys per user from the cached registry (no live server sync).
@@ -664,6 +669,8 @@ def list_customers():
             "keys_count": keys_by_user.get(uid, 0),
             # Lifetime paid-in (sum of APPROVED slips), a.k.a "Total Spent".
             "total_topup": topups.get(uid, 0),
+            # Loyalty points balance (0 when the user has none yet).
+            "points": int((points_data.get(uid) or {}).get("points", 0)),
         })
 
     return jsonify({"total": len(customers), "customers": customers}), 200
@@ -677,10 +684,12 @@ def get_customer_detail(chat_id):
     from bot_app.services.billing import get_user_balance_breakdown
     from bot_app.services.orders import get_user_combined_purchase_records, load_redeem_codes
     from bot_app.services.profiles import backfill_profiles_from_history, get_user_profile
+    from bot_app.services.points import get_points
 
     uid = str(chat_id)
     backfill_profiles_from_history()
     profile = get_user_profile(uid)
+    points_rec = get_points(uid)
 
     main_bal, bonus_bal, total_bal = get_user_balance_breakdown(uid)
 
@@ -721,10 +730,16 @@ def get_customer_detail(chat_id):
     # Admin audit entries that targeted this user or their slips
     slip_ids = {str(s.get("id")) for s in slips}
     audit = []
+    points_ledger = []
     for log in load_audit_logs():
         target_type = log.get("target_type")
         target_id = str(log.get("target_id", ""))
         details = log.get("details", {}) or {}
+        # Loyalty-points events form their own ledger tab (claims, top-up grants,
+        # redemptions, admin adjustments), keyed by the customer as target.
+        if target_type == "points" and target_id == uid:
+            points_ledger.append(log)
+            continue
         if (
             (target_type == "user" and target_id == uid)
             or str(details.get("chat_id", "")) == uid
@@ -732,6 +747,7 @@ def get_customer_detail(chat_id):
         ):
             audit.append(log)
     audit.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    points_ledger.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
     return jsonify({
         "profile": {
@@ -745,12 +761,19 @@ def get_customer_detail(chat_id):
             "bonus_balance": bonus_bal,
             "keys_count": len(keys),
             "total_topup": total_topup,
+            # Loyalty points snapshot
+            "points": int(points_rec.get("points", 0)),
+            "points_streak": int(points_rec.get("streak_days", 0)),
+            "points_redeemed_count": int(points_rec.get("redeemed_count", 0)),
+            "points_lifetime_earned": int(points_rec.get("lifetime_earned", 0)),
+            "points_has_topped_up": bool(points_rec.get("has_topped_up", False)),
         },
         "keys": keys,
         "purchases": purchases,
         "slips": slips,
         "redeems": redeems,
         "audit": audit,
+        "points_ledger": points_ledger,
     }), 200
 
 
@@ -818,6 +841,45 @@ def adjust_customer_balance(chat_id):
         "chat_id": str(chat_id),
         "new_balance": new_balance,
         "notified": notified,
+    }), 200
+
+
+@admin_bp.route("/customers/<chat_id>/points", methods=["POST"])
+def adjust_customer_points(chat_id):
+    """Admin manual loyalty-points grant/deduct.
+
+    Mirrors the balance-adjust contract: ``adjustment_type`` GRANT/DEDUCT +
+    ``amount``. Grants respect the 20,000 cap (overflow discarded); deducts are
+    floored at 0 and refuse to overdraw. Audited with the acting admin as actor.
+    """
+    from bot_app.services.points import admin_adjust_points, get_points
+
+    data = request.get_json(silent=True) or {}
+    adj_type = data.get("adjustment_type", "GRANT").upper()
+    amount = int(data.get("amount", 0) or 0)
+    reason = data.get("reason", "Admin manual points adjustment")
+
+    if amount <= 0:
+        return jsonify({"error": "Amount must be greater than 0"}), 400
+    if adj_type not in ("GRANT", "DEDUCT"):
+        return jsonify({"error": "Invalid adjustment_type. Must be 'GRANT' or 'DEDUCT'"}), 400
+
+    if adj_type == "DEDUCT":
+        current = int(get_points(chat_id).get("points", 0))
+        if amount > current:
+            return jsonify({
+                "error": f"Points လက်ကျန် ({current:,}) ထက် ပို၍ နှုတ်ယူ၍ မရပါ။"
+            }), 400
+
+    delta = amount if adj_type == "GRANT" else -amount
+    result = admin_adjust_points(chat_id, delta, admin_id=current_admin_id(), reason=reason)
+
+    return jsonify({
+        "success": True,
+        "chat_id": str(chat_id),
+        "new_balance": result["new_balance"],
+        "applied": result["applied"],
+        "discarded": result["discarded"],
     }), 200
 
 

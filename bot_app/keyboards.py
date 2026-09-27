@@ -27,12 +27,14 @@ def get_main_menu_keyboard(chat_id=None):
     btn_check = KeyboardButton("🧰 Data ပမာဏစစ်ရန်")
     btn_history = KeyboardButton("📇 ဝယ်ယူမှုမှတ်တမ်း")
     btn_replace = KeyboardButton("♻️ Key လဲရန်")
+    btn_reward = KeyboardButton("🎁 Daily Reward")
     btn_admin = KeyboardButton("👨‍💻 Admin ဆက်သွယ်ရန်")
     btn_refresh = KeyboardButton("🤖 Bot Refresh")
 
     markup.add(btn_buy, btn_topup)
     markup.add(btn_wallet, btn_history)
     markup.add(btn_check, btn_replace)
+    markup.add(btn_reward)
     markup.add(btn_admin, btn_refresh)
 
     if chat_id and is_admin(chat_id):

@@ -191,12 +191,31 @@ def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", rea
         # 1. Update user balance
         new_balance, _ = update_user_balance(chat_id, amount)
 
+        # 1b. Loyalty points: a real customer payment earns points and flips the
+        # redeem gate (has_topped_up). Single choke point → covers both the
+        # Telegram approve button and the dashboard review. Best-effort: a points
+        # failure must never block the money credit or the approval itself.
+        pts_granted = 0
+        try:
+            from bot_app.services.points import credit_points, topup_points_for
+
+            pts_granted, _pts_discarded, _pts_balance = credit_points(
+                chat_id, topup_points_for(amount), "topup"
+            )
+        except Exception:
+            pts_granted = 0
+
+        points_line = (
+            f"🎁 ရရှိသော Points: <b>+{pts_granted:,}</b>\n\n" if pts_granted > 0 else ""
+        )
+
         # 2. Send Telegram notification to user
         user_noti = (
             f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
             f"🧾 Top-Up ID: <code>{slip_id}</code>\n\n"
             f"💵 ဖြည့်သွင်းငွေ: <b>+{amount:,} MMK</b>\n\n"
             f"💳 လက်ရှိ Wallet လက်ကျန်ငွေ: <b>{new_balance:,} MMK</b>\n\n"
+            f"{points_line}"
             f"'🛍️ Plan များဝယ်ရန်' Menu မှတစ်ဆင့် VPN Key များကို အချိန်မရွေး စိတ်ကြိုက် ချက်ချင်း ဝယ်ယူနိုင်ပါပြီခင်ဗျာ!"
         )
         try:
@@ -210,7 +229,8 @@ def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", rea
             action="SLIP_APPROVE",
             target_type="slip",
             target_id=slip_id,
-            details={"chat_id": chat_id, "amount": amount, "new_balance": new_balance},
+            details={"chat_id": chat_id, "amount": amount, "new_balance": new_balance,
+                     "points_granted": pts_granted},
         )
 
         return {"success": True, "action": "APPROVED", "new_balance": new_balance, "slip": slip}

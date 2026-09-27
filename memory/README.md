@@ -30,12 +30,18 @@ This directory contains the complete technical blueprints, database schemas, API
    - Frontend Vite + Vercel setup
    - Telegram BotFather Menu Button configuration guide
 
-6. [**2026-09-25_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-25_PROGRESS.md)
+6. [**05_POINTS_SYSTEM_PLAN.md**](file:///home/zixuan/Projects/outline-key-bot/memory/05_POINTS_SYSTEM_PLAN.md)
+   - FUTURE PLAN (design locked, not yet built): Points / Daily Reward system
+   - Locked economics (5,000 pts = Starter, 20,000 cap, 4h cooldown, reward table)
+   - KV data model, integration surface (bot + top-up hook + admin dashboard), concurrency, phased build plan
+
+
+7. [**2026-09-25_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-25_PROGRESS.md)
    - Daily progress log, active execution plan, milestones, and test suite verification
 
-7. [**2026-09-26_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-26_PROGRESS.md)
+8. [**2026-09-26_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-26_PROGRESS.md)
    - Daily progress log (dashboard deploy/promote, webhook fixes, three-bot token cleanup, perf & OCR diagnoses)
 
-8. [**2026-09-27_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-27_PROGRESS.md)
+9. [**2026-09-27_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-27_PROGRESS.md)
    - Incident log: prod webhook re-pointed to site root (405) — local run ruled out, fixed via `scripts/set_webhook.py reset`
 

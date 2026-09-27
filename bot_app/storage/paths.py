@@ -27,4 +27,5 @@ SLIPS_FILE = "/tmp/payment_slips.json"
 AUDIT_LOGS_FILE = "/tmp/audit_logs.json"
 DATA_VERSION_FILE = "/tmp/admin_data_version.json"
 USER_PROFILES_FILE = "/tmp/user_profiles.json"
+POINTS_FILE = "/tmp/points_data.json"
 

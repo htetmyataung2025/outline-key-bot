@@ -126,3 +126,37 @@ def redis_delete(key):
     except Exception:
         return False
 
+
+def redis_set_nx(key, ttl_seconds, value="1"):
+    """Acquire a short-lived lock: ``SET key value NX EX ttl``.
+
+    Used to guard non-idempotent flows (e.g. the points claim) against a
+    double-tap in the serverless runtime. Deliberately bypasses ``redis_set``
+    so a lock never bumps the dashboard data-version.
+
+    Returns:
+      * ``True``  — lock acquired (key did not exist).
+      * ``False`` — key already held by a concurrent request.
+      * ``None``  — KV unconfigured/unreachable; caller treats as best-effort
+        (single-process dev/tests are safe without a lock).
+    """
+    url, token = _kv_config()
+    if not url or not token:
+        return None
+    try:
+        # Lock value is a fixed scalar with no '/', so path-argument form is
+        # safe here (SET key value NX EX ttl).
+        encoded_key = urllib.parse.quote(json.dumps(key), safe="")
+        encoded_val = urllib.parse.quote(str(value), safe="")
+        res = get_session().post(
+            f"{url}/set/{encoded_key}/{encoded_val}/NX/EX/{int(ttl_seconds)}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        if res.status_code == 200:
+            # Upstash returns {"result":"OK"} on set, {"result":null} when NX fails.
+            return res.json().get("result") == "OK"
+        return False
+    except Exception:
+        return None
+

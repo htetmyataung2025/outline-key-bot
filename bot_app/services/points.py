@@ -1,0 +1,342 @@
+"""Loyalty points: 4-hour claim + top-up rewards, redeemable for a Starter Plan.
+
+Storage mirrors wallets/slips: Upstash KV first, ``/tmp`` JSON fallback. All
+amounts are integers and all timestamps use ``myanmar_now()``. The pure helpers
+(cooldown math, weighted RNG, cap, streak) are kept separate from the
+storage-backed flows so they can be unit-tested offline.
+
+See ``memory/05_POINTS_SYSTEM_PLAN.md`` for the locked economics.
+"""
+
+import json
+import os
+import random
+from datetime import date, datetime
+
+from bot_app.config import (
+    POINTS_BALANCE_CAP,
+    POINTS_CLAIM_COOLDOWN_H,
+    POINTS_REWARD_TABLE,
+    POINTS_STARTER_COST,
+    POINTS_STREAK_REWARD,
+    POINTS_STREAK_TARGET_DAYS,
+    POINTS_TOPUP_CAP,
+    POINTS_TOPUP_RATE,
+)
+from bot_app.storage.kv import redis_delete, redis_get, redis_set, redis_set_nx
+from bot_app.storage.paths import POINTS_FILE
+from bot_app.timeutil import myanmar_now
+
+_TS_FMT = "%Y-%m-%d %H:%M:%S"
+_DAY_FMT = "%Y-%m-%d"
+_LOCK_TTL_S = 10
+
+
+def _default_record() -> dict:
+    return {
+        "points": 0,
+        "last_claim_at": None,
+        "streak_days": 0,
+        "last_streak_day": None,
+        "has_topped_up": False,
+        "redeemed_count": 0,
+        "lifetime_earned": 0,
+        "lifetime_claims": 0,
+    }
+
+
+# ── Storage ─────────────────────────────────────────────────────────────────
+def load_all_points() -> dict:
+    data = redis_get("points_data")
+    if data is not None:
+        return data
+    if os.path.exists(POINTS_FILE):
+        try:
+            with open(POINTS_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_all_points(data: dict) -> None:
+    redis_set("points_data", data)
+    try:
+        with open(POINTS_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+
+def get_points(chat_id) -> dict:
+    """Points record for ``chat_id`` with all keys present (safe defaults)."""
+    rec = _default_record()
+    stored = load_all_points().get(str(chat_id))
+    if isinstance(stored, dict):
+        rec.update(stored)
+    return rec
+
+
+def _audit(chat_id, action: str, details: dict) -> None:
+    # Lazy import: slips.py imports billing/extensions and will import this
+    # module in Phase 2 — a top-level import here would create a cycle.
+    try:
+        from bot_app.services.slips import record_audit_log
+
+        record_audit_log(chat_id, action, "points", str(chat_id), details)
+    except Exception:
+        pass
+
+
+# ── Pure helpers (offline-testable) ──────────────────────────────────────────
+def topup_points_for(amount_ks) -> int:
+    """Points granted for a wallet top-up: 1% of the amount, capped."""
+    return min(POINTS_TOPUP_CAP, int(amount_ks) // POINTS_TOPUP_RATE)
+
+
+def claim_cooldown_remaining(rec: dict, now: datetime | None = None) -> int:
+    """Seconds until the next claim is allowed (0 = ready now)."""
+    now = now or myanmar_now()
+    last = rec.get("last_claim_at")
+    if not last:
+        return 0
+    try:
+        last_dt = datetime.strptime(last, _TS_FMT)
+    except (ValueError, TypeError):
+        return 0
+    remaining = POINTS_CLAIM_COOLDOWN_H * 3600 - (now - last_dt).total_seconds()
+    return int(remaining) if remaining > 0 else 0
+
+
+def is_streak_reward_day(streak_days: int) -> bool:
+    """True on every Nth consecutive claim-day (7, 14, 21…) — guaranteed band."""
+    return streak_days > 0 and streak_days % POINTS_STREAK_TARGET_DAYS == 0
+
+
+def _next_streak(rec: dict, today: date) -> int:
+    """Streak count after a claim made on ``today`` (Myanmar calendar day)."""
+    current = int(rec.get("streak_days") or 0)
+    last_day = rec.get("last_streak_day")
+    if not last_day:
+        return 1
+    try:
+        last_date = datetime.strptime(last_day, _DAY_FMT).date()
+    except (ValueError, TypeError):
+        return 1
+    delta = (today - last_date).days
+    if delta <= 0:                      # same day → unchanged
+        return current if current > 0 else 1
+    if delta == 1:                      # consecutive day → grow
+        return current + 1
+    return 1                            # gap → reset
+
+
+def roll_claim_reward(streak_days: int, rng: random.Random | None = None) -> int:
+    """Weighted random claim reward in [10, 200].
+
+    On a streak-target day the reward is drawn from the guaranteed high band
+    instead of the weighted table.
+    """
+    rng = rng or random
+    if is_streak_reward_day(streak_days):
+        low, high = POINTS_STREAK_REWARD
+        return rng.randint(low, high)
+    ranges = [(lo, hi) for lo, hi, _ in POINTS_REWARD_TABLE]
+    weights = [w for _, _, w in POINTS_REWARD_TABLE]
+    lo, hi = rng.choices(ranges, weights=weights, k=1)[0]
+    return rng.randint(lo, hi)
+
+
+def _apply_cap(current: int, amount: int) -> tuple[int, int, int]:
+    """Add ``amount`` under the balance cap.
+
+    Returns ``(new_balance, granted, discarded)``.
+    """
+    room = POINTS_BALANCE_CAP - int(current)
+    if room <= 0:
+        return int(current), 0, int(amount)
+    granted = min(int(amount), room)
+    return int(current) + granted, granted, int(amount) - granted
+
+
+# ── Storage-backed flows ──────────────────────────────────────────────────────
+def credit_points(chat_id, amount, source: str = "topup") -> tuple[int, int, int]:
+    """Add points under the cap. Returns ``(granted, discarded, new_balance)``.
+
+    A ``source="topup"`` credit also flips ``has_topped_up`` (the redeem gate).
+    """
+    amount = int(amount)
+    uid = str(chat_id)
+    data = load_all_points()
+    rec = _default_record()
+    if isinstance(data.get(uid), dict):
+        rec.update(data[uid])
+
+    new_bal, granted, discarded = _apply_cap(rec["points"], amount)
+    rec["points"] = new_bal
+    rec["lifetime_earned"] = int(rec["lifetime_earned"]) + granted
+    if source == "topup":
+        rec["has_topped_up"] = True
+    data[uid] = rec
+    save_all_points(data)
+
+    action = "POINTS_TOPUP" if source == "topup" else "POINTS_GRANT"
+    _audit(uid, action, {"amount": amount, "granted": granted,
+                         "discarded": discarded, "new_balance": new_bal, "source": source})
+    return granted, discarded, new_bal
+
+
+def try_claim(chat_id, now: datetime | None = None,
+              rng: random.Random | None = None) -> dict:
+    """Atomic 4-hour claim. On success grants a weighted reward and advances
+    the streak. Guarded by a short per-user Upstash lock against double-taps.
+
+    Returns a dict with ``ok`` plus, on success, ``awarded``/``granted``/
+    ``discarded``/``new_balance``/``streak_days``/``is_streak_bonus``/
+    ``next_in_s``; on failure ``error`` is ``"cooldown"`` or ``"claim_in_progress"``.
+    """
+    now = now or myanmar_now()
+    uid = str(chat_id)
+    lock_key = f"points_lock:{uid}"
+    lock = redis_set_nx(lock_key, _LOCK_TTL_S)
+    if lock is False:
+        return {"ok": False, "error": "claim_in_progress"}
+    try:
+        data = load_all_points()
+        rec = _default_record()
+        if isinstance(data.get(uid), dict):
+            rec.update(data[uid])
+
+        remaining = claim_cooldown_remaining(rec, now)
+        if remaining > 0:
+            return {"ok": False, "error": "cooldown", "next_in_s": remaining,
+                    "points": rec["points"], "streak_days": rec["streak_days"]}
+
+        today = now.date()
+        new_streak = _next_streak(rec, today)
+        awarded = roll_claim_reward(new_streak, rng=rng)
+        new_bal, granted, discarded = _apply_cap(rec["points"], awarded)
+
+        rec["points"] = new_bal
+        rec["lifetime_earned"] = int(rec["lifetime_earned"]) + granted
+        rec["lifetime_claims"] = int(rec["lifetime_claims"]) + 1
+        rec["last_claim_at"] = now.strftime(_TS_FMT)
+        rec["streak_days"] = new_streak
+        rec["last_streak_day"] = today.strftime(_DAY_FMT)
+        data[uid] = rec
+        save_all_points(data)
+
+        is_bonus = is_streak_reward_day(new_streak)
+        _audit(uid, "POINTS_CLAIM", {"awarded": awarded, "granted": granted,
+                                     "discarded": discarded, "new_balance": new_bal,
+                                     "streak_days": new_streak, "streak_bonus": is_bonus})
+        return {"ok": True, "awarded": awarded, "granted": granted,
+                "discarded": discarded, "new_balance": new_bal,
+                "streak_days": new_streak, "is_streak_bonus": is_bonus,
+                "next_in_s": POINTS_CLAIM_COOLDOWN_H * 3600}
+    finally:
+        if lock is True:
+            redis_delete(lock_key)
+
+
+def can_redeem(rec: dict, cost: int | None = None) -> tuple[bool, str | None]:
+    """Redemption gate. Returns ``(ok, reason)`` where reason is one of
+    ``needs_topup`` / ``insufficient_points``.
+
+    Starter is the ONLY redemption product, but it is **repeatable**: any user
+    who has topped up at least once may redeem it as often as their balance
+    (≤ 20,000 cap) allows.
+    """
+    cost = POINTS_STARTER_COST if cost is None else cost
+    if not rec.get("has_topped_up"):
+        return False, "needs_topup"
+    if int(rec.get("points", 0)) < cost:
+        return False, "insufficient_points"
+    return True, None
+
+
+def redeem_starter(chat_id) -> dict:
+    """Deduct the Starter cost for a (repeatable) redemption.
+
+    Does NOT provision the VPN key — the handler does that after a successful
+    deduction, and calls ``refund_starter`` if provisioning fails.
+    """
+    uid = str(chat_id)
+    data = load_all_points()
+    rec = _default_record()
+    if isinstance(data.get(uid), dict):
+        rec.update(data[uid])
+
+    ok, reason = can_redeem(rec)
+    if not ok:
+        return {"ok": False, "error": reason, "points": rec["points"]}
+
+    rec["points"] = int(rec["points"]) - POINTS_STARTER_COST
+    rec["redeemed_count"] = int(rec.get("redeemed_count", 0)) + 1
+    data[uid] = rec
+    save_all_points(data)
+
+    _audit(uid, "POINTS_REDEEM", {"cost": POINTS_STARTER_COST,
+                                  "new_balance": rec["points"], "product": "starter",
+                                  "redeemed_count": rec["redeemed_count"]})
+    return {"ok": True, "new_balance": rec["points"], "product": "starter",
+            "redeemed_count": rec["redeemed_count"]}
+
+
+def refund_starter(chat_id) -> dict:
+    """Re-credit a failed Starter redemption (points back, undo the count)."""
+    uid = str(chat_id)
+    data = load_all_points()
+    rec = _default_record()
+    if isinstance(data.get(uid), dict):
+        rec.update(data[uid])
+
+    new_bal, _granted, _discarded = _apply_cap(rec["points"], POINTS_STARTER_COST)
+    rec["points"] = new_bal
+    rec["redeemed_count"] = max(0, int(rec.get("redeemed_count", 0)) - 1)
+    data[uid] = rec
+    save_all_points(data)
+
+    _audit(uid, "POINTS_REDEEM_REFUND", {"amount": POINTS_STARTER_COST,
+                                         "new_balance": new_bal})
+    return {"ok": True, "new_balance": new_bal}
+
+
+def admin_adjust_points(chat_id, delta, admin_id="Admin", reason: str = "") -> dict:
+    """Admin manual points adjustment.
+
+    ``delta > 0`` grants (capped at 20,000, overflow discarded); ``delta < 0``
+    deducts (floored at 0). Audited as ``POINTS_ADMIN_GRANT``/``POINTS_ADMIN_DEDUCT``
+    with the acting admin as actor and the customer as target. Returns
+    ``{ok, applied, discarded, new_balance}`` where ``applied`` is the signed
+    change actually made to the balance.
+    """
+    uid = str(chat_id)
+    delta = int(delta)
+    data = load_all_points()
+    rec = _default_record()
+    if isinstance(data.get(uid), dict):
+        rec.update(data[uid])
+
+    current = int(rec["points"])
+    discarded = 0
+    if delta >= 0:
+        new_bal, applied, discarded = _apply_cap(current, delta)
+        rec["lifetime_earned"] = int(rec["lifetime_earned"]) + applied
+    else:
+        new_bal = max(0, current + delta)
+        applied = new_bal - current   # negative or zero
+    rec["points"] = new_bal
+    data[uid] = rec
+    save_all_points(data)
+
+    action = "POINTS_ADMIN_GRANT" if delta >= 0 else "POINTS_ADMIN_DEDUCT"
+    try:
+        from bot_app.services.slips import record_audit_log
+
+        record_audit_log(admin_id, action, "points", uid,
+                         {"delta": delta, "applied": applied, "discarded": discarded,
+                          "new_balance": new_bal, "reason": reason})
+    except Exception:
+        pass
+    return {"ok": True, "applied": applied, "discarded": discarded, "new_balance": new_bal}

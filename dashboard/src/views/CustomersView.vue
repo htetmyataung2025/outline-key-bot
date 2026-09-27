@@ -48,6 +48,7 @@ type SortKey =
   | 'balance_desc'
   | 'balance_asc'
   | 'topup_desc'
+  | 'points_desc'
   | 'active_recent'
   | 'keys_desc'
   | 'first_new'
@@ -80,6 +81,7 @@ const sortOptions = [
   { label: 'Balance: High → Low', value: 'balance_desc' },
   { label: 'Balance: Low → High', value: 'balance_asc' },
   { label: 'Total Spent: High → Low', value: 'topup_desc' },
+  { label: 'Points: High → Low', value: 'points_desc' },
   { label: 'Recently Active', value: 'active_recent' },
   { label: 'Most Keys', value: 'keys_desc' },
   { label: 'Newest Customers', value: 'first_new' },
@@ -182,6 +184,9 @@ const filteredCustomers = computed(() => {
       break
     case 'topup_desc':
       arr.sort((a, b) => (b.total_topup || 0) - (a.total_topup || 0))
+      break
+    case 'points_desc':
+      arr.sort((a, b) => (b.points || 0) - (a.points || 0))
       break
     case 'keys_desc':
       arr.sort((a, b) => (b.keys_count || 0) - (a.keys_count || 0))
@@ -451,6 +456,7 @@ defineExpose({ loadData: loadCustomers })
             <span class="cell c-id">User ID</span>
             <span class="cell c-balance">Wallet Balance</span>
             <span class="cell c-spent">Total Spent</span>
+            <span class="cell c-points">Points</span>
             <span class="cell c-keys">Keys</span>
             <span class="cell c-seen">Last Active</span>
             <span class="cell c-actions">Actions</span>
@@ -481,6 +487,11 @@ defineExpose({ loadData: loadCustomers })
                 <span class="spent-label">Spent</span>
                 <span class="spent-val font-mono">{{ (c.total_topup || 0).toLocaleString() }}</span>
                 <span class="balance-cur">MMK</span>
+              </div>
+
+              <div class="cell c-points">
+                <span class="points-label">Points</span>
+                <span class="points-chip font-mono">🎁 {{ (c.points || 0).toLocaleString() }}</span>
               </div>
 
               <div class="cell c-keys">
@@ -749,7 +760,7 @@ defineExpose({ loadData: loadCustomers })
 .table-head,
 .table-row {
   display: grid;
-  grid-template-columns: minmax(170px, 2fr) 130px 140px 140px 60px 120px 120px;
+  grid-template-columns: minmax(170px, 2fr) 130px 140px 140px 90px 60px 120px 120px;
   align-items: center;
   gap: 12px;
   padding: 0 16px;
@@ -881,6 +892,25 @@ defineExpose({ loadData: loadCustomers })
   font-size: 11px;
   color: var(--text-4);
 }
+
+/* Points cell */
+.c-points {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.points-chip {
+  color: #f59e0b;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.points-label {
+  display: none;
+  font-size: 11px;
+  color: var(--text-4);
+}
 /* Keys cell */
 .keys-chip {
   display: inline-flex;
@@ -986,6 +1016,7 @@ defineExpose({ loadData: loadCustomers })
   }
 
   .c-spent,
+  .c-points,
   .c-keys,
   .c-seen {
     display: none;

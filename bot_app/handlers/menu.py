@@ -373,6 +373,15 @@ def handle_all_messages(message):
         bot.send_message(chat_id, "👇 အောက်ကခလုတ်ကိုနှိပ်ပြီး Admin ထံ တိုက်ရိုက်စာပို့ ဆက်သွယ်နိုင်ပါပြီဗျာ။", reply_markup=admin_link_markup)
         return
 
+    # 🎁 Daily Reward (Points)
+    if input_value in ["🎁 Daily Reward", "Daily Reward"]:
+        clear_all_states(chat_id)
+        from bot_app.handlers.points import build_reward_view
+
+        text, markup = build_reward_view(chat_id)
+        bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
+        return
+
     # 🎟️ Wallet Amount Redeem Code စစ်ဆေးခြင်း Handler
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)

@@ -275,3 +275,25 @@ class _DynamicPlans(dict):
 
 PLANS = _DynamicPlans()
 
+
+# 🎁 Loyalty Points / Daily Reward System (see memory/05_POINTS_SYSTEM_PLAN.md)
+# Economics are LOCKED; reward-table weights are tunable after live observation.
+POINTS_BALANCE_CAP = 20000          # hard cap; earnings above this are discarded
+POINTS_CLAIM_COOLDOWN_H = 4         # rolling cooldown between claims (~6/day max)
+POINTS_TOPUP_RATE = 100             # 1 point per this many Ks topped up
+POINTS_TOPUP_CAP = 1000             # max points from a single top-up (at 100k Ks)
+POINTS_STARTER_COST = 5000          # points to redeem one Starter Plan
+POINTS_STREAK_TARGET_DAYS = 7       # every Nth consecutive claim-day = guaranteed band
+POINTS_STREAK_REWARD = (150, 200)   # guaranteed reward range on a streak-target day
+POINTS_ON_ADMIN_TOPUP = False       # LOCKED: manual admin credits grant no points
+
+# Claim reward distribution: (low, high, weight). Weighted low so 100+ is rare.
+POINTS_REWARD_TABLE = [
+    (10, 19, 35),
+    (20, 30, 35),
+    (31, 50, 18),
+    (51, 99, 8),
+    (100, 150, 3),
+    (151, 200, 1),
+]
+
