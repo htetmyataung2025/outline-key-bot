@@ -1,0 +1,51 @@
+name: Webhook Guard
+
+# Self-heals Telegram delivery: if the production webhook drifted away from
+# /webhook (the twice-repeated 405 outage), re-register it. Idles safely
+# until the TELEGRAM_TOKEN + WEBHOOK_URL secrets are added.
+
+on:
+  schedule:
+    - cron: "23 * * * *" # hourly, off the top-of-hour rush
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check + auto-repair production webhook
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+          if [ -z "$TELEGRAM_TOKEN" ] || [ -z "$WEBHOOK_URL" ]; then
+            echo "::notice::Secrets not set yet (Repo Settings → Secrets and variables → Actions: TELEGRAM_TOKEN, WEBHOOK_URL) — guard is idle."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import os, requests
+
+          token = os.environ["TELEGRAM_TOKEN"]
+          want = os.environ["WEBHOOK_URL"].strip().rstrip("/")
+          api = f"https://api.telegram.org/bot{token}"
+          info = requests.get(f"{api}/getWebhookInfo", timeout=20).json()
+          if not info.get("ok"):
+              raise SystemExit(f"getWebhookInfo failed: {info}")
+          current = (info["result"].get("url") or "").rstrip("/")
+          if current == want:
+              print(f"webhook healthy: {current}")
+              raise SystemExit(0)
+          print(f"drift detected: {current or '<none>'!r} -> restoring {want}")
+          fixed = requests.get(
+              f"{api}/setWebhook",
+              params={"url": want, "allowed_updates": "[]"},
+              timeout=20,
+          ).json()
+          print("setWebhook:", fixed)
+          raise SystemExit(0 if fixed.get("ok") else 1)
+          PY

@@ -45,7 +45,13 @@ def test_cron_with_no_keys(client, mock_bot, monkeypatch):
     calls = _fake_outline(monkeypatch, [])
     resp = client.get("/cron-check", headers={"User-Agent": "vercel-cron/1.0"})
     assert resp.status_code == 200
-    assert resp.get_json() == {"status": "cron completed", "notified": 0, "deleted": 0}
+    assert resp.get_json() == {
+        "status": "cron completed",
+        "webhook_guard": {"checked": False, "url": "", "previous": "",
+                          "fixed": False, "error": None},
+        "notified": 0,
+        "deleted": 0,
+    }
     assert calls["delete"] == []
     assert mock_bot.calls["send_message"] == []
 

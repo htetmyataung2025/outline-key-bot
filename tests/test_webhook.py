@@ -168,7 +168,7 @@ def test_diag_rejects_missing_or_wrong_key(client):
         assert b"Bot is running perfectly!" in resp.data
 
 
-def test_diag_reports_config_status_for_the_owner(client, monkeypatch):
+def test_diag_reports_config_status_for_the_owner(client, mock_bot, monkeypatch):
     from bot_app.config import admin_chat_ids
     from bot_app.routes import diag_key
 
@@ -180,6 +180,7 @@ def test_diag_reports_config_status_for_the_owner(client, monkeypatch):
     assert data["admins"] == len(admin_chat_ids())
     assert data["admin_env_sources"] == ["ADMIN_CHAT_IDS"]
     assert data["required_channel"]            # channel name is not a secret
+    assert data["webhook_ok"] is None          # no Vercel domain in tests
     assert "token" not in resp.get_data(as_text=True).lower()
 
 

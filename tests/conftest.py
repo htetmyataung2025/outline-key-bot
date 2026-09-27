@@ -11,6 +11,7 @@ Safety rules for the whole suite:
 """
 
 import os
+from types import SimpleNamespace
 
 # --- Must run BEFORE importing bot_app (config reads these at import time) ---
 for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY"):
@@ -100,9 +101,11 @@ class BotMock:
         self.calls = {"send_message": [], "reply_to": [], "answer_callback": [],
                       "delete_message": [], "menu_button": [], "get_chat_member": [],
                       "send_photo": [], "get_file": [], "edit_message_text": [],
-                      "edit_message_caption": [], "get_chat": []}
+                      "edit_message_caption": [], "get_chat": [],
+                      "get_webhook_info": [], "set_webhook": []}
         self.member_status = "member"
         self.member_error = None
+        self.webhook_url = ""  # tests may point this at a fake webhook URL
 
         from bot_app.extensions import bot as _bot
         for target in (_bot,):
@@ -117,12 +120,23 @@ class BotMock:
             monkeypatch.setattr(target, "edit_message_text", self._edit_message_text)
             monkeypatch.setattr(target, "edit_message_caption", self._edit_message_caption)
             monkeypatch.setattr(target, "get_chat", self._get_chat)
+            monkeypatch.setattr(target, "get_webhook_info", self._get_webhook_info)
+            monkeypatch.setattr(target, "set_webhook", self._set_webhook)
 
     def _get_chat_member(self, chat, user):
         self.calls["get_chat_member"].append((chat, user))
         if self.member_error is not None:
             raise self.member_error
         return FakeMember(self.member_status)
+
+    def _get_webhook_info(self):
+        self.calls["get_webhook_info"].append(True)
+        return SimpleNamespace(url=self.webhook_url)
+
+    def _set_webhook(self, url, **kwargs):
+        self.calls["set_webhook"].append(url)
+        self.webhook_url = url
+        return True
 
     def _send_message(self, chat_id, text, *args, **kwargs):
         self.calls["send_message"].append((chat_id, text))

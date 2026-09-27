@@ -30,6 +30,7 @@ from bot_app.config import (
 )
 from bot_app.extensions import bot
 from bot_app.extensions import flask_app as app
+from bot_app.helpers.webhook_guard import ensure_webhook, expected_webhook_url
 from bot_app.services.notifier import run_expiry_cron
 
 CRON_USER_AGENT = "vercel-cron"
@@ -56,6 +57,20 @@ def _process_update():
 def _is_cron_request():
     ua = request.headers.get("User-Agent", "")
     return ua.startswith(CRON_USER_AGENT) or request.headers.get("x-vercel-cron") == "1"
+
+
+def _notify_webhook_restore(guard):
+    """Tell admins the delivery path drifted and was auto-repaired."""
+    text = (
+        "🛠️ Webhook auto-repair: Telegram delivery ပြန်တောင့်တင်းပါပြီ။\n"
+        f"Drifted URL: {guard.get('previous') or '∅'}\n"
+        f"Restored URL: {guard.get('url')}"
+    )
+    for chat_id in admin_chat_ids():
+        try:
+            bot.send_message(chat_id, text)
+        except Exception:
+            pass
 
 
 def _is_diag_request():
@@ -96,6 +111,12 @@ def _diag_payload():
             "post": post_ok,
         }
 
+    try:
+        live_webhook = (getattr(bot.get_webhook_info(), "url", "") or "").strip()
+    except Exception:
+        live_webhook = ""
+    expected_webhook = expected_webhook_url()
+
     return {
         "status": "ok",
         "platform": "vercel" if os.environ.get("VERCEL") else "local",
@@ -111,6 +132,9 @@ def _diag_payload():
         "ocr": bool(OCR_API_KEY),
         "payment_phones": len(MY_PAYMENT_PHONES),
         "required_channel": REQUIRED_CHANNEL,
+        "webhook_url": live_webhook,
+        "webhook_ok": (live_webhook.rstrip("/") == expected_webhook.rstrip("/")
+                       if expected_webhook else None),
     }
 
 
@@ -151,8 +175,11 @@ def entry(path=""):
         return jsonify(_diag_payload()), 200
 
     if _is_cron_request():
+        guard = ensure_webhook(bot)
+        if guard.get("fixed"):
+            _notify_webhook_restore(guard)
         result = run_expiry_cron()
-        return jsonify({"status": "cron completed", **result}), 200
+        return jsonify({"status": "cron completed", "webhook_guard": guard, **result}), 200
 
     # Hide secret-ish probe paths when the real path reaches us (dev/local).
     if path and path.rsplit("/", 1)[-1].startswith("."):

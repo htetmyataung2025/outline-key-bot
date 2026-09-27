@@ -33,3 +33,9 @@ This directory contains the complete technical blueprints, database schemas, API
 6. [**2026-09-25_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-25_PROGRESS.md)
    - Daily progress log, active execution plan, milestones, and test suite verification
 
+7. [**2026-09-26_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-26_PROGRESS.md)
+   - Daily progress log (dashboard deploy/promote, webhook fixes, three-bot token cleanup, perf & OCR diagnoses)
+
+8. [**2026-09-27_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-27_PROGRESS.md)
+   - Incident log: prod webhook re-pointed to site root (405) — local run ruled out, fixed via `scripts/set_webhook.py reset`
+
