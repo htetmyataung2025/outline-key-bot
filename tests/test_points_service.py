@@ -79,6 +79,31 @@ def test_is_streak_reward_day():
     assert P.is_streak_reward_day(14)
 
 
+def test_effective_streak_alive_and_broken():
+    now = datetime(2026, 9, 27, 12, 0, 0)
+    # claimed today → full streak shown
+    rec = {**P._default_record(), "streak_days": 9, "last_streak_day": "2026-09-27"}
+    assert P.effective_streak(rec, now) == 9
+    # claimed yesterday → still alive
+    rec_y = {**P._default_record(), "streak_days": 9, "last_streak_day": "2026-09-26"}
+    assert P.effective_streak(rec_y, now) == 9
+    # missed a day (older than yesterday) → broken → 0
+    rec_b = {**P._default_record(), "streak_days": 9, "last_streak_day": "2026-09-25"}
+    assert P.effective_streak(rec_b, now) == 0
+    # never claimed → 0
+    assert P.effective_streak(P._default_record(), now) == 0
+
+
+def test_streak_grows_without_limit_and_resets_on_gap():
+    d = _day
+    # daily claims keep growing past the 7-day target (8, 9, 10…)
+    rec = {**P._default_record(), "streak_days": 9, "last_streak_day": "2026-09-27"}
+    assert P._next_streak(rec, d("2026-09-28")) == 10
+    # a skipped day resets to 1 on the next claim
+    assert P._next_streak(rec, d("2026-09-30")) == 1
+
+
+
 # ── cap / overflow ──────────────────────────────────────────────────────────────
 def test_credit_applies_cap_and_discards(isolated_state):
     granted, discarded, bal = P.credit_points(UID, POINTS_BALANCE_CAP - 100, "topup")

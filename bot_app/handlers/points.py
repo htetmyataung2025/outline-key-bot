@@ -19,7 +19,8 @@ from bot_app.keyboards import get_back_inline_keyboard
 from bot_app.services.orders import save_key_mapping, save_user_purchase_record
 from bot_app.services.outline import create_outline_key
 from bot_app.services.points import (
-    claim_cooldown_remaining, get_points, redeem_starter, refund_starter, try_claim,
+    claim_cooldown_remaining, effective_streak, get_points, redeem_starter,
+    refund_starter, try_claim,
 )
 from bot_app.utils import is_user_subscribed
 
@@ -52,7 +53,7 @@ def build_reward_view(chat_id):
     """
     rec = get_points(chat_id)
     points = int(rec.get("points", 0))
-    streak = int(rec.get("streak_days", 0))
+    streak = effective_streak(rec)
     cooldown = claim_cooldown_remaining(rec)
     ready = cooldown <= 0
 
@@ -76,7 +77,7 @@ def build_reward_view(chat_id):
         f"🎫 <b>Starter Plan</b> (25GB / {_STARTER_VALID_DAYS} ရက်) = <b>{POINTS_STARTER_COST:,} Points</b>\n"
         f"{redeem_hint}\n\n"
         f"💡 <i>၄ နာရီ တစ်ကြိမ် Claim လုပ်၍ Points ရယူပါ။ {POINTS_STREAK_TARGET_DAYS} ရက် ဆက်တိုက် Claim လုပ်ပါက "
-        f"Points (150–200) အာမခံ ရရှိပါမည်။</i>"
+        f"Points (150 မှ 200) ကြား ရရှိရန် အာမခံပါသည်။</i>"
     )
 
     markup = InlineKeyboardMarkup()

@@ -202,3 +202,91 @@ Streak never expires the points, only affects that one bonus draw.
   wired into Phase 3 key provisioning (`custom_days=30`).
 - Reward-table weights are a starting point; tune after seeing live behavior.
 
+## 9. Settings-configurable Points (PLANNED — not yet built)
+
+> Goal: move every `POINTS_*` constant out of `config.py` hardcode into the
+> dynamic Settings store so the owner can tune the whole economy from the
+> dashboard **without a redeploy** — same pattern as `plans` / `payment_phones`
+> / `servers`. Works KV-only (no Supabase required).
+
+### 9.1 Behavior confirmed by the owner (2026-09-27)
+
+- **Old top-ups do NOT count for the redeem gate.** `has_topped_up` only flips
+  when `review_slip` runs the points hook (added in Phase 2). Historical
+  approved slips are never replayed, and no backfill is done — so every
+  existing customer starts at `has_topped_up=false` and must make **one fresh
+  top-up after the system is live** before they can redeem. This is intended.
+- **Streak grows without limit** (8, 9, 10, 30, 45…) while the user claims at
+  least once per calendar day, and **resets to 1 on the next claim after a
+  missed day**. Display shows 0 the moment a day is missed (see
+  `effective_streak`). Already implemented.
+
+### 9.2 Fields to expose in Settings (ALL of the recommended set)
+
+| Setting | key | Default | Validation (POST guardrail) |
+|---|---|---|---|
+| Master ON/OFF | `enabled` | true | bool |
+| Claim cooldown (hours) | `claim_cooldown_h` | 4 | int 1–24 |
+| Balance cap | `balance_cap` | 20000 | int ≥ `starter_cost` |
+| Top-up rate (Ks/point) | `topup_rate` | 100 | int ≥ 1 |
+| Top-up point cap | `topup_cap` | 1000 | int ≥ 0 |
+| Starter cost (points) | `starter_cost` | 5000 | int ≥ 1 and ≤ `balance_cap` |
+| Streak target (days) | `streak_target_days` | 7 | int 1–30 |
+| Streak reward band | `streak_reward` `[low, high]` | [150, 200] | 1 ≤ low ≤ high ≤ `balance_cap` |
+| Admin top-up grants points | `on_admin_topup` | false | bool |
+| Reward table | `reward_table` `[[low,high,weight],…]` | §2 table | see 9.4 |
+
+### 9.3 Locked behaviors (must hold in the implementation)
+
+- **Cap reduction is NOT retroactive.** Lowering `balance_cap` never trims
+  existing balances; the new cap only limits *future* earning. A user already
+  above a lowered cap keeps their points but earns nothing until they spend
+  back under it (`_apply_cap` with `room ≤ 0` already discards — correct).
+- **Master OFF preserves balances.** `enabled=false` only gates the *actions*:
+  hide the 🎁 Daily Reward button (`keyboards.py`), short-circuit the claim /
+  redeem callbacks with a friendly "ယာယီ ပိတ်ထားသည်" message, and skip the
+  top-up points hook in `review_slip`. Stored points, ledgers and admin
+  grant/deduct stay available. Nothing is deleted.
+- **Reward table validation is strict.** Reject on POST unless: non-empty list;
+  every row is `[low, high, weight]` with integers `1 ≤ low ≤ high ≤ balance_cap`
+  and `weight > 0`. Offer 3 presets (Conservative / Balanced / Generous) so the
+  owner rarely hand-edits weights.
+
+### 9.4 Architecture / integration surface
+
+- **`services/settings.py`** — add `points` to `_get_default_settings()` (built
+  from the current `POINTS_*` constants) and to BOTH merge branches (KV-only +
+  Supabase). One new settings key `points` holding the dict above.
+- **`config.py`** — new `points_settings()` helper: **call-time** read of
+  `get_system_settings()["points"]`, each field falling back to the existing
+  `POINTS_*` constant, which itself falls back to the hardcoded default. Never
+  read at import time (so live edits apply without redeploy). Keep the
+  `POINTS_*` constants as the ultimate fallback layer.
+- **`services/points.py`** — replace direct constant use with
+  `points_settings()` lookups inside functions (cooldown, cap, topup formula,
+  reward table, streak target/band, starter cost). Pure helpers can take the
+  resolved values as args to stay unit-testable.
+- **Master toggle plumbing** — `points_enabled()` checked in:
+  `keyboards.get_main_menu_keyboard` (hide button), `menu.handle_all_messages`
+  (🎁 branch → "ပိတ်ထားသည်" notice), `handlers/points.py` callbacks (reject),
+  `slips.review_slip` (skip the credit hook).
+- **`routes_admin.py`** — `GET /settings` already returns the whole bundle;
+  add strict validation for the `points` block on `POST /settings` (ranges +
+  reward-table rules in 9.2/9.4). Settings writes are already audited.
+- **`SettingsView.vue`** — new "Loyalty Points" card: master switch, number
+  inputs with the guardrails, streak-band low/high, reward-table editor with
+  the 3 presets. `api.ts` already has `updateSettings`.
+- **Tests** — settings defaults include `points`; POST validation rejects
+  out-of-range values and bad reward tables; `points_settings()` fallback works
+  with KV disabled; master-OFF gates claim/redeem/earn + hides the button.
+
+### 9.5 Suggested build phases (when approved)
+
+1. Backend: settings default+merge, `points_settings()` + `points_enabled()`,
+   `points.py` consumption, master-toggle gating, strict POST validation +
+   tests. (No UI yet — everything already tunable via the API.)
+2. Frontend: SettingsView "Loyalty Points" card + reward-table editor/presets.
+
+> Status: design only. No code written for §9 yet — implement after the owner
+> approves this plan.
+

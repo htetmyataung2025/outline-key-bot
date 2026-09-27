@@ -113,6 +113,27 @@ def is_streak_reward_day(streak_days: int) -> bool:
     return streak_days > 0 and streak_days % POINTS_STREAK_TARGET_DAYS == 0
 
 
+def effective_streak(rec: dict, now: datetime | None = None) -> int:
+    """Live streak for display.
+
+    Returns the stored streak while it is still alive — the last claim was
+    today or yesterday — otherwise 0. A missed day breaks the streak, and the
+    next claim restarts it at 1. The streak grows without limit (8, 9, 30, 45…)
+    as long as the user claims at least once each calendar day.
+    """
+    now = now or myanmar_now()
+    last_day = rec.get("last_streak_day")
+    if not last_day:
+        return 0
+    try:
+        last_date = datetime.strptime(last_day, _DAY_FMT).date()
+    except (ValueError, TypeError):
+        return 0
+    if (now.date() - last_date).days <= 1:
+        return int(rec.get("streak_days") or 0)
+    return 0
+
+
 def _next_streak(rec: dict, today: date) -> int:
     """Streak count after a claim made on ``today`` (Myanmar calendar day)."""
     current = int(rec.get("streak_days") or 0)
