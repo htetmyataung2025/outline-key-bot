@@ -247,9 +247,24 @@ def list_keys():
     start = (page - 1) * page_size
     paged_items = items[start : start + page_size]
 
-    # Attach a clean display label (raw packed name kept intact for recovery).
+    # Live per-key data usage (lifetime bytes transferred) lives in a separate
+    # Outline endpoint, so join it here for only the keys on this page. Skipped
+    # when sync=0 (hermetic reads); best-effort otherwise — an unreachable
+    # server just leaves bytes_used as None and the dashboard shows "—".
+    usage = {}
+    if sync_mode != "0":
+        try:
+            from bot_app.services.outline import get_usage_by_server
+            usage = get_usage_by_server({str(k.get("server")) for k in paged_items})
+        except Exception:
+            usage = {}
+
+    # Attach a clean display label (raw packed name kept intact for recovery)
+    # plus the joined usage figure.
     for k in paged_items:
         k["label"] = clean_key_label(k.get("name", ""))
+        used = usage.get(str(k.get("server")), {}).get(str(k.get("key_id")))
+        k["bytes_used"] = int(used) if used is not None else None
 
     return jsonify({"total": total, "page": page, "page_size": page_size, "items": paged_items}), 200
 

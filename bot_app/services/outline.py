@@ -1,6 +1,8 @@
 """Outline VPN server client: keys, usage, search, renew/create."""
 
 import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
@@ -63,6 +65,75 @@ def refresh_registry_from_servers():
     for server_num, keys in results:
         if keys:
             sync_keys_to_persistent_registry(server_num, keys)
+
+
+# Per-key data usage lives in a separate Outline endpoint (/metrics/transfer),
+# not in /access-keys, so the key list joins it on read. The map is fetched per
+# server and cached briefly: a dashboard reload within the window reuses it
+# instead of re-probing every server (the metrics call costs ~1 s each).
+USAGE_CACHE_TTL = 30.0
+_usage_cache = {}  # {server_id(str): {"ts": monotonic, "data": {key_id(str): bytes}}}
+_usage_cache_lock = threading.Lock()
+
+
+def fetch_transfer_metrics(api_url, timeout=6):
+    """Return one server's ``bytesTransferredByUserId`` map ``{key_id: bytes}``.
+
+    Empty dict on any failure (unreachable server, non-200, malformed body) so
+    callers degrade gracefully — a missing usage figure is never fatal. The
+    figure is Outline's *lifetime* transfer for the key; it does not reset when
+    a key is extended.
+    """
+    if not api_url:
+        return {}
+    try:
+        resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=timeout)
+        if resp.status_code == 200:
+            return resp.json().get("bytesTransferredByUserId", {}) or {}
+    except Exception:
+        pass
+    return {}
+
+
+def get_usage_by_server(server_ids=None, force=False):
+    """Return ``{server_id: {key_id: bytes}}`` for the requested configured servers.
+
+    Fetches ``/metrics/transfer`` in parallel and caches each server's map for
+    ``USAGE_CACHE_TTL`` seconds. ``server_ids`` limits the probe to the servers
+    actually shown on the current page; ``force`` bypasses the cache.
+    Unreachable servers resolve to ``{}`` and are simply omitted from usage
+    display.
+    """
+    configured = get_configured_servers()
+    if server_ids is not None:
+        wanted = {str(s) for s in server_ids}
+        configured = [srv for srv in configured if str(srv.get("id")) in wanted]
+
+    now = time.monotonic()
+    result = {}
+    to_fetch = []
+    with _usage_cache_lock:
+        for srv in configured:
+            sid = str(srv.get("id"))
+            cached = _usage_cache.get(sid)
+            if not force and cached and now - cached["ts"] < USAGE_CACHE_TTL:
+                result[sid] = cached["data"]
+            else:
+                to_fetch.append(srv)
+
+    if to_fetch:
+        def fetch(srv):
+            return str(srv.get("id")), fetch_transfer_metrics(srv.get("api_url", ""))
+
+        with ThreadPoolExecutor(max_workers=min(8, max(1, len(to_fetch)))) as executor:
+            fetched = list(executor.map(fetch, to_fetch))
+        stamp = time.monotonic()
+        with _usage_cache_lock:
+            for sid, data in fetched:
+                _usage_cache[sid] = {"ts": stamp, "data": data}
+                result[sid] = data
+
+    return result
 
 
 def get_servers_total_usage():

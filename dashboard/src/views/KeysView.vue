@@ -21,6 +21,7 @@ import {
   NSpin,
   NPagination,
   NEmpty,
+  NProgress,
   useMessage,
 } from 'naive-ui'
 import {
@@ -29,6 +30,7 @@ import {
   CopyOutline,
   CalendarOutline,
   TrashOutline,
+  CellularOutline,
 } from '@vicons/ionicons5'
 
 const message = useMessage()
@@ -84,6 +86,49 @@ function expiryClass(value?: string): string {
   if (d < 0) return 'expired'
   if (d <= 7) return 'expiring'
   return 'active'
+}
+
+// ── Data usage (quota vs. consumed) ─────────────────────────────────
+// Backend stores both limit_bytes and bytes_used as decimal bytes (GB = 1000³),
+// matching the rest of the app; format to match.
+function formatData(bytes?: number | null): string {
+  if (bytes === null || bytes === undefined) return '—'
+  const gb = bytes / 1000 ** 3
+  if (gb >= 1) return `${gb.toFixed(gb >= 100 ? 0 : 1)} GB`
+  const mb = bytes / 1000 ** 2
+  if (mb >= 1) return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`
+  return `${(bytes / 1000).toFixed(0)} KB`
+}
+
+function hasQuota(k: any): boolean {
+  return !!k.limit_bytes && Number(k.limit_bytes) > 0
+}
+
+function usagePercent(k: any): number {
+  if (!hasQuota(k) || k.bytes_used === null || k.bytes_used === undefined) return 0
+  return Math.min(100, Math.round((k.bytes_used / k.limit_bytes) * 100))
+}
+
+// Colour thresholds mirror the expiry pills: green healthy, amber ≥70 %, red ≥90 %.
+function usageColor(k: any): string {
+  const p = usagePercent(k)
+  if (p >= 90) return '#ef4444'
+  if (p >= 70) return '#f59e0b'
+  return '#10b981'
+}
+
+function usageClass(k: any): string {
+  if (!hasQuota(k) || k.bytes_used === null || k.bytes_used === undefined) return 'muted'
+  const p = usagePercent(k)
+  if (p >= 90) return 'danger'
+  if (p >= 70) return 'warn'
+  return 'ok'
+}
+
+function usageText(k: any): string {
+  const limit = formatData(k.limit_bytes)
+  if (k.bytes_used === null || k.bytes_used === undefined) return `— / ${limit}`
+  return `${formatData(k.bytes_used)} / ${limit} · ${usagePercent(k)}%`
 }
 
 const expiringSoonCount = computed(
@@ -408,6 +453,37 @@ defineExpose({
               <CalendarOutline class="cal-icon" />
               <span class="expiry-label">Expires</span>
               <span class="expiry-val font-mono">{{ k.expire_date || 'N/A' }}</span>
+            </div>
+
+            <div
+              v-if="hasQuota(k)"
+              class="key-usage"
+              title="Lifetime data transferred on this key (does not reset when extended)"
+            >
+              <CellularOutline class="usage-icon" />
+              <NProgress
+                class="usage-bar"
+                type="line"
+                :percentage="usagePercent(k)"
+                :show-indicator="false"
+                :height="6"
+                :border-radius="3"
+                :color="usageColor(k)"
+                rail-color="rgba(255, 255, 255, 0.06)"
+              />
+              <span class="usage-text font-mono" :class="usageClass(k)">
+                {{ usageText(k) }}
+              </span>
+            </div>
+            <div v-else class="key-usage key-usage--unlimited">
+              <CellularOutline class="usage-icon" />
+              <span class="usage-unlimited">Unlimited data</span>
+              <span
+                v-if="k.bytes_used !== null && k.bytes_used !== undefined"
+                class="usage-text font-mono muted"
+              >
+                {{ formatData(k.bytes_used) }} used
+              </span>
             </div>
           </div>
 
@@ -772,6 +848,58 @@ defineExpose({
   font-weight: 600;
 }
 
+/* ── Data usage bar (quota vs. consumed) ─────────────────────────── */
+.key-usage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.usage-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
+.usage-bar {
+  flex: 1;
+  max-width: 240px;
+  min-width: 90px;
+}
+
+.usage-text {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.usage-text.ok {
+  color: var(--accent);
+}
+
+.usage-text.warn {
+  color: var(--warn);
+}
+
+.usage-text.danger {
+  color: var(--danger);
+}
+
+.usage-text.muted {
+  color: var(--text-4);
+}
+
+.usage-unlimited {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
 .key-actions {
   display: flex;
   gap: 8px;
@@ -924,6 +1052,11 @@ defineExpose({
 
   .key-name {
     font-size: 14px;
+  }
+
+  /* Let the usage bar use the full card width on narrow screens. */
+  .usage-bar {
+    max-width: none;
   }
 
   /* Copy/Delete become icon-only; Extend keeps its label and takes the slack */
