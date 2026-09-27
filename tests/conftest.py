@@ -211,11 +211,13 @@ def make_telegram_init_data():
     import json
     from urllib.parse import urlencode
 
-    def _generator(user_id=111000111, username="admin_user", is_tampered=False, token=None):
+    def _generator(user_id=111000111, username="admin_user", is_tampered=False, token=None,
+                   auth_date=None):
+        import time
         bot_token = token or os.environ.get("TELEGRAM_TOKEN", "0000000000:AAADummyTokenForTestsOnly00000000000")
         user_dict = {"id": user_id, "first_name": "Test", "username": username}
         params = {
-            "auth_date": "1727260000",
+            "auth_date": str(int(time.time()) if auth_date is None else auth_date),
             "query_id": "AAHdF6IQAAAAAN0XohD5p8Zb",
             "user": json.dumps(user_dict, separators=(",", ":")),
         }

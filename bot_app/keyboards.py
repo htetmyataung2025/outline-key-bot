@@ -1,8 +1,14 @@
 """Reply + inline keyboard factories."""
 
-from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from telebot.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    WebAppInfo,
+)
 
-from bot_app.config import REQUIRED_CHANNEL, is_admin
+from bot_app.config import DASHBOARD_URL, REQUIRED_CHANNEL, is_admin
 
 
 def get_force_join_keyboard():
@@ -31,12 +37,15 @@ def get_main_menu_keyboard(chat_id=None):
     markup.add(btn_admin, btn_refresh)
 
     if chat_id and is_admin(chat_id):
+        btn_dashboard = KeyboardButton(
+            "🎛 Control Center", web_app=WebAppInfo(url=DASHBOARD_URL))
         btn_total_usage = KeyboardButton("📊 Total Data Usage")
         btn_monthly_income = KeyboardButton("💰 လစဉ် ဝင်ငွေ")
         btn_gen_code = KeyboardButton("🎟️ Gen RD Code")
         btn_search_user = KeyboardButton("🔍 Cus ရှာရန်")
         btn_deduct = KeyboardButton("💸 ငွေနှုတ်ရန်")
         btn_broadcast = KeyboardButton("📢 Broadcast စာပို့ရန်")
+        markup.add(btn_dashboard)
         markup.add(btn_total_usage, btn_gen_code)
         markup.add(btn_monthly_income, btn_search_user)
         markup.add(btn_deduct, btn_broadcast)

@@ -10,23 +10,44 @@ import {
   NButton,
   darkTheme,
 } from 'naive-ui'
-import { KeyOutline, LockClosedOutline } from '@vicons/ionicons5'
+import { KeyOutline, LockClosedOutline, PersonOutline } from '@vicons/ionicons5'
 import { themeOverrides } from '@/theme'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import MobileNav from '@/components/layout/MobileNav.vue'
-import { fetchOverview, fetchSlips, fetchDataVersion, openVersionStream } from '@/api'
+import { adminLogin, fetchSlips, fetchDataVersion, openVersionStream } from '@/api'
 
 const pendingSlipsCount = ref(0)
 const currentViewRef = ref<any>(null)
 const isAuthenticated = ref(false)
 
-// Desktop Auth Modal
+// Auth Modal — Admin ID + password, identical in the browser and the
+// Telegram Mini App (the Mini App no longer auto-logs in via initData).
 const showLoginModal = ref(false)
-const adminPin = ref('')
+const adminId = ref('')
+const adminPassword = ref('')
 const loginLoading = ref(false)
 
 const loginError = ref('')
+
+function loginErrorMessage(err: any): string {
+  const status = err?.response?.status
+  if (status === 401) return 'Admin Password မှားနေပါသည်။'
+  if (status === 403) {
+    const detail = err?.response?.data?.error || ''
+    if (detail.includes('not enabled')) {
+      return 'Admin login ကို စနစ်တွင် ဖွင့်ထားခြင်း မရှိသေးပါ။ (.env — ADMIN_SECRET_KEY)'
+    }
+    return 'ဒီ Admin ID ကို ဝင်ရောက်ခွင့် မရှိပါ။'
+  }
+  if (status === 400) return err?.response?.data?.error || 'Admin ID နှင့် Password နှစ်ခုလုံး ဖြည့်သွင်းပါ။'
+  return err?.response?.data?.error || 'ဝင်ရောက်မှု မအောင်မြင်ပါ။ ထပ်မံ ကြိုးစားကြည့်ပါ။'
+}
+
+function clearCredentials() {
+  localStorage.removeItem('admin_id')
+  localStorage.removeItem('admin_token')
+}
 
 async function refreshPendingCount() {
   if (!isAuthenticated.value) return
@@ -34,10 +55,14 @@ async function refreshPendingCount() {
     const slips = await fetchSlips('PENDING')
     pendingSlipsCount.value = slips.length
   } catch (e: any) {
-    if (e?.response?.status === 401 && !window.Telegram?.WebApp?.initData) {
-      isAuthenticated.value = false
-      showLoginModal.value = true
-    }
+    const status = e?.response?.status
+    if (status !== 401 && status !== 403) return
+    // Session no longer valid (secret rotated / ID removed from admins):
+    // back to the login form with the server's reason.
+    isAuthenticated.value = false
+    clearCredentials()
+    loginError.value = e?.response?.data?.error || ''
+    showLoginModal.value = true
   }
 }
 
@@ -57,29 +82,35 @@ async function handleGlobalRefresh() {
 }
 
 async function handleLogin() {
-  if (!adminPin.value.trim()) {
-    loginError.value = 'Please enter an Admin Secret PIN'
+  const id = adminId.value.trim()
+  const pw = adminPassword.value
+  if (!id || !pw) {
+    loginError.value = 'Admin ID နှင့် Password နှစ်ခုလုံး ဖြည့်သွင်းပါ။'
     return
   }
   loginLoading.value = true
   loginError.value = ''
   try {
-    localStorage.setItem('admin_token', adminPin.value.trim())
-    await fetchOverview()
+    await adminLogin(id, pw)
+    localStorage.setItem('admin_id', id)
+    localStorage.setItem('admin_token', pw)
     isAuthenticated.value = true
     showLoginModal.value = false
     handleGlobalRefresh()
   } catch (err: any) {
-    localStorage.removeItem('admin_token')
     isAuthenticated.value = false
-    loginError.value = err?.response?.data?.error || 'Invalid Admin Secret PIN. Check .env (ADMIN_SECRET_KEY)'
+    clearCredentials()
+    loginError.value = loginErrorMessage(err)
   } finally {
     loginLoading.value = false
   }
 }
 
 function handleLogout() {
-  localStorage.removeItem('admin_token')
+  clearCredentials()
+  adminId.value = ''
+  adminPassword.value = ''
+  loginError.value = ''
   isAuthenticated.value = false
   stopFallbackPoll()
   liveMode.value = 'off'
@@ -97,10 +128,10 @@ onMounted(() => {
     // Non-Telegram environment
   }
 
-  const isTMA = Boolean(window.Telegram?.WebApp?.initData)
-  const hasDesktopToken = Boolean(localStorage.getItem('admin_token'))
-
-  if (!isTMA && !hasDesktopToken) {
+  // Both entry points (browser + Mini App) require an explicit Admin ID +
+  // password login; there is no initData auto-login anymore.
+  const hasCredentials = Boolean(localStorage.getItem('admin_token') && localStorage.getItem('admin_id'))
+  if (!hasCredentials) {
     isAuthenticated.value = false
     showLoginModal.value = true
   } else {
@@ -228,7 +259,7 @@ onUnmounted(() => {
             :pending-slips-count="pendingSlipsCount"
           />
 
-          <!-- Desktop PIN Login Modal -->
+          <!-- Admin Login Modal (browser + Telegram Mini App) -->
           <NModal v-model:show="showLoginModal" :mask-closable="false" :close-on-esc="false">
             <NCard
               style="width: 90vw; max-width: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);"
@@ -244,16 +275,27 @@ onUnmounted(() => {
                   <div>
                     <span style="font-size: 14px; font-weight: 600; color: var(--text-1);">Control Center Access</span>
                     <br />
-                    <span style="font-size: 12px; color: var(--text-3);">Enter Desktop Admin Secret PIN</span>
+                    <span style="font-size: 12px; color: var(--text-3);">Admin ID နှင့် Password ဖြင့် ဝင်ရောက်ပါ</span>
                   </div>
                 </div>
 
-                <div style="display: flex; flex-direction: column; gap: 6px;">
+                <div style="display: flex; flex-direction: column; gap: 10px;">
                   <NInput
-                    v-model:value="adminPin"
+                    v-model:value="adminId"
+                    inputmode="numeric"
+                    placeholder="Admin ID (Telegram User ID)"
+                    size="large"
+                    @keyup.enter="handleLogin"
+                  >
+                    <template #prefix>
+                      <PersonOutline style="width: 16px; height: 16px; color: var(--text-3);" />
+                    </template>
+                  </NInput>
+                  <NInput
+                    v-model:value="adminPassword"
                     type="password"
                     show-password-on="click"
-                    placeholder="Enter Admin PIN / Secret Key"
+                    placeholder="Admin Password"
                     size="large"
                     @keyup.enter="handleLogin"
                   >
@@ -262,9 +304,8 @@ onUnmounted(() => {
                     </template>
                   </NInput>
                   <span style="font-size: 12px; color: var(--text-4);">
-                    Enter the secret key configured in .env (<code>ADMIN_SECRET_KEY</code>)
+                    Admin ID သည် <code>ADMIN_CHAT_IDS</code> ထဲမှ တစ်ခု ဖြစ်ရမည် · Password မှာ <code>ADMIN_SECRET_KEY</code> ဖြစ်သည်
                   </span>
-
                 </div>
 
                 <div v-if="loginError" style="color: var(--danger); font-size: 12px; background: rgba(239, 68, 68, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2);">
@@ -278,7 +319,7 @@ onUnmounted(() => {
                   :loading="loginLoading"
                   @click="handleLogin"
                 >
-                  Authorize Access
+                  ဝင်ရောက်မည်
                 </NButton>
               </div>
             </NCard>

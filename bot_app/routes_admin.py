@@ -11,7 +11,7 @@ import requests
 from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 
 from bot_app.config import ADMIN_CHAT_IDS, TELEGRAM_TOKEN
-from bot_app.helpers.auth import require_admin_api
+from bot_app.helpers.auth import check_admin_credentials, require_admin_api
 from bot_app.helpers.sse import consume_ticket, issue_ticket
 from bot_app.services.admin_telemetry import get_admin_overview_telemetry, reset_telemetry_cache
 from bot_app.storage import versioning
@@ -44,6 +44,9 @@ _last_live_sync = 0.0
 # Apply authentication to all admin routes in blueprint
 @admin_bp.before_request
 def authenticate_admin():
+    if request.endpoint == "admin_bp.admin_login":
+        # The submitted Admin ID + password themselves authenticate this route.
+        return None
     if request.endpoint == SSE_STREAM_ENDPOINT:
         admin = consume_ticket(request.args.get("ticket", ""))
         if not admin:
@@ -51,6 +54,30 @@ def authenticate_admin():
         g.admin_user = admin
         return None
     return require_admin_api(lambda: None)()
+
+
+# ---------------------------------------------------------------------------
+# 0. Dashboard login (Admin ID + password)
+# ---------------------------------------------------------------------------
+@admin_bp.route("/login", methods=["POST"])
+def admin_login():
+    """Validate the Control Center login form.
+
+    The dashboard (browser AND Telegram Mini App) posts the Admin's Telegram
+    ID plus the shared secret password here before storing the pair for its
+    authenticated API calls. Returns 403 for an unregistered ID, 401 for a
+    wrong password.
+    """
+    data = request.get_json(silent=True) or {}
+    admin_id = str(data.get("admin_id", "")).strip()
+    password = str(data.get("password", ""))
+    if not admin_id or not password:
+        return jsonify({"error": "admin_id and password are required"}), 400
+
+    failure = check_admin_credentials(admin_id, password)
+    if failure:
+        return jsonify({"error": failure[1]}), failure[0]
+    return jsonify({"ok": True, "admin": {"id": admin_id}}), 200
 
 
 # ---------------------------------------------------------------------------

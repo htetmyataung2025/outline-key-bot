@@ -3,6 +3,7 @@
 import telebot
 from telebot.types import WebAppInfo
 
+from bot_app.config import DASHBOARD_URL, LANDING_URL, is_admin
 from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.keyboards import get_main_menu_keyboard
@@ -28,11 +29,17 @@ def send_welcome(message):
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     full_name = f"{user_first} {user_last}".strip() or "HMA User"
 
+    # Admins open the Control Center straight from the menu button; the
+    # dashboard trusts Telegram's signed initData, so no admin PIN is needed.
+    if is_admin(chat_id):
+        menu_text, menu_url = "🎛 Control Center", DASHBOARD_URL
+    else:
+        menu_text, menu_url = "Main Website", LANDING_URL
     try:
         bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
             type="web_app",
-            text="Main Website",
-            web_app=WebAppInfo(url="https://h-e.feature.hma.qzz.io"))
+            text=menu_text,
+            web_app=WebAppInfo(url=menu_url))
         )
     except:
         pass

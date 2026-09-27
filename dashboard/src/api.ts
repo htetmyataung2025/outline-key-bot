@@ -48,22 +48,25 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-  // 1. Try Telegram Mini App initData
-  const tgInitData = window.Telegram?.WebApp?.initData
-  if (tgInitData) {
-    config.headers['X-Telegram-Init-Data'] = tgInitData
+  // Authenticated as a logged-in admin: shared secret + the Admin ID it was
+  // issued to (minted by POST /login). The Mini App signs in the same way as
+  // the desktop browser — no initData auto-login.
+  const adminId = localStorage.getItem('admin_id')
+  if (adminId) {
+    config.headers['X-Admin-ID'] = adminId
   }
-
-  // 2. Try desktop bearer token fallback
-  const desktopToken = localStorage.getItem('admin_token')
-  if (desktopToken && !config.headers['X-Telegram-Init-Data']) {
-    config.headers['Authorization'] = `Bearer ${desktopToken}`
+  const adminToken = localStorage.getItem('admin_token')
+  if (adminToken) {
+    config.headers['Authorization'] = `Bearer ${adminToken}`
   }
-
   return config
 })
 
 export default api
+
+// ── Authentication ─────────────────────────────────────────────────────────
+export const adminLogin = (adminId: string, password: string) =>
+  api.post('/login', { admin_id: adminId, password }, { timeout: 8000 }).then((r) => r.data)
 
 // API functions
 // Overview probes live VPN servers on a cold cache, so give it a longer ceiling
