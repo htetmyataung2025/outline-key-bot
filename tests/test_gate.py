@@ -73,17 +73,24 @@ def test_start_sets_landing_menu_button_for_customers(mock_bot, isolated_state):
     assert button.text == "Main Website"
 
 
-def test_admin_main_menu_has_control_center_web_app_button():
-    from bot_app.config import DASHBOARD_URL
+def test_admin_main_menu_has_no_web_app_row():
+    """The Control Center lives in the chat menu button only (gate.py) — a
+    web_app row in the reply keyboard duplicated it and, on mobile, made the
+    keyboard tall enough to swallow the message input."""
     from bot_app.keyboards import get_main_menu_keyboard
 
     rows = get_main_menu_keyboard(_admin_id()).keyboard
-    web_app_urls = [
-        btn["web_app"]["url"]
-        for row in rows for btn in row
-        if "web_app" in btn
-    ]
-    assert web_app_urls == [DASHBOARD_URL]
+    assert all("web_app" not in btn for row in rows for btn in row)
+
+
+def test_admin_main_menu_keeps_admin_tool_rows():
+    from bot_app.keyboards import get_main_menu_keyboard
+
+    rows = get_main_menu_keyboard(_admin_id()).keyboard
+    labels = [btn["text"] for row in rows for btn in row]
+    assert "📊 Total Data Usage" in labels
+    assert "💸 ငွေနှုတ်ရန်" in labels
+    assert "📢 Broadcast စာပို့ရန်" in labels
 
 
 def test_customer_main_menu_has_no_web_app_button():
