@@ -29,10 +29,11 @@ def send_welcome(message):
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     full_name = f"{user_first} {user_last}".strip() or "HMA User"
 
-    # Admins open the Control Center straight from the menu button; the
-    # dashboard trusts Telegram's signed initData, so no admin PIN is needed.
+    # Admins open the Control Center straight from the menu button (short
+    # label keeps the pill compact on mobile); the dashboard then asks for
+    # Admin ID + password.
     if is_admin(chat_id):
-        menu_text, menu_url = "🎛 Control Center", DASHBOARD_URL
+        menu_text, menu_url = "🎛 Control", DASHBOARD_URL
     else:
         menu_text, menu_url = "Main Website", LANDING_URL
     try:

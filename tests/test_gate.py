@@ -59,7 +59,7 @@ def test_start_sets_dashboard_menu_button_for_admins(mock_bot, isolated_state):
     chat_id, button = _last_menu_button(mock_bot)
     assert str(chat_id) == str(_admin_id())
     assert button.web_app.url == DASHBOARD_URL
-    assert "Control Center" in button.text
+    assert button.text == "🎛 Control"
 
 
 def test_start_sets_landing_menu_button_for_customers(mock_bot, isolated_state):
