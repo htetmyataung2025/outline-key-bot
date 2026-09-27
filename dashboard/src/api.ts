@@ -184,6 +184,10 @@ export const deleteKey = (serverId: string | number, keyId: string | number) =>
 export const fetchRedeems = () => api.get('/redeems').then((r) => r.data)
 export const createRedeemBatch = (payload: { amount_ks: number; mode: 'single' | 'shared'; valid_days: number; count: number }) =>
   api.post('/redeems/batch', payload).then((r) => r.data)
+export const deleteRedeem = (code: string) =>
+  api.delete(`/redeems/${encodeURIComponent(code)}`).then((r) => r.data)
+export const deleteRedeemsBulk = (codes: string[]) =>
+  api.post('/redeems/delete', { codes }).then((r) => r.data)
 
 export const fetchCustomers = () => api.get('/customers').then((r) => r.data)
 export const fetchCustomerDetail = (chatId: string) =>

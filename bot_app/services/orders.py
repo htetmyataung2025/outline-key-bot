@@ -297,3 +297,20 @@ def save_redeem_codes(codes):
             json.dump(codes, f)
     except:
         pass
+
+
+def is_code_expired(info: dict) -> bool:
+    """True when a redeem code carries an ``expires_at`` in the past.
+
+    Codes without ``expires_at`` (Telegram-generated) never expire. An
+    unparseable timestamp is treated as not expired so a bad record can
+    never lock out redemption silently — the dashboard shows the raw string.
+    """
+    raw = (info or {}).get("expires_at")
+    if not raw:
+        return False
+    try:
+        from datetime import datetime
+        return datetime.strptime(str(raw), "%d/%m/%Y %I:%M %p") < myanmar_now()
+    except (ValueError, TypeError):
+        return False

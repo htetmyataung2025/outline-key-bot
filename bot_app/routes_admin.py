@@ -18,6 +18,7 @@ from bot_app.storage import versioning
 from bot_app.storage.versioning import get_data_version
 from bot_app.services.billing import load_all_wallets, update_user_balance
 from bot_app.services.orders import (
+    is_code_expired,
     load_all_users,
     load_redeem_codes,
     save_redeem_codes,
@@ -450,8 +451,71 @@ def list_redeems():
     for code, info in codes.items():
         item = dict(info)
         item["code"] = code
+        # Derived fields so the dashboard can show pool/claim/expiry state
+        # without duplicating the redemption rules client-side.
+        item["remaining"] = int(info.get("remaining", info.get("amount", 0) or 0))
+        item["claimed_count"] = len(info.get("claimed_users", []) or [])
+        item["expired"] = is_code_expired(info)
         items.append(item)
     return jsonify(items), 200
+
+
+@admin_bp.route("/redeems/<code>", methods=["DELETE"])
+def delete_redeem_code(code):
+    codes = load_redeem_codes()
+    info = codes.pop(code, None)
+    if info is None:
+        return jsonify({"error": "Redeem code not found"}), 404
+    save_redeem_codes(codes)
+
+    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    record_audit_log(
+        admin_id=admin_id,
+        action="REDEEM_DELETE",
+        target_type="redeem",
+        target_id=code,
+        details={
+            "amount": info.get("amount"),
+            "mode": info.get("mode"),
+            "remaining": info.get("remaining", info.get("amount")),
+            "claimed_count": len(info.get("claimed_users", []) or []),
+        },
+    )
+    return jsonify({"success": True, "deleted": code}), 200
+
+
+@admin_bp.route("/redeems/delete", methods=["POST"])
+def delete_redeem_batch():
+    data = request.get_json(silent=True) or {}
+    targets = data.get("codes")
+    if not isinstance(targets, list) or not targets:
+        return jsonify({"error": "codes must be a non-empty list"}), 400
+
+    codes = load_redeem_codes()
+    admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
+    deleted, not_found = [], []
+    for code in targets:
+        info = codes.pop(str(code), None)
+        if info is None:
+            not_found.append(str(code))
+            continue
+        deleted.append(str(code))
+        record_audit_log(
+            admin_id=admin_id,
+            action="REDEEM_DELETE",
+            target_type="redeem",
+            target_id=str(code),
+            details={
+                "amount": info.get("amount"),
+                "mode": info.get("mode"),
+                "remaining": info.get("remaining", info.get("amount")),
+                "claimed_count": len(info.get("claimed_users", []) or []),
+                "bulk": True,
+            },
+        )
+    if deleted:
+        save_redeem_codes(codes)
+    return jsonify({"success": True, "deleted": len(deleted), "not_found": not_found}), 200
 
 
 @admin_bp.route("/redeems/batch", methods=["POST"])
@@ -472,9 +536,16 @@ def generate_redeem_batch():
 
     for _ in range(count):
         code = f"RD-{generate_random_redeem_code().upper()}"
+        # Same record shape the Telegram redemption flow (menu.py) reads:
+        # validity_days/remaining/claimed_users are required for shared
+        # codes to be claimable and for single codes to keep their validity.
         codes_data[code] = {
+            "type": "wallet",
             "amount": amount_ks,
             "mode": mode,
+            "remaining": amount_ks,
+            "validity_days": valid_days,
+            "claimed_users": [],
             "valid_days": valid_days,
             "expires_at": exp_date,
             "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),

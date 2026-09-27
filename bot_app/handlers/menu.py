@@ -20,8 +20,9 @@ from bot_app.services.billing import (
     load_expiring_credits,
 )
 from bot_app.services.orders import (
-    get_order_id_for_key, get_user_combined_purchase_records, load_all_users,
-    load_redeem_codes, save_redeem_codes, save_user_id, save_user_purchase_record,
+    get_order_id_for_key, get_user_combined_purchase_records, is_code_expired,
+    load_all_users, load_redeem_codes, save_redeem_codes, save_user_id,
+    save_user_purchase_record,
 )
 from bot_app.services.outline import (
     fetch_key_from_server, get_customer_summary_stats, get_servers_total_usage,
@@ -357,6 +358,9 @@ def handle_all_messages(message):
 
         if matched_code_key:
             code_info = codes[matched_code_key]
+            if is_code_expired(code_info):
+                bot.send_message(chat_id, f"❌ <b>ဤ Code ၏ သက်တမ်း ကုန်ဆုံးသွားပါပြီ။</b>\n\n🎟️ <code>{matched_code_key}</code> (ကုန်ဆုံးရက်: {code_info.get('expires_at')})", parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+                return
             validity_days = int(code_info.get("validity_days", 1))
             mode = code_info.get("mode", "single")
             user_str_id = str(chat_id)
