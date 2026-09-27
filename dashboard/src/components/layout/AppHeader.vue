@@ -286,17 +286,24 @@ onUnmounted(() => {
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-/* Push stream down → poll fallback (amber) or offline (gray) */
+/* Push stream down → poll fallback (amber) or offline (gray).
+   Only the DOT gets a filled background + glow; the LABEL gets a text
+   color change only — a solid background on the text renders as a big
+   amber blob with unreadable text. */
 .status-pill.mode-poll {
   background: rgba(245, 158, 11, 0.08);
   border-color: rgba(245, 158, 11, 0.3);
 }
 
-.status-pill.mode-poll .status-label,
 .status-pill.mode-poll .pulse-dot {
   color: var(--warn);
   background-color: var(--warn);
   box-shadow: 0 0 6px var(--warn);
+  animation: none;
+}
+
+.status-pill.mode-poll .status-label {
+  color: var(--warn);
 }
 
 .status-pill.mode-off {
@@ -304,12 +311,15 @@ onUnmounted(() => {
   border-color: rgba(148, 163, 184, 0.25);
 }
 
-.status-pill.mode-off .status-label,
 .status-pill.mode-off .pulse-dot {
   color: var(--text-3);
   background-color: var(--text-3);
   box-shadow: none;
   animation: none;
+}
+
+.status-pill.mode-off .status-label {
+  color: var(--text-3);
 }
 
 .pulse-dot {

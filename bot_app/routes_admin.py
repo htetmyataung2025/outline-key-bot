@@ -2,6 +2,8 @@
 
 import json
 import queue
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from urllib.parse import unquote
 
@@ -30,6 +32,12 @@ admin_bp = Blueprint("admin_bp", __name__, url_prefix="/api/admin")
 # Route that authenticates with a one-time stream ticket instead of headers
 # (EventSource cannot attach custom headers). Checked by endpoint name below.
 SSE_STREAM_ENDPOINT = "admin_bp.sse_events"
+
+# Live Outline sync in GET /keys is throttled: the probe costs 1-2 s, so
+# page reloads reuse the cached registry and only re-sync every 30 s
+# (or immediately with ?sync=force).
+LIVE_SYNC_MIN_INTERVAL = 30.0
+_last_live_sync = 0.0
 
 
 # Apply authentication to all admin routes in blueprint
@@ -199,6 +207,8 @@ def review_slip_endpoint(slip_id):
 # ---------------------------------------------------------------------------
 @admin_bp.route("/keys", methods=["GET"])
 def list_keys():
+    global _last_live_sync
+
     server_id = request.args.get("server_id")
     search = request.args.get("search", "").strip().lower()
     page = int(request.args.get("page", 1))
@@ -206,12 +216,18 @@ def list_keys():
 
     # Pull live keys from the Outline servers into the registry so the list shows
     # every key on the servers, not only the ones created through the dashboard.
-    if request.args.get("sync", "1") != "0":
-        try:
-            from bot_app.services.outline import refresh_registry_from_servers
-            refresh_registry_from_servers()
-        except Exception:
-            pass
+    # Throttled: page visits within 30s reuse the cached registry (?sync=force
+    # bypasses, e.g. after manual server changes).
+    sync_mode = request.args.get("sync", "1")
+    if sync_mode != "0":
+        now = time.monotonic()
+        if sync_mode == "force" or now - _last_live_sync >= LIVE_SYNC_MIN_INTERVAL:
+            try:
+                from bot_app.services.outline import refresh_registry_from_servers
+                refresh_registry_from_servers()
+                _last_live_sync = time.monotonic()
+            except Exception:
+                pass
 
     registry = load_persistent_keys()
     items = list(registry.values())
@@ -472,10 +488,19 @@ def generate_redeem_batch():
 def list_customers():
     from bot_app.services.profiles import backfill_profiles_from_history
 
-    profiles = backfill_profiles_from_history()
-    wallets = load_all_wallets()
+    # The four reads are independent; together they dominate the endpoint's
+    # latency (6-8 sequential KV round-trips). Run them concurrently.
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        f_profiles = executor.submit(backfill_profiles_from_history)
+        f_wallets = executor.submit(load_all_wallets)
+        f_users = executor.submit(load_all_users)
+        f_keys = executor.submit(load_persistent_keys)
+        profiles = f_profiles.result()
+        wallets = f_wallets.result()
+        all_users_list = f_users.result()
+        registry = f_keys.result()
 
-    all_users = set(load_all_users())
+    all_users = set(all_users_list)
     for uid in wallets.keys():
         all_users.add(str(uid))
     for uid in profiles.keys():
@@ -484,7 +509,7 @@ def list_customers():
     # Count Outline keys per user from the cached registry (no live server sync).
     # Users who only own a key (no wallet / no profile yet) are pulled in too.
     keys_by_user = {}
-    for k in load_persistent_keys().values():
+    for k in registry.values():
         cid = str(k.get("chat_id") or "").strip()
         if cid:
             keys_by_user[cid] = keys_by_user.get(cid, 0) + 1

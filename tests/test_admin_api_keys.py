@@ -133,3 +133,29 @@ def test_delete_key_unconfigured_server(client, make_telegram_init_data, monkeyp
     resp = client.delete("/api/admin/keys/9/123", headers=headers)
     assert resp.status_code == 400
     assert "error" in resp.json
+
+
+def test_keys_live_sync_throttled_and_force_bypasses(client, make_telegram_init_data, monkeypatch):
+    """Page visits within 30s must reuse the cached registry; ?sync=force
+    always re-syncs (the probe costs 1-2s per visit otherwise)."""
+    import bot_app.routes_admin as ra
+
+    calls = {"n": 0}
+
+    def fake_refresh():
+        calls["n"] += 1
+
+    monkeypatch.setattr("bot_app.services.outline.refresh_registry_from_servers", fake_refresh)
+    monkeypatch.setattr(ra, "_last_live_sync", 0.0)
+
+    headers = {"X-Telegram-Init-Data": make_telegram_init_data(user_id=ADMIN_ID)}
+
+    assert client.get("/api/admin/keys", headers=headers).status_code == 200
+    assert client.get("/api/admin/keys", headers=headers).status_code == 200
+    assert calls["n"] == 1
+
+    assert client.get("/api/admin/keys?sync=force", headers=headers).status_code == 200
+    assert calls["n"] == 2
+
+    assert client.get("/api/admin/keys?sync=0", headers=headers).status_code == 200
+    assert calls["n"] == 2

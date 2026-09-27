@@ -5,7 +5,8 @@ cold starts on serverless platforms and reliable free-tier cloud persistence.
 """
 
 import os
-import requests
+
+from bot_app.helpers.http_session import get_session
 
 
 def get_supabase_config() -> tuple[str, str]:
@@ -37,7 +38,7 @@ def supabase_get(table: str, params: dict | None = None, timeout: int = 5) -> li
         return None
     url, _ = get_supabase_config()
     try:
-        resp = requests.get(
+        resp = get_session().get(
             f"{url}/rest/v1/{table}",
             headers=_headers(),
             params=params or {},
@@ -62,7 +63,7 @@ def supabase_upsert(table: str, data: dict | list, on_conflict: str = "", timeou
         params["on_conflict"] = on_conflict
 
     try:
-        resp = requests.post(
+        resp = get_session().post(
             f"{url}/rest/v1/{table}",
             headers=headers,
             params=params,
@@ -82,7 +83,7 @@ def supabase_delete(table: str, params: dict, timeout: int = 5) -> bool:
         return False
     url, _ = get_supabase_config()
     try:
-        resp = requests.delete(
+        resp = get_session().delete(
             f"{url}/rest/v1/{table}",
             headers=_headers(),
             params=params,

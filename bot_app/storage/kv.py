@@ -9,7 +9,7 @@ import json
 import os
 import urllib.parse
 
-import requests
+from bot_app.helpers.http_session import get_session
 
 
 def _kv_config():
@@ -33,7 +33,7 @@ def redis_get(key):
         return None
     try:
         encoded = urllib.parse.quote(json.dumps(key))
-        res = requests.get(
+        res = get_session().get(
             f"{url}/get/{encoded}",
             headers={"Authorization": f"Bearer {token}"},
             timeout=5,
@@ -66,7 +66,7 @@ def redis_set(key, value):
     try:
         encoded_key = urllib.parse.quote(json.dumps(key))
         encoded_val = urllib.parse.quote(json.dumps(value))
-        res = requests.get(
+        res = get_session().get(
             f"{url}/set/{encoded_key}/{encoded_val}",
             headers={"Authorization": f"Bearer {token}"},
             timeout=5,

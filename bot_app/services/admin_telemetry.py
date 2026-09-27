@@ -181,8 +181,18 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
 
     servers = get_servers_telemetry(configured_servers, force_refresh=force_refresh)
 
-    # 2. Sales and revenue calculation
-    sales_history = load_sales_history()
+    # 2-4. Storage KPI reads are independent — fetch them concurrently
+    #      (each is 1-2 KV round-trips; sequential they add up to seconds).
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        f_sales = executor.submit(load_sales_history)
+        f_keys = executor.submit(load_persistent_keys)
+        f_users = executor.submit(load_all_users)
+        f_slips = executor.submit(get_slips_list, "PENDING")
+        sales_history = f_sales.result()
+        persistent_keys = f_keys.result()
+        all_users = f_users.result()
+        pending_slips_list = f_slips.result()
+
     today_revenue = 0
     month_revenue = 0
 
@@ -198,16 +208,14 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
             month_revenue += price
 
     # 3. Keys and customers count
-    persistent_keys = load_persistent_keys()
     active_keys_count = sum(s["total_keys"] for s in servers if s["is_active"])
     if not active_keys_count and persistent_keys:
         active_keys_count = len(persistent_keys)
 
-    all_users = load_all_users()
     total_customers = len(all_users)
 
     # 4. Pending slips count
-    pending_slips = len(get_slips_list("PENDING"))
+    pending_slips = len(pending_slips_list)
 
     # 5. Traffic trends (last 3 points or based on servers)
     total_gb = sum(s["total_transferred_gb"] for s in servers)
