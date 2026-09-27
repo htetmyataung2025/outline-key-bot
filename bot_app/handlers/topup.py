@@ -145,15 +145,6 @@ def handle_photo_messages(message):
 
     photo_file = bot.get_file(message.photo[-1].file_id)
     topup_id, tx_ref = extract_order_id_and_tx(photo_file.file_path)
-    record_slip(
-        slip_id=topup_id,
-        chat_id=chat_id,
-        amount=topup_amt,
-        username=username,
-        file_id=message.photo[-1].file_id,
-        extracted_tx_id=tx_ref,
-    )
-
 
     admin_alert_text = (
         f"💰 <b>ငွေဖြည့်ပြေစာအသစ် (Top-Up Request)</b>\n\n"
@@ -167,11 +158,25 @@ def handle_photo_messages(message):
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(f"✅ Approve (+{topup_amt:,} MMK)", callback_data=f"approve_topup_{chat_id}_{topup_amt}_{topup_id}"))
 
+    admin_messages = []
     for aid in ADMIN_CHAT_IDS:
         try:
-            bot.send_photo(aid, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=markup)
+            sent = bot.send_photo(aid, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=markup)
+            if sent is not None:
+                admin_messages.append({"chat_id": sent.chat.id, "message_id": sent.message_id})
         except:
             pass
+
+    record_slip(
+        slip_id=topup_id,
+        chat_id=chat_id,
+        amount=topup_amt,
+        username=username,
+        file_id=message.photo[-1].file_id,
+        extracted_tx_id=tx_ref,
+        admin_messages=admin_messages,
+        admin_caption=admin_alert_text,
+    )
 
     user_reply = (
         f"💌 <b>ငွေလွှဲပြေစာအား လက်ခံရရှိပါသည်ခင်ဗျာ။</b>\n\n"

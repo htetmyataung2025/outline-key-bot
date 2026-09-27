@@ -40,6 +40,8 @@ def record_slip(
     image_url: str = "",
     file_id: str = "",
     extracted_tx_id: str = "",
+    admin_messages: list | None = None,
+    admin_caption: str = "",
 ) -> dict:
     slips = load_all_slips()
     now = myanmar_now()
@@ -56,6 +58,11 @@ def record_slip(
         "reviewed_at": None,
         "review_reason": None,
         "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        # Telegram notifications sent to admin chats for this slip
+        # ([{"chat_id": ..., "message_id": ...}]) plus the original caption,
+        # so a dashboard-side review can edit those messages too.
+        "admin_messages": admin_messages or [],
+        "admin_caption": admin_caption,
     }
     slips[str(slip_id)] = slip_record
     save_all_slips(slips)
@@ -114,6 +121,27 @@ def record_audit_log(admin_id: str | int, action: str, target_type: str, target_
         pass
 
 
+def _sync_admin_messages(slip: dict, badge: str):
+    """Append a verdict badge to the admin Telegram notifications and drop
+    the Approve button, so a dashboard-side review is reflected in Telegram.
+
+    Best-effort: messages may have been deleted or the bot removed from the
+    chat, and slips recorded before this feature carry no message ids.
+    """
+    caption = slip.get("admin_caption") or ""
+    for entry in slip.get("admin_messages") or []:
+        try:
+            bot.edit_message_caption(
+                chat_id=entry["chat_id"],
+                message_id=entry["message_id"],
+                caption=f"{caption}\n\n{badge}" if caption else badge,
+                parse_mode="HTML",
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+
+
 def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", reason: str = "") -> dict:
     slips = load_all_slips()
     slip = slips.get(str(slip_id))
@@ -140,6 +168,9 @@ def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", rea
         slip["reviewed_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
         slip["review_reason"] = reason or "Payment approved"
         save_all_slips(slips)
+
+        # 0. Reflect the verdict on the admin Telegram notifications
+        _sync_admin_messages(slip, f"✅ <b>APPROVED (+{amount:,} MMK)</b>")
 
         # 1. Update user balance
         new_balance, _ = update_user_balance(chat_id, amount)
@@ -174,6 +205,10 @@ def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", rea
         slip["reviewed_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
         slip["review_reason"] = reason or "Payment rejected"
         save_all_slips(slips)
+
+        # Reflect the verdict on the admin Telegram notifications
+        reject_badge = f"❌ <b>REJECTED</b>\n{reason}" if reason else "❌ <b>REJECTED</b>"
+        _sync_admin_messages(slip, reject_badge)
 
         # Send Telegram notification to user
         reject_msg = (

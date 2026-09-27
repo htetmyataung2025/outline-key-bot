@@ -160,7 +160,12 @@ class BotMock:
 
     def _send_photo(self, chat_id, photo, *args, **kwargs):
         self.calls["send_photo"].append((chat_id, photo))
-        return None
+        # Real TeleBot returns the sent Message; handlers may record its id.
+        self._photo_seq = getattr(self, "_photo_seq", 0) + 1
+        return SimpleNamespace(
+            chat=SimpleNamespace(id=chat_id),
+            message_id=900000 + self._photo_seq,
+        )
 
     def _get_file(self, file_id):
         self.calls["get_file"].append(file_id)

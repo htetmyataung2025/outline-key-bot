@@ -1,9 +1,12 @@
 """Tests for Admin Slips Verification Queue endpoints."""
 
+from types import SimpleNamespace
+
 from bot_app.services.billing import get_user_balance
-from bot_app.services.slips import record_slip
+from bot_app.services.slips import get_slip_by_id, record_slip
 
 ADMIN_ID = 111000111
+ADMIN_ID_2 = 222000222
 CUSTOMER_ID = 555444333
 
 
@@ -170,3 +173,90 @@ def test_vercel_middleware_decodes_encoded_forwarded_path():
     environ3 = {"PATH_INFO": "/api/admin/slips/%23082412/image"}
     wsgi(environ3, lambda *a: None)
     assert captured["path"] == "/api/admin/slips/%23082412/image"
+
+
+# --- Dashboard review must sync the admin Telegram notifications -------------
+
+def test_dashboard_approve_syncs_admin_telegram_messages(client, make_telegram_init_data, mock_bot):
+    init_data = make_telegram_init_data(user_id=ADMIN_ID)
+    headers = {"X-Telegram-Init-Data": init_data}
+
+    record_slip(
+        slip_id="SLIP-SYNC-1", chat_id=CUSTOMER_ID, amount=7000,
+        admin_messages=[
+            {"chat_id": ADMIN_ID, "message_id": 900001},
+            {"chat_id": ADMIN_ID_2, "message_id": 900002},
+        ],
+        admin_caption="💰 <b>Top-Up Request</b>",
+    )
+
+    resp = client.post("/api/admin/slips/SLIP-SYNC-1/review",
+                       json={"action": "APPROVE"}, headers=headers)
+    assert resp.status_code == 200
+
+    edits = mock_bot.calls["edit_message_caption"]
+    assert len(edits) == 2
+    for (args, kwargs), msg_id in zip(edits, (900001, 900002)):
+        assert kwargs["message_id"] == msg_id
+        assert "Top-Up Request" in kwargs["caption"]
+        assert "✅ <b>APPROVED (+7,000 MMK)</b>" in kwargs["caption"]
+        assert kwargs["reply_markup"] is None  # Approve button removed
+    assert {e[1]["chat_id"] for e in edits} == {ADMIN_ID, ADMIN_ID_2}
+
+
+def test_dashboard_reject_syncs_admin_telegram_messages(client, make_telegram_init_data, mock_bot):
+    init_data = make_telegram_init_data(user_id=ADMIN_ID)
+    headers = {"X-Telegram-Init-Data": init_data}
+
+    record_slip(
+        slip_id="SLIP-SYNC-2", chat_id=CUSTOMER_ID, amount=5000,
+        admin_messages=[{"chat_id": ADMIN_ID, "message_id": 900010}],
+        admin_caption="💰 <b>Top-Up Request</b>",
+    )
+
+    resp = client.post("/api/admin/slips/SLIP-SYNC-2/review",
+                       json={"action": "REJECT", "reason": "TxID already used"},
+                       headers=headers)
+    assert resp.status_code == 200
+
+    (args, kwargs), = mock_bot.calls["edit_message_caption"]
+    assert kwargs["message_id"] == 900010
+    assert "❌ <b>REJECTED</b>" in kwargs["caption"]
+    assert "TxID already used" in kwargs["caption"]
+    assert kwargs["reply_markup"] is None
+
+
+def test_review_without_admin_messages_is_noop(client, make_telegram_init_data, mock_bot):
+    """Legacy slips (no stored message ids) still review cleanly, editing nothing."""
+    init_data = make_telegram_init_data(user_id=ADMIN_ID)
+    headers = {"X-Telegram-Init-Data": init_data}
+
+    record_slip(slip_id="SLIP-LEGACY-1", chat_id=CUSTOMER_ID, amount=1000)
+
+    resp = client.post("/api/admin/slips/SLIP-LEGACY-1/review",
+                       json={"action": "APPROVE"}, headers=headers)
+    assert resp.status_code == 200
+    assert mock_bot.calls["edit_message_caption"] == []
+
+
+def test_photo_handler_records_admin_message_ids(mock_bot, isolated_state, monkeypatch):
+    """The slip record must carry the admin notification ids so a later
+    dashboard review can edit those exact messages."""
+    from bot_app.handlers import topup
+    from bot_app.services.states import set_topup_state
+
+    monkeypatch.setattr(topup, "extract_order_id_and_tx", lambda path: ("#777001", "TX777"))
+    set_topup_state(CUSTOMER_ID, 2000)
+
+    message = SimpleNamespace(
+        chat=SimpleNamespace(id=CUSTOMER_ID),
+        from_user=SimpleNamespace(id=CUSTOMER_ID, first_name="Test", last_name="", username="tester"),
+        photo=[SimpleNamespace(file_id="fid_small"), SimpleNamespace(file_id="fid_big")],
+    )
+    topup.handle_photo_messages(message)
+
+    slip = get_slip_by_id("#777001")
+    assert slip is not None
+    assert slip["admin_caption"] and "Top-Up Request" in slip["admin_caption"]
+    assert [str(m["chat_id"]) for m in slip["admin_messages"]] == [str(ADMIN_ID), str(ADMIN_ID_2)]
+    assert all(isinstance(m["message_id"], int) for m in slip["admin_messages"])
