@@ -49,6 +49,15 @@ const adjustForm = ref({
   amount_ks: 5000,
   reason: '',
 })
+
+const isDeduct = computed(() => adjustForm.value.adjustment_type === 'DEDUCT')
+const currentBalance = computed(() => Number(profile.value.wallet_balance || 0))
+// Deduct can never exceed the wallet; Top-Up is uncapped.
+const amountMax = computed(() => (isDeduct.value ? currentBalance.value : undefined))
+const deductExceeds = computed(
+  () => isDeduct.value && Number(adjustForm.value.amount_ks || 0) > currentBalance.value,
+)
+
 async function loadDetail(opts?: { silent?: boolean }) {
   const silent = opts?.silent ?? false
   if (!silent) loading.value = true
@@ -318,14 +327,17 @@ defineExpose({ loadData: loadDetail })
           </NRadioGroup>
         </NFormItem>
         <NFormItem label="Amount (Ks)">
-          <NInputNumber v-model:value="adjustForm.amount_ks" :step="1000" :min="100" />
+          <NInputNumber v-model:value="adjustForm.amount_ks" :step="1000" :min="100" :max="amountMax" />
         </NFormItem>
+        <p v-if="deductExceeds" class="deduct-warning">
+          ⚠️ လက်ကျန်ငွေ ({{ currentBalance.toLocaleString() }} Ks) ထက် ပို၍ နှုတ်ယူ၍ မရပါ။
+        </p>
         <NFormItem label="Reason">
           <NInput v-model:value="adjustForm.reason" placeholder="e.g. Compensation bonus" />
         </NFormItem>
         <div class="modal-actions">
           <NButton @click="showAdjustModal = false">Cancel</NButton>
-          <NButton type="primary" :loading="adjustLoading" @click="handleAdjustBalance">
+          <NButton type="primary" :loading="adjustLoading" :disabled="deductExceeds" @click="handleAdjustBalance">
             Confirm Adjustment
           </NButton>
         </div>
@@ -682,6 +694,12 @@ defineExpose({ loadData: loadDetail })
   justify-content: flex-end;
   gap: 10px;
   margin-top: 16px;
+}
+
+.deduct-warning {
+  margin: -4px 0 12px 120px;
+  font-size: 12.5px;
+  color: #f87171;
 }
 
 /* ── Mobile: stack panels, trim padding ─────────────────────────── */

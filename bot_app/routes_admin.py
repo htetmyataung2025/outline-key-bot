@@ -10,7 +10,7 @@ from urllib.parse import unquote
 import requests
 from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 
-from bot_app.config import TELEGRAM_TOKEN
+from bot_app.config import ADMIN_CHAT_IDS, TELEGRAM_TOKEN
 from bot_app.helpers.auth import require_admin_api
 from bot_app.helpers.sse import consume_ticket, issue_ticket
 from bot_app.services.admin_telemetry import get_admin_overview_telemetry, reset_telemetry_cache
@@ -635,15 +635,45 @@ def adjust_customer_balance(chat_id):
     if amount <= 0:
         return jsonify({"error": "Amount must be greater than 0"}), 400
 
+    from bot_app.helpers.payment_text import (
+        build_admin_deduct_notice,
+        build_admin_topup_notice,
+    )
+
     if adj_type == "TOPUP":
         new_balance, _ = update_user_balance(chat_id, amount)
+        notice = build_admin_topup_notice(amount, new_balance, reason)
     elif adj_type == "DEDUCT":
-        from bot_app.services.billing import admin_deduct_specific_funds
+        from bot_app.services.billing import (
+            admin_deduct_specific_funds,
+            get_user_balance_breakdown,
+        )
+
+        # Guard against overdrawing: refuse to deduct more than the customer
+        # currently holds instead of silently taking only what is available.
+        _, _, current_total = get_user_balance_breakdown(chat_id)
+        if amount > current_total:
+            return jsonify({
+                "error": f"လက်ကျန်ငွေ ({current_total:,} Ks) ထက် ပို၍ နှုတ်ယူ၍ မရပါ။"
+            }), 400
+
         deducted, m_bal, b_bal, total_bal = admin_deduct_specific_funds(chat_id, amount, "all")
         new_balance = total_bal
+        notice = build_admin_deduct_notice(amount, new_balance, reason)
     else:
         return jsonify({"error": "Invalid adjustment_type. Must be 'TOPUP' or 'DEDUCT'"}), 400
 
+    # Notify the customer on Telegram. Skipped for admin targets (their balance
+    # is a hardcoded sentinel, not a real wallet). Best-effort: a delivery
+    # failure must not fail the adjustment the admin already committed.
+    notified = False
+    if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        try:
+            from bot_app.extensions import bot
+            bot.send_message(chat_id, notice, parse_mode="HTML")
+            notified = True
+        except Exception:
+            notified = False
 
     admin_id = g.admin_user.get("id") if hasattr(g, "admin_user") else "admin"
     record_audit_log(
@@ -654,7 +684,13 @@ def adjust_customer_balance(chat_id):
         details={"amount": amount, "new_balance": new_balance, "reason": reason},
     )
 
-    return jsonify({"success": True, "chat_id": str(chat_id), "new_balance": new_balance}), 200
+    return jsonify({
+        "success": True,
+        "chat_id": str(chat_id),
+        "new_balance": new_balance,
+        "notified": notified,
+    }), 200
+
 
 
 # ---------------------------------------------------------------------------
