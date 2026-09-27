@@ -7,6 +7,7 @@ import {
   triggerHaptic,
   triggerHapticNotification,
 } from '@/api'
+import { formatAdminId } from '@/format'
 import {
   NCard,
   NTabs,
@@ -270,7 +271,7 @@ defineExpose({ loadData: loadSlips })
               </NButton>
             </template>
             <span v-else class="reviewed-note">
-              by {{ slip.reviewed_by || 'Admin' }}<template v-if="slip.review_reason"> · “{{ slip.review_reason }}”</template>
+              by {{ formatAdminId(slip.reviewed_by) }}<template v-if="slip.review_reason"> · “{{ slip.review_reason }}”</template>
             </span>
           </div>
         </div>

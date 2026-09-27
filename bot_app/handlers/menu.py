@@ -28,6 +28,7 @@ from bot_app.services.outline import (
     fetch_key_from_server, get_customer_summary_stats, get_servers_total_usage,
     search_users_by_query,
 )
+from bot_app.services.slips import record_audit_log
 from bot_app.services.registry import save_persistent_key
 from bot_app.services.reports import get_monthly_revenue_report
 from bot_app.services.profiles import touch_user
@@ -116,6 +117,14 @@ def handle_all_messages(message):
 
                 deducted, m_bal, b_bal, final_bal = admin_deduct_specific_funds(target_user_id, amt_to_deduct, deduct_type=dtype)
 
+                record_audit_log(
+                    message.from_user.id,
+                    "BALANCE_DEDUCT",
+                    "user",
+                    target_user_id,
+                    {"amount": deducted, "new_balance": final_bal, "requested": amt_to_deduct, "via": "telegram"},
+                )
+
                 bot.reply_to(
                     message,
                     f"✅ <b>ငွေပြန်နှုတ်ခြင်း အောင်မြင်ပါသည်!</b>\n\n"
@@ -192,6 +201,13 @@ def handle_all_messages(message):
             except:
                 pass
         bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nရောက်ရှိသူ: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
+        record_audit_log(
+            message.from_user.id,
+            "BROADCAST",
+            "broadcast",
+            str(len(all_users)),
+            {"message_type": "text", "sent": success_count, "recipients": len(all_users)},
+        )
         return
 
     # 🛍️ Plan များဝယ်ရန်

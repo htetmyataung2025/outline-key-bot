@@ -16,6 +16,7 @@ from bot_app.keyboards import (
 )
 from bot_app.services.orders import get_order_id_for_key, load_redeem_codes, save_redeem_codes
 from bot_app.services.registry import load_persistent_keys
+from bot_app.services.slips import record_audit_log
 from bot_app.services.states import clear_all_states, set_manual_dispatch_state
 from bot_app.storage.kv import redis_set
 from bot_app.utils import bytes_to_gb, generate_random_redeem_code
@@ -180,7 +181,15 @@ def handle_admin_rd_generate(call):
         generated_list.append(f"<code>{code}</code>")
         
     save_redeem_codes(codes)
-    
+
+    record_audit_log(
+        user_id,
+        "REDEEM_BATCH_CREATE",
+        "redeem",
+        str(count),
+        {"amount": amt, "mode": mode, "count": count, "via": "telegram"},
+    )
+
     if mode == "shared":
         mode_desc = "လူအများခွဲသုံး (၁၀၀၀ ~ ၃၀၀၀ Ks စီ)"
     else:
@@ -312,6 +321,14 @@ def handle_admin_del_key(call):
         if uid in persistent_registry:
             del persistent_registry[uid]
             redis_set("persistent_keys_registry", persistent_registry)
+
+        record_audit_log(
+            call.from_user.id,
+            "KEY_DELETE",
+            "key",
+            str(key_id),
+            {"server": str(server_num), "via": "telegram"},
+        )
 
         api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
         try:

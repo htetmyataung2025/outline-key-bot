@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchCustomerDetail, adjustBalance, triggerHaptic, triggerHapticNotification } from '@/api'
 import { avatarInitial, avatarGradient, displayName } from '@/composables/avatar'
+import { formatAdminId } from '@/format'
 import {
   NButton,
   NSpin,
@@ -297,7 +298,7 @@ defineExpose({ loadData: loadDetail })
                         <template v-if="a.details && a.details.amount">{{ a.details.amount.toLocaleString() }} Ks</template>
                         <template v-if="a.details && a.details.reason"> · {{ a.details.reason }}</template>
                       </td>
-                      <td class="font-mono rec-muted">{{ a.admin_id }}</td>
+                      <td><span class="id-chip font-mono">{{ formatAdminId(a.admin_id) }}</span></td>
                       <td class="rec-muted">{{ a.timestamp }}</td>
                     </tr>
                   </tbody>
@@ -668,6 +669,16 @@ defineExpose({ loadData: loadDetail })
   border: 1px solid var(--border);
   text-transform: none;
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* Audit "By" actor chip — same visual language as the customer list id-chip */
+.id-chip {
+  font-size: 12.5px;
+  color: var(--text-2);
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--fill-subtle);
+  border: 1px solid var(--border);
 }
 
 .font-mono {

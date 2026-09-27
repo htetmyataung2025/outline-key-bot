@@ -12,7 +12,7 @@ from bot_app.services.billing import update_user_balance
 from bot_app.services.ocr import extract_order_id_and_tx
 from bot_app.services.orders import load_all_users, save_user_id
 from bot_app.services.profiles import touch_user
-from bot_app.services.slips import record_slip, review_slip
+from bot_app.services.slips import record_audit_log, record_slip, review_slip
 from bot_app.services.states import (
     get_broadcast_state,
     get_topup_state, set_broadcast_state, set_custom_topup_state, set_topup_state,
@@ -82,9 +82,18 @@ def handle_approve_topup(call):
     # credits the wallet, notifies the user and audit-logs) so the admin
     # dashboard reflects a Telegram-side approval live. Only if the slip is
     # not in the queue (legacy orders) do we credit directly.
-    result = review_slip(topup_id, "APPROVE", reviewed_by=call.from_user.id or "Telegram Admin")
+    result = review_slip(topup_id, "APPROVE", reviewed_by=call.from_user.id)
     if not result.get("success") and result.get("code") == 404:
         new_balance, _ = update_user_balance(target_chat_id, amount)
+        # Legacy slip (predates the review queue): the credit above must
+        # still leave the same audit trail as a queue approve.
+        record_audit_log(
+            call.from_user.id,
+            "SLIP_APPROVE",
+            "slip",
+            topup_id,
+            {"chat_id": target_chat_id, "amount": amount, "legacy": True},
+        )
         user_noti = (
             f"🎉 <b>ငွေဖြည့်သွင်းမှု အောင်မြင်ပါသည်!</b>\n\n"
             f"🧾 Top-Up ID: <code>{topup_id}</code>\n\n"
@@ -131,6 +140,13 @@ def handle_photo_messages(message):
             except:
                 pass
         bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nရောက်ရှိသူ: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
+        record_audit_log(
+            message.from_user.id,
+            "BROADCAST",
+            "broadcast",
+            str(len(all_users)),
+            {"message_type": "photo", "sent": success_count, "recipients": len(all_users)},
+        )
         return
 
     # Top-Up Slip Handler

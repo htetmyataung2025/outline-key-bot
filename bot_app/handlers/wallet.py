@@ -4,6 +4,7 @@ from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.keyboards import get_back_inline_keyboard
 from bot_app.services.billing import admin_deduct_specific_funds
+from bot_app.services.slips import record_audit_log
 from bot_app.services.states import set_admin_deduct_state
 
 
@@ -32,6 +33,14 @@ def handle_admin_deduct_command(message):
 
     amt = int(amt_str)
     deducted, m_bal, b_bal, final_bal = admin_deduct_specific_funds(target_id, amt, deduct_type="all")
+
+    record_audit_log(
+        message.from_user.id,
+        "BALANCE_DEDUCT",
+        "user",
+        target_id,
+        {"amount": deducted, "new_balance": final_bal, "requested": amt, "via": "telegram"},
+    )
 
     bot.reply_to(
         message,
