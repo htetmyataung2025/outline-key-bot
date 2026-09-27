@@ -6,6 +6,7 @@ import { avatarInitial, avatarGradient, displayName } from '@/composables/avatar
 import {
   NCard,
   NInput,
+  NSelect,
   NButton,
   NModal,
   NForm,
@@ -24,6 +25,7 @@ import {
   ChevronForwardOutline,
   KeyOutline,
   PeopleOutline,
+  CloseOutline,
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -34,6 +36,51 @@ const customers = ref<any[]>([])
 const search = ref('')
 const page = ref(1)
 const pageSize = ref(10)
+
+// ── Filters & sort (all client-side over the fully-loaded list) ──────
+type BalanceFilter = 'all' | 'positive' | 'zero'
+type KeysFilter = 'all' | 'has' | 'none'
+type ActivityFilter = 'all' | '7d' | '30d' | 'inactive' | 'never'
+type SortKey =
+  | 'balance_desc'
+  | 'balance_asc'
+  | 'active_recent'
+  | 'keys_desc'
+  | 'first_new'
+  | 'first_old'
+  | 'name_asc'
+
+const balanceFilter = ref<BalanceFilter>('all')
+const keysFilter = ref<KeysFilter>('all')
+const activityFilter = ref<ActivityFilter>('all')
+const sortBy = ref<SortKey>('balance_desc')
+
+const balanceOptions = [
+  { label: 'All Balances', value: 'all' },
+  { label: 'Has Balance (>0)', value: 'positive' },
+  { label: 'Zero Balance', value: 'zero' },
+]
+const keysOptions = [
+  { label: 'All Keys', value: 'all' },
+  { label: 'Has Keys (≥1)', value: 'has' },
+  { label: 'No Keys', value: 'none' },
+]
+const activityOptions = [
+  { label: 'All Activity', value: 'all' },
+  { label: 'Active ≤ 7 days', value: '7d' },
+  { label: 'Active ≤ 30 days', value: '30d' },
+  { label: 'Inactive > 30 days', value: 'inactive' },
+  { label: 'Never Active', value: 'never' },
+]
+const sortOptions = [
+  { label: 'Balance: High → Low', value: 'balance_desc' },
+  { label: 'Balance: Low → High', value: 'balance_asc' },
+  { label: 'Recently Active', value: 'active_recent' },
+  { label: 'Most Keys', value: 'keys_desc' },
+  { label: 'Newest Customers', value: 'first_new' },
+  { label: 'Oldest Customers', value: 'first_old' },
+  { label: 'Name A–Z', value: 'name_asc' },
+]
 
 // Balance adjust modal
 const showAdjustModal = ref(false)
@@ -67,19 +114,109 @@ async function loadCustomers(opts?: { silent?: boolean }) {
   }
 }
 
+// Whole-day age of a "last_seen"/"first_seen" timestamp; null when absent/unparseable.
+function daysSince(value?: string): number | null {
+  if (!value) return null
+  const dt = new Date(String(value).replace(' ', 'T'))
+  if (isNaN(dt.getTime())) return null
+  return Math.floor((Date.now() - dt.getTime()) / 86400000)
+}
+
+// Epoch ms for sorting; NaN when absent so those rows sink to the bottom.
+function toTs(value?: string): number {
+  if (!value) return NaN
+  const t = new Date(String(value).replace(' ', 'T')).getTime()
+  return isNaN(t) ? NaN : t
+}
+
+// Newest-first date sort that always parks missing dates last.
+function byDateDesc(a?: string, b?: string): number {
+  const ta = toTs(a)
+  const tb = toTs(b)
+  if (isNaN(ta) && isNaN(tb)) return 0
+  if (isNaN(ta)) return 1
+  if (isNaN(tb)) return -1
+  return tb - ta
+}
+
 const filteredCustomers = computed(() => {
   const q = search.value.trim().toLowerCase()
-  const list = !q
-    ? customers.value
-    : customers.value.filter(
-        (c) =>
-          String(c.chat_id).toLowerCase().includes(q) ||
-          String(c.full_name || '').toLowerCase().includes(q) ||
-          String(c.username || '').toLowerCase().includes(q),
+
+  const list = customers.value.filter((c) => {
+    if (q) {
+      const hit =
+        String(c.chat_id).toLowerCase().includes(q) ||
+        String(c.full_name || '').toLowerCase().includes(q) ||
+        String(c.username || '').toLowerCase().includes(q)
+      if (!hit) return false
+    }
+
+    const bal = Number(c.wallet_balance || 0)
+    if (balanceFilter.value === 'positive' && bal <= 0) return false
+    if (balanceFilter.value === 'zero' && bal > 0) return false
+
+    const keys = Number(c.keys_count || 0)
+    if (keysFilter.value === 'has' && keys < 1) return false
+    if (keysFilter.value === 'none' && keys >= 1) return false
+
+    if (activityFilter.value !== 'all') {
+      const d = daysSince(c.last_seen)
+      if (activityFilter.value === 'never' && d !== null) return false
+      if (activityFilter.value === '7d' && (d === null || d > 7)) return false
+      if (activityFilter.value === '30d' && (d === null || d > 30)) return false
+      if (activityFilter.value === 'inactive' && (d === null || d <= 30)) return false
+    }
+
+    return true
+  })
+
+  const arr = [...list]
+  switch (sortBy.value) {
+    case 'balance_asc':
+      arr.sort((a, b) => (a.wallet_balance || 0) - (b.wallet_balance || 0))
+      break
+    case 'keys_desc':
+      arr.sort((a, b) => (b.keys_count || 0) - (a.keys_count || 0))
+      break
+    case 'active_recent':
+      arr.sort((a, b) => byDateDesc(a.last_seen, b.last_seen))
+      break
+    case 'first_new':
+      arr.sort((a, b) => byDateDesc(a.first_seen, b.first_seen))
+      break
+    case 'first_old':
+      arr.sort((a, b) => -byDateDesc(a.first_seen, b.first_seen))
+      break
+    case 'name_asc':
+      arr.sort((a, b) =>
+        displayName(a.full_name, a.username, a.chat_id).localeCompare(
+          displayName(b.full_name, b.username, b.chat_id),
+        ),
       )
-  // Highest balance first so the accounts that matter surface at the top.
-  return [...list].sort((a, b) => (b.wallet_balance || 0) - (a.wallet_balance || 0))
+      break
+    case 'balance_desc':
+    default:
+      // Highest balance first so the accounts that matter surface at the top.
+      arr.sort((a, b) => (b.wallet_balance || 0) - (a.wallet_balance || 0))
+  }
+  return arr
 })
+
+const hasActiveFilters = computed(
+  () =>
+    !!search.value.trim() ||
+    balanceFilter.value !== 'all' ||
+    keysFilter.value !== 'all' ||
+    activityFilter.value !== 'all',
+)
+
+function clearFilters() {
+  triggerHaptic('light')
+  search.value = ''
+  balanceFilter.value = 'all'
+  keysFilter.value = 'all'
+  activityFilter.value = 'all'
+}
 
 const filteredCount = computed(() => filteredCustomers.value.length)
 const totalBalance = computed(() =>
@@ -94,7 +231,7 @@ const pagedCustomers = computed(() => {
 const rangeStart = computed(() => (filteredCount.value === 0 ? 0 : (page.value - 1) * pageSize.value + 1))
 const rangeEnd = computed(() => Math.min(page.value * pageSize.value, filteredCount.value))
 
-watch([search, pageSize], () => {
+watch([search, balanceFilter, keysFilter, activityFilter, sortBy, pageSize], () => {
   page.value = 1
 })
 
@@ -173,13 +310,45 @@ defineExpose({ loadData: loadCustomers })
             <SearchOutline />
           </template>
         </NInput>
+
+        <NSelect
+          v-model:value="balanceFilter"
+          :options="balanceOptions"
+          class="filter-select"
+        />
+        <NSelect
+          v-model:value="keysFilter"
+          :options="keysOptions"
+          class="filter-select"
+        />
+        <NSelect
+          v-model:value="activityFilter"
+          :options="activityOptions"
+          class="filter-select"
+        />
+        <NSelect
+          v-model:value="sortBy"
+          :options="sortOptions"
+          class="filter-select sort-select"
+        />
       </div>
+
       <div class="filter-summary">
         <span><PeopleOutline class="sum-icon" /> {{ customers.length }} customers</span>
         <span class="sum-accent">{{ totalBalance.toLocaleString() }} MMK total balance</span>
         <span v-if="filteredCount !== customers.length" class="summary-muted">
-          {{ filteredCount }} match search
+          {{ filteredCount }} match filters
         </span>
+        <NButton
+          v-if="hasActiveFilters"
+          class="clear-btn"
+          size="tiny"
+          quaternary
+          @click="clearFilters"
+        >
+          <template #icon><CloseOutline /></template>
+          Clear filters
+        </NButton>
       </div>
     </NCard>
 
@@ -240,7 +409,7 @@ defineExpose({ loadData: loadCustomers })
       </div>
 
       <div v-else class="empty-wrap">
-        <NEmpty description="No customers matching search" />
+        <NEmpty description="No customers match the current filters" />
       </div>
     </NSpin>
 
@@ -338,8 +507,22 @@ defineExpose({ loadData: loadCustomers })
 }
 
 .search-input {
-  flex: 1;
+  flex: 2;
   min-width: 220px;
+}
+
+.filter-select {
+  flex: 1;
+  min-width: 150px;
+}
+
+.sort-select {
+  min-width: 175px;
+}
+
+.clear-btn {
+  margin-left: auto;
+  color: var(--text-3);
 }
 
 .filter-summary {
