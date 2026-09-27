@@ -76,7 +76,7 @@ def build_reward_view(chat_id):
         f"🎫 <b>Starter Plan</b> (25GB / {_STARTER_VALID_DAYS} ရက်) = <b>{POINTS_STARTER_COST:,} Points</b>\n"
         f"{redeem_hint}\n\n"
         f"💡 <i>၄ နာရီ တစ်ကြိမ် Claim လုပ်၍ Points ရယူပါ။ {POINTS_STREAK_TARGET_DAYS} ရက် ဆက်တိုက် Claim လုပ်ပါက "
-        f"ဆုကြီး (150–200) အာမခံ ရရှိပါမည်။</i>"
+        f"Points (150–200) အာမခံ ရရှိပါမည်။</i>"
     )
 
     markup = InlineKeyboardMarkup()
@@ -127,7 +127,7 @@ def handle_points_claim(call):
 
     awarded = res.get("awarded", 0)
     if res.get("is_streak_bonus"):
-        popup = f"🎉 ဆုကြီး! +{awarded:,} Points ({res.get('streak_days')} ရက် ဆက်တိုက်!)"
+        popup = f"🎉 +{awarded:,} Points ({res.get('streak_days')} ရက် ဆက်တိုက်! 🔥)"
     else:
         popup = f"🎉 +{awarded:,} Points ရရှိပါပြီ!"
     if res.get("discarded", 0) > 0:
