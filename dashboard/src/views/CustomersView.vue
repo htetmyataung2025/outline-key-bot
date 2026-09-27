@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { fetchCustomers, adjustBalance, triggerHaptic, triggerHapticNotification } from '@/api'
 import { avatarInitial, avatarGradient, displayName } from '@/composables/avatar'
 import {
@@ -26,9 +26,12 @@ import {
   KeyOutline,
   PeopleOutline,
   CloseOutline,
+  WalletOutline,
+  TrendingUpOutline,
 } from '@vicons/ionicons5'
 
 const router = useRouter()
+const route = useRoute()
 const message = useMessage()
 
 const loading = ref(false)
@@ -44,6 +47,7 @@ type ActivityFilter = 'all' | '7d' | '30d' | 'inactive' | 'never'
 type SortKey =
   | 'balance_desc'
   | 'balance_asc'
+  | 'topup_desc'
   | 'active_recent'
   | 'keys_desc'
   | 'first_new'
@@ -75,6 +79,7 @@ const activityOptions = [
 const sortOptions = [
   { label: 'Balance: High → Low', value: 'balance_desc' },
   { label: 'Balance: Low → High', value: 'balance_asc' },
+  { label: 'Total Spent: High → Low', value: 'topup_desc' },
   { label: 'Recently Active', value: 'active_recent' },
   { label: 'Most Keys', value: 'keys_desc' },
   { label: 'Newest Customers', value: 'first_new' },
@@ -175,6 +180,9 @@ const filteredCustomers = computed(() => {
     case 'balance_asc':
       arr.sort((a, b) => (a.wallet_balance || 0) - (b.wallet_balance || 0))
       break
+    case 'topup_desc':
+      arr.sort((a, b) => (b.total_topup || 0) - (a.total_topup || 0))
+      break
     case 'keys_desc':
       arr.sort((a, b) => (b.keys_count || 0) - (a.keys_count || 0))
       break
@@ -222,6 +230,46 @@ const filteredCount = computed(() => filteredCustomers.value.length)
 const totalBalance = computed(() =>
   customers.value.reduce((sum, c) => sum + (c.wallet_balance || 0), 0),
 )
+const totalSpent = computed(() =>
+  customers.value.reduce((sum, c) => sum + (c.total_topup || 0), 0),
+)
+
+// ── Stat chips that double as one-click filters ─────────────────────
+// Each chip shows a live count and, when clicked, toggles the matching
+// filter (clicking the active chip clears it). "All" resets everything.
+const withBalanceCount = computed(
+  () => customers.value.filter((c) => Number(c.wallet_balance || 0) > 0).length,
+)
+const withKeysCount = computed(
+  () => customers.value.filter((c) => Number(c.keys_count || 0) >= 1).length,
+)
+const activeRecentCount = computed(
+  () => customers.value.filter((c) => { const d = daysSince(c.last_seen); return d !== null && d <= 7 }).length,
+)
+
+const chipAllActive = computed(() => !hasActiveFilters.value)
+
+function toggleBalanceChip() {
+  triggerHaptic('light')
+  balanceFilter.value = balanceFilter.value === 'positive' ? 'all' : 'positive'
+}
+function toggleKeysChip() {
+  triggerHaptic('light')
+  keysFilter.value = keysFilter.value === 'has' ? 'all' : 'has'
+}
+function toggleActiveChip() {
+  triggerHaptic('light')
+  activityFilter.value = activityFilter.value === '7d' ? 'all' : '7d'
+}
+
+// Deep-link support: /customers?filter=positive|has_keys|active preselects a
+// filter (e.g. from an Overview stat card).
+function applyQueryFilter(value: unknown) {
+  const v = String(value || '')
+  if (v === 'positive') balanceFilter.value = 'positive'
+  else if (v === 'has_keys') keysFilter.value = 'has'
+  else if (v === 'active') activityFilter.value = '7d'
+}
 
 const pagedCustomers = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -282,6 +330,7 @@ async function handleAdjustBalance() {
 }
 
 onMounted(() => {
+  if (route.query.filter) applyQueryFilter(route.query.filter)
   loadCustomers()
 })
 
@@ -294,6 +343,47 @@ defineExpose({ loadData: loadCustomers })
       <div>
         <h1 class="page-title">Customer Wallets</h1>
         <p class="page-subtitle">Inspect user balances, activity, and perform administrative adjustments</p>
+      </div>
+    </div>
+
+    <!-- Stat chips: live counts that double as one-click filters -->
+    <div class="stat-chips">
+      <button class="stat-chip" :class="{ active: chipAllActive }" @click="clearFilters">
+        <PeopleOutline class="chip-icon" />
+        <span class="chip-num">{{ customers.length }}</span>
+        <span class="chip-label">Total</span>
+      </button>
+      <button
+        class="stat-chip"
+        :class="{ active: balanceFilter === 'positive' }"
+        @click="toggleBalanceChip"
+      >
+        <WalletOutline class="chip-icon emerald" />
+        <span class="chip-num">{{ withBalanceCount }}</span>
+        <span class="chip-label">Has Balance</span>
+      </button>
+      <button
+        class="stat-chip"
+        :class="{ active: keysFilter === 'has' }"
+        @click="toggleKeysChip"
+      >
+        <KeyOutline class="chip-icon blue" />
+        <span class="chip-num">{{ withKeysCount }}</span>
+        <span class="chip-label">Has Keys</span>
+      </button>
+      <button
+        class="stat-chip"
+        :class="{ active: activityFilter === '7d' }"
+        @click="toggleActiveChip"
+      >
+        <TrendingUpOutline class="chip-icon amber" />
+        <span class="chip-num">{{ activeRecentCount }}</span>
+        <span class="chip-label">Active ≤7d</span>
+      </button>
+      <div class="stat-chip stat-chip--readonly">
+        <CashOutline class="chip-icon emerald" />
+        <span class="chip-num">{{ totalSpent.toLocaleString() }}</span>
+        <span class="chip-label">Total Spent (MMK)</span>
       </div>
     </div>
 
@@ -360,6 +450,7 @@ defineExpose({ loadData: loadCustomers })
             <span class="cell c-customer">Customer</span>
             <span class="cell c-id">User ID</span>
             <span class="cell c-balance">Wallet Balance</span>
+            <span class="cell c-spent">Total Spent</span>
             <span class="cell c-keys">Keys</span>
             <span class="cell c-seen">Last Active</span>
             <span class="cell c-actions">Actions</span>
@@ -383,6 +474,12 @@ defineExpose({ loadData: loadCustomers })
 
               <div class="cell c-balance">
                 <span class="balance-val font-mono">{{ (c.wallet_balance || 0).toLocaleString() }}</span>
+                <span class="balance-cur">MMK</span>
+              </div>
+
+              <div class="cell c-spent">
+                <span class="spent-label">Spent</span>
+                <span class="spent-val font-mono">{{ (c.total_topup || 0).toLocaleString() }}</span>
                 <span class="balance-cur">MMK</span>
               </div>
 
@@ -495,6 +592,93 @@ defineExpose({ loadData: loadCustomers })
   color: var(--text-3);
 }
 
+/* ── Stat chips (clickable filters) ─────────────────────────────── */
+.stat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.stat-chip:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.stat-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.stat-chip--readonly {
+  cursor: default;
+  margin-left: auto;
+}
+
+.stat-chip--readonly:hover {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.chip-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
+.chip-icon.emerald { color: var(--accent); }
+.chip-icon.blue { color: var(--info); }
+.chip-icon.amber { color: var(--warn); }
+
+.chip-num {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.chip-label {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .stat-chips {
+    gap: 8px;
+  }
+
+  .stat-chip {
+    padding: 8px 11px;
+    gap: 6px;
+    flex: 1 1 calc(50% - 4px);
+    justify-content: center;
+  }
+
+  .stat-chip--readonly {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .chip-num {
+    font-size: 14px;
+  }
+}
+
 .filter-card {
   margin-bottom: 20px;
   background: var(--surface-2);
@@ -565,7 +749,7 @@ defineExpose({ loadData: loadCustomers })
 .table-head,
 .table-row {
   display: grid;
-  grid-template-columns: minmax(180px, 2fr) 150px 150px 70px 130px 130px;
+  grid-template-columns: minmax(170px, 2fr) 130px 140px 140px 60px 120px 120px;
   align-items: center;
   gap: 12px;
   padding: 0 16px;
@@ -678,6 +862,25 @@ defineExpose({ loadData: loadCustomers })
   font-size: 11px;
   color: var(--text-4);
 }
+
+/* Total Spent cell */
+.c-spent {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.spent-val {
+  color: var(--text-1);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.spent-label {
+  display: none;
+  font-size: 11px;
+  color: var(--text-4);
+}
 /* Keys cell */
 .keys-chip {
   display: inline-flex;
@@ -775,13 +978,14 @@ defineExpose({ loadData: loadCustomers })
   font-size: 12.5px;
   color: #f87171;
 }
-/* ── Medium column: drop the two secondary columns ──────────────── */
+/* ── Medium column: drop the secondary columns ──────────────────── */
 @container cust (max-width: 980px) {
   .table-head,
   .table-row {
     grid-template-columns: minmax(160px, 2fr) 140px 140px 120px;
   }
 
+  .c-spent,
   .c-keys,
   .c-seen {
     display: none;
@@ -812,8 +1016,9 @@ defineExpose({ loadData: loadCustomers })
     grid-template-columns: 1fr auto;
     grid-template-areas:
       "customer balance"
-      "meta actions";
-    gap: 12px;
+      "meta spent"
+      "actions actions";
+    gap: 10px 12px;
     padding: 14px;
     min-height: 0;
     background: var(--surface);
@@ -824,9 +1029,17 @@ defineExpose({ loadData: loadCustomers })
   .c-customer { grid-area: customer; }
   .c-balance { grid-area: balance; justify-self: end; align-self: center; }
   .c-id { grid-area: meta; align-self: center; }
+  .c-spent {
+    grid-area: spent;
+    display: flex;
+    justify-self: end;
+    align-self: center;
+  }
+  .c-spent .spent-label { display: inline; }
   .c-keys,
   .c-seen { display: none; }
-  .c-actions { grid-area: actions; justify-self: end; }
+  .c-actions { grid-area: actions; justify-self: stretch; }
+  .c-actions :deep(.n-button:first-child) { flex: 1; }
 
   .balance-val {
     font-size: 15px;

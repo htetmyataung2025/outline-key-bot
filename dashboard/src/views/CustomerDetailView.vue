@@ -179,6 +179,10 @@ defineExpose({ loadData: loadDetail })
               <span class="stat-val">{{ profile.keys_count || 0 }}</span>
             </div>
             <div class="stat-row">
+              <span class="stat-label"><CashOutline class="stat-icon" /> Total Spent</span>
+              <span class="stat-val text-emerald">{{ (profile.total_topup || 0).toLocaleString() }} MMK</span>
+            </div>
+            <div class="stat-row">
               <span class="stat-label"><PersonOutline class="stat-icon" /> First Seen</span>
               <span class="stat-val">{{ fmtDate(profile.first_seen) }}</span>
             </div>

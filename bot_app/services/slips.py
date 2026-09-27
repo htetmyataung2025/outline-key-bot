@@ -69,6 +69,22 @@ def record_slip(
     return slip_record
 
 
+def get_lifetime_topups_by_user() -> dict:
+    """Map ``chat_id`` -> total APPROVED top-up amount (lifetime real money paid in).
+
+    Sums the ``amount`` of every slip whose status is ``APPROVED``; PENDING and
+    REJECTED slips do not count. This is the customer's lifetime "Total Spent"
+    figure — real bank/wallet top-ups only, not admin manual credits or promo
+    redeem codes, which are separate wallet adjustments.
+    """
+    totals: dict[str, int] = {}
+    for slip in load_all_slips().values():
+        if slip.get("status") == "APPROVED":
+            uid = str(slip.get("chat_id"))
+            totals[uid] = totals.get(uid, 0) + int(slip.get("amount", 0) or 0)
+    return totals
+
+
 def get_slips_list(status: str | None = None) -> list:
     slips = load_all_slips()
     result = list(slips.values())

@@ -31,6 +31,9 @@ import {
   CalendarOutline,
   TrashOutline,
   CellularOutline,
+  InformationCircleOutline,
+  ServerOutline,
+  PersonOutline,
 } from '@vicons/ionicons5'
 
 const message = useMessage()
@@ -129,6 +132,23 @@ function usageText(k: any): string {
   const limit = formatData(k.limit_bytes)
   if (k.bytes_used === null || k.bytes_used === undefined) return `— / ${limit}`
   return `${formatData(k.bytes_used)} / ${limit} · ${usagePercent(k)}%`
+}
+
+// ── Key detail modal (circular usage gauge) ─────────────────────────
+const showDetailModal = ref(false)
+const detailKey = ref<any>(null)
+
+function openDetail(k: any) {
+  triggerHaptic('light')
+  detailKey.value = k
+  showDetailModal.value = true
+}
+
+// Remaining data (quota − used) for the modal caption; null when unknown/unlimited.
+function remainingData(k: any): string | null {
+  if (!hasQuota(k) || k.bytes_used === null || k.bytes_used === undefined) return null
+  const left = Math.max(0, Number(k.limit_bytes) - Number(k.bytes_used))
+  return formatData(left)
 }
 
 const expiringSoonCount = computed(
@@ -433,7 +453,10 @@ defineExpose({
         <div v-for="k in pagedKeys" :key="`${k.server}_${k.key_id}`" class="key-card">
           <div class="key-main">
             <div class="key-identity">
-              <span class="key-name">{{ k.label || k.name }}</span>
+              <button class="key-name key-name-btn" @click="openDetail(k)" title="View key details">
+                <span class="key-name-text">{{ k.label || k.name }}</span>
+                <InformationCircleOutline class="key-info-icon" />
+              </button>
               <span class="expiry-pill" :class="expiryClass(k.expire_date)">
                 {{ expiryLabel(k.expire_date) }}
               </span>
@@ -631,6 +654,106 @@ defineExpose({
         </NButton>
       </div>
     </NModal>
+
+    <!-- Key Detail (circular usage gauge) -->
+    <NModal
+      v-model:show="showDetailModal"
+      preset="card"
+      :bordered="false"
+      :auto-focus="false"
+      class="detail-modal"
+      style="max-width: 440px; width: calc(100vw - 32px);"
+    >
+      <div v-if="detailKey" class="kd-body">
+        <div class="kd-head">
+          <span class="kd-name">{{ detailKey.label || detailKey.name }}</span>
+          <span class="expiry-pill" :class="expiryClass(detailKey.expire_date)">
+            {{ expiryLabel(detailKey.expire_date) }}
+          </span>
+        </div>
+
+        <!-- Circular usage gauge -->
+        <div class="kd-gauge">
+          <NProgress
+            v-if="hasQuota(detailKey)"
+            type="circle"
+            :percentage="usagePercent(detailKey)"
+            :color="usageColor(detailKey)"
+            rail-color="rgba(255, 255, 255, 0.08)"
+            :stroke-width="8"
+            :offset-degree="0"
+          >
+            <div class="kd-gauge-inner">
+              <span class="kd-gauge-pct font-mono" :class="usageClass(detailKey)">
+                {{ usagePercent(detailKey) }}%
+              </span>
+              <span class="kd-gauge-sub">used</span>
+            </div>
+          </NProgress>
+          <NProgress
+            v-else
+            type="circle"
+            :percentage="0"
+            color="#10b981"
+            rail-color="rgba(255, 255, 255, 0.08)"
+            :stroke-width="8"
+          >
+            <div class="kd-gauge-inner">
+              <CellularOutline class="kd-gauge-unlimited-icon" />
+              <span class="kd-gauge-sub">Unlimited</span>
+            </div>
+          </NProgress>
+        </div>
+
+        <div class="kd-usage-caption">
+          <template v-if="hasQuota(detailKey)">
+            <span class="font-mono" :class="usageClass(detailKey)">{{ usageText(detailKey) }}</span>
+            <span v-if="remainingData(detailKey)" class="kd-remaining">
+              {{ remainingData(detailKey) }} remaining
+            </span>
+          </template>
+          <template v-else>
+            <span class="kd-remaining">
+              No data cap<template v-if="detailKey.bytes_used !== null && detailKey.bytes_used !== undefined">
+                · {{ formatData(detailKey.bytes_used) }} transferred</template>
+            </span>
+          </template>
+          <span class="kd-usage-note">Lifetime transfer — does not reset on extend</span>
+        </div>
+
+        <!-- Details grid -->
+        <div class="kd-rows">
+          <div class="kd-row">
+            <span class="kd-label"><ServerOutline class="kd-row-icon" /> Server</span>
+            <span class="kd-val">Server {{ detailKey.server }}</span>
+          </div>
+          <div class="kd-row">
+            <span class="kd-label"><CalendarOutline class="kd-row-icon" /> Expires</span>
+            <span class="kd-val font-mono">{{ detailKey.expire_date || 'N/A' }}</span>
+          </div>
+          <div class="kd-row">
+            <span class="kd-label">Key ID</span>
+            <span class="kd-val font-mono">{{ detailKey.key_id }}</span>
+          </div>
+          <div v-if="detailKey.chat_id" class="kd-row">
+            <span class="kd-label"><PersonOutline class="kd-row-icon" /> Owner UID</span>
+            <span class="kd-val font-mono">{{ detailKey.chat_id }}</span>
+          </div>
+        </div>
+
+        <div class="kd-actions">
+          <NButton
+            v-if="detailKey.access_url"
+            secondary
+            block
+            @click="copyKeyUrl(detailKey.access_url)"
+          >
+            <template #icon><CopyOutline /></template>
+            Copy Access Link
+          </NButton>
+        </div>
+      </div>
+    </NModal>
   </div>
 </template>
 
@@ -753,6 +876,41 @@ defineExpose({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Key name doubles as the "open details" trigger. */
+.key-name-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.key-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.key-info-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-4);
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.key-name-btn:hover {
+  color: var(--accent);
+}
+
+.key-name-btn:hover .key-info-icon {
+  color: var(--accent);
 }
 
 .key-meta {
@@ -979,6 +1137,140 @@ defineExpose({
 .confirm-cancel,
 .confirm-ok {
   flex: 1;
+}
+
+/* ── Key detail modal (circular usage gauge) ────────────────────── */
+.kd-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 2px 2px;
+}
+
+.kd-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.kd-name {
+  font-size: 16.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  word-break: break-word;
+}
+
+.kd-gauge {
+  padding: 4px 0;
+}
+
+.kd-gauge :deep(.n-progress.n-progress--circle) {
+  width: 140px;
+}
+
+.kd-gauge-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.kd-gauge-pct {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.kd-gauge-pct.ok { color: var(--accent); }
+.kd-gauge-pct.warn { color: var(--warn); }
+.kd-gauge-pct.danger { color: var(--danger); }
+
+.kd-gauge-sub {
+  font-size: 11px;
+  color: var(--text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kd-gauge-unlimited-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+}
+
+.kd-usage-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.kd-usage-caption .ok { color: var(--accent); }
+.kd-usage-caption .warn { color: var(--warn); }
+.kd-usage-caption .danger { color: var(--danger); }
+
+.kd-usage-caption > span:first-child {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kd-remaining {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.kd-usage-note {
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+.kd-rows {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+
+.kd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+
+.kd-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+}
+
+.kd-row-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-4);
+}
+
+.kd-val {
+  color: var(--text-1);
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kd-actions {
+  width: 100%;
+  margin-top: 4px;
 }
 
 /* ── Mobile (Telegram Mini App width) ───────────────────────────── */

@@ -620,18 +620,21 @@ def generate_redeem_batch():
 @admin_bp.route("/customers", methods=["GET"])
 def list_customers():
     from bot_app.services.profiles import backfill_profiles_from_history
+    from bot_app.services.slips import get_lifetime_topups_by_user
 
-    # The four reads are independent; together they dominate the endpoint's
-    # latency (6-8 sequential KV round-trips). Run them concurrently.
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    # The five reads are independent; together they dominate the endpoint's
+    # latency (sequential KV round-trips). Run them concurrently.
+    with ThreadPoolExecutor(max_workers=5) as executor:
         f_profiles = executor.submit(backfill_profiles_from_history)
         f_wallets = executor.submit(load_all_wallets)
         f_users = executor.submit(load_all_users)
         f_keys = executor.submit(load_persistent_keys)
+        f_topups = executor.submit(get_lifetime_topups_by_user)
         profiles = f_profiles.result()
         wallets = f_wallets.result()
         all_users_list = f_users.result()
         registry = f_keys.result()
+        topups = f_topups.result()
 
     all_users = set(all_users_list)
     for uid in wallets.keys():
@@ -659,6 +662,8 @@ def list_customers():
             "first_seen": profile.get("first_seen", ""),
             "last_seen": profile.get("last_seen", ""),
             "keys_count": keys_by_user.get(uid, 0),
+            # Lifetime paid-in (sum of APPROVED slips), a.k.a "Total Spent".
+            "total_topup": topups.get(uid, 0),
         })
 
     return jsonify({"total": len(customers), "customers": customers}), 200
@@ -694,6 +699,11 @@ def get_customer_detail(chat_id):
 
     # Payment slips submitted by this user (newest first)
     slips = [s for s in get_slips_list() if str(s.get("chat_id")) == uid]
+
+    # Lifetime "Total Spent" = sum of this user's APPROVED slips (real paid-in).
+    total_topup = sum(
+        int(s.get("amount", 0) or 0) for s in slips if s.get("status") == "APPROVED"
+    )
 
     # Shared redeem codes this user has claimed (single-use codes are deleted on
     # claim, so only shared codes leave a per-user trail).
@@ -734,6 +744,7 @@ def get_customer_detail(chat_id):
             "main_balance": main_bal,
             "bonus_balance": bonus_bal,
             "keys_count": len(keys),
+            "total_topup": total_topup,
         },
         "keys": keys,
         "purchases": purchases,
