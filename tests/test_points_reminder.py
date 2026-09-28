@@ -139,6 +139,13 @@ def test_default_record_has_reminder_flag():
     assert P._default_record()["reminder_sent"] is False
 
 
+def test_reminder_carries_inline_claim_button():
+    markup = PR._claim_keyboard()
+    btn = markup.keyboard[0][0]
+    assert btn.callback_data == "points_claim"
+    assert "Claim Now" in btn.text
+
+
 # ── Endpoint auth: /reminder-check ────────────────────────────────────────────
 def test_endpoint_disabled_without_secret(client, mock_bot, monkeypatch):
     monkeypatch.delenv("REMINDER_CRON_SECRET", raising=False)

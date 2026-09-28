@@ -14,6 +14,8 @@ returns therefore receives at most one reminder per claim.
 
 from datetime import datetime
 
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 from bot_app.config import points_enabled, points_settings
 from bot_app.extensions import bot
 from bot_app.services.points import (
@@ -29,6 +31,15 @@ from bot_app.timeutil import myanmar_now
 _SEND_CAP = 100
 
 
+def _claim_keyboard() -> InlineKeyboardMarkup:
+    """A single "Claim Now" button reusing the reward view's ``points_claim``
+    callback: tapping it claims and edits THIS message in place into the full
+    reward view, so the user never has to open /start → Daily Reward."""
+    markup = InlineKeyboardMarkup()
+    markup.row(InlineKeyboardButton("🎁 Claim Now", callback_data="points_claim"))
+    return markup
+
+
 def _reminder_text(rec: dict, now: datetime) -> str:
     bal = int(rec.get("points", 0) or 0)
     streak = effective_streak(rec, now)
@@ -36,7 +47,7 @@ def _reminder_text(rec: dict, now: datetime) -> str:
         "🎁 <b>Daily Reward အသင့်ဖြစ်ပါပြီ!</b>\n\n"
         f"လက်ကျန် Points: <b>{bal:,}</b>\n"
         f"လက်ရှိ Streak: <b>{streak}</b> ရက်\n\n"
-        "အခုပဲ Claim လုပ်ပြီး Points ဆက်စုလိုက်ပါ 👉 /start"
+        "အောက်က 🎁 Claim Now ကို နှိပ်ပြီး Points ချက်ချင်း ရယူလိုက်ပါ 👇"
     )
 
 
@@ -69,7 +80,8 @@ def run_cooldown_reminders(now: datetime | None = None) -> dict:
         if not _is_ready(rec, now):
             continue
         try:
-            bot.send_message(uid, _reminder_text(rec, now), parse_mode="HTML")
+            bot.send_message(uid, _reminder_text(rec, now), parse_mode="HTML",
+                             reply_markup=_claim_keyboard())
         except Exception:
             # A blocked/deleted chat must not abort the whole sweep; leave the
             # flag unset so a future run can retry.
