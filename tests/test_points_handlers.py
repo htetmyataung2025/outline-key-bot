@@ -6,6 +6,8 @@ Network-free: ``mock_bot`` stubs Telegram (incl. subscription check + get_chat),
 
 from types import SimpleNamespace
 
+from telebot.apihelper import ApiTelegramException
+
 from bot_app.config import POINTS_STARTER_COST
 from bot_app.handlers import points as H
 from bot_app.services import points as P
@@ -18,6 +20,38 @@ def _call(data, chat_id=UID, message_id=555):
         id="cb1", data=data,
         message=SimpleNamespace(chat=SimpleNamespace(id=chat_id), message_id=message_id),
     )
+
+
+def _api_error(description):
+    return ApiTelegramException(
+        "editMessageText", "resp",
+        {"error_code": 400, "description": description},
+    )
+
+
+def test_refresh_not_modified_does_not_duplicate(isolated_state, mock_bot, monkeypatch):
+    """Tapping Refresh twice in the same minute yields identical content;
+    Telegram raises 'message is not modified' — that must be a no-op, never a
+    second (duplicate) reward panel."""
+    def _raise(*a, **k):
+        raise _api_error("Bad Request: message is not modified")
+    monkeypatch.setattr(H.bot, "edit_message_text", _raise)
+
+    H.handle_points_view(_call("points_view"))
+
+    assert mock_bot.calls["send_message"] == []   # no duplicate panel
+
+
+def test_refresh_falls_back_when_message_gone(isolated_state, mock_bot, monkeypatch):
+    """A genuinely un-editable message (deleted / too old) still falls back to
+    a fresh send so the user is not left without a panel."""
+    def _raise(*a, **k):
+        raise _api_error("Bad Request: message to edit not found")
+    monkeypatch.setattr(H.bot, "edit_message_text", _raise)
+
+    H.handle_points_view(_call("points_view"))
+
+    assert len(mock_bot.calls["send_message"]) == 1
 
 
 def test_reward_view_ready_for_fresh_user(isolated_state):

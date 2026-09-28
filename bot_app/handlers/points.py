@@ -10,6 +10,7 @@ import random
 import string
 
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+from telebot.apihelper import ApiTelegramException
 
 from bot_app.config import PLANS, points_enabled, points_settings
 from bot_app.extensions import bot
@@ -114,6 +115,16 @@ def _refresh_panel(chat_id, message_id):
     try:
         bot.edit_message_text(text, chat_id=chat_id, message_id=message_id,
                               parse_mode="HTML", reply_markup=markup)
+    except ApiTelegramException as e:
+        # "message is not modified" means the panel is already showing this
+        # exact content — e.g. tapping Refresh twice inside the same minute,
+        # where the countdown label has not changed yet. That is a no-op, NOT
+        # a failure: posting a new message here is what produced duplicate
+        # reward panels. Only a genuinely un-editable message (deleted / too
+        # old) falls back to a fresh send.
+        if "message is not modified" in str(getattr(e, "description", "") or e).lower():
+            return
+        bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
     except Exception:
         bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
