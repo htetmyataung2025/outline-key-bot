@@ -392,6 +392,25 @@ def handle_all_messages(message):
         bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
         return
 
+    # 🏆 Points Leaderboard
+    if input_value in ["🏆 Leaderboard", "🏆 Points Leaderboard", "Leaderboard"]:
+        clear_all_states(chat_id)
+        from bot_app.config import points_enabled
+
+        if not points_enabled():
+            bot.send_message(
+                chat_id,
+                "🏆 <b>Leaderboard ကို ယာယီ ပိတ်ထားပါသည်။</b>\n\n"
+                "မကြာမီ ပြန်လည် ဖွင့်လှစ်ပေးပါမည်ခင်ဗျာ။",
+                parse_mode="HTML",
+            )
+            return
+        from bot_app.handlers.leaderboard import build_leaderboard_view
+
+        text, markup = build_leaderboard_view(chat_id, "7d")
+        bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
+        return
+
     # 🎟️ Wallet Amount Redeem Code စစ်ဆေးခြင်း Handler
     if get_redeem_state(chat_id):
         set_redeem_state(chat_id, False)

@@ -12,6 +12,7 @@ from bot_app.handlers import (
     gate,
     history,
     keys,
+    leaderboard,
     menu,
     points,
     redeem,
@@ -25,5 +26,5 @@ from bot_app import routes
 __all__ = [
     "app", "bot", "flask_app", "routes",
     "admin", "common", "gate", "history", "keys",
-    "menu", "points", "redeem", "shop", "topup", "wallet",
+    "leaderboard", "menu", "points", "redeem", "shop", "topup", "wallet",
 ]

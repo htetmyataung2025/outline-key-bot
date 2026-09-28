@@ -6,10 +6,10 @@ first matching handler, so command/text handlers must register before it).
 """
 
 from bot_app.handlers import common, gate, shop, topup, wallet  # noqa: F401
-from bot_app.handlers import keys, redeem, history, admin, menu  # noqa: F401
+from bot_app.handlers import keys, redeem, history, admin, leaderboard, menu  # noqa: F401
 
 __all__ = [
     "common", "gate", "shop", "topup", "wallet", "keys",
-    "redeem", "history", "admin", "menu",
+    "redeem", "history", "admin", "leaderboard", "menu",
 ]
 

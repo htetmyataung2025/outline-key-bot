@@ -337,6 +337,7 @@ def default_points_settings() -> dict:
         "streak_reward": [POINTS_STREAK_REWARD[0], POINTS_STREAK_REWARD[1]],
         "on_admin_topup": POINTS_ON_ADMIN_TOPUP,
         "cooldown_reminder": True,
+        "leaderboard_epoch": None,
         "reward_table": [[lo, hi, w] for lo, hi, w in POINTS_REWARD_TABLE],
     }
 
@@ -406,6 +407,9 @@ def points_settings() -> dict:
         "streak_reward": _band(POINTS_STREAK_REWARD),
         "on_admin_topup": bool(dyn.get("on_admin_topup", POINTS_ON_ADMIN_TOPUP)),
         "cooldown_reminder": bool(dyn.get("cooldown_reminder", True)),
+        "leaderboard_epoch": (dyn.get("leaderboard_epoch").strip()
+                              if isinstance(dyn.get("leaderboard_epoch"), str)
+                              and dyn.get("leaderboard_epoch").strip() else None),
         "reward_table": _table(POINTS_REWARD_TABLE),
     }
 

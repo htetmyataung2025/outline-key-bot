@@ -1027,6 +1027,16 @@ def _validate_points_settings(raw, current=None):
             return False, "reward_table weight must be > 0", None
         norm_table.append([lo, hi, w])
 
+    epoch = merged.get("leaderboard_epoch")
+    if epoch in (None, ""):
+        epoch = None
+    else:
+        try:
+            datetime.strptime(str(epoch), "%Y-%m-%d")
+            epoch = str(epoch)
+        except (TypeError, ValueError):
+            return False, "leaderboard_epoch must be a YYYY-MM-DD date or empty", None
+
     normalized = {
         "enabled": bool(merged.get("enabled", True)),
         "claim_cooldown_h": cooldown,
@@ -1038,6 +1048,7 @@ def _validate_points_settings(raw, current=None):
         "streak_reward": [band_low, band_high],
         "on_admin_topup": bool(merged.get("on_admin_topup", False)),
         "cooldown_reminder": bool(merged.get("cooldown_reminder", True)),
+        "leaderboard_epoch": epoch,
         "reward_table": norm_table,
     }
     return True, None, normalized

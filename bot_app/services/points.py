@@ -11,7 +11,7 @@ See ``memory/05_POINTS_SYSTEM_PLAN.md`` for the locked economics.
 import json
 import os
 import random
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from bot_app.config import points_settings
 from bot_app.storage.kv import redis_delete, redis_get, redis_set, redis_set_nx
@@ -34,6 +34,8 @@ def _default_record() -> dict:
         "lifetime_earned": 0,
         "lifetime_claims": 0,
         "reminder_sent": False,
+        "week_earned": 0,
+        "week_start": None,
     }
 
 
@@ -180,6 +182,66 @@ def _apply_cap(current: int, amount: int) -> tuple[int, int, int]:
     return int(current) + granted, granted, int(amount) - granted
 
 
+# ── Weekly leaderboard period (pure, offline-testable) ────────────────────────
+_AUTO = object()
+
+
+def _iso_monday(d: date) -> date:
+    return d - timedelta(days=d.weekday())
+
+
+def current_week_start(now: datetime | None = None, epoch: str | None = None) -> str:
+    """Start date (``YYYY-MM-DD``) of the CURRENT 7-day leaderboard period.
+
+    Without an ``epoch`` the period is the ISO week (auto-resets every Monday).
+    With an ``epoch`` date set (e.g. by an admin ``/lb_reset``), 7-day blocks are
+    counted from that date, re-anchoring the weekly cycle to the reset day. No
+    cron is needed: the boundary advances purely from the calendar.
+    """
+    now = now or myanmar_now()
+    d = now.date()
+    base = None
+    if epoch:
+        try:
+            base = datetime.strptime(epoch, _DAY_FMT).date()
+        except (ValueError, TypeError):
+            base = None
+    if base is None:
+        base = _iso_monday(d)
+    if d < base:
+        return base.strftime(_DAY_FMT)
+    weeks = (d - base).days // 7
+    return (base + timedelta(days=7 * weeks)).strftime(_DAY_FMT)
+
+
+def _leaderboard_epoch() -> str | None:
+    return points_settings().get("leaderboard_epoch") or None
+
+
+def week_score(rec: dict, now: datetime | None = None, epoch=_AUTO) -> int:
+    """Points ``rec`` earned in the current period (0 once it has reset — i.e.
+    the stored counter belongs to an older period)."""
+    if epoch is _AUTO:
+        epoch = _leaderboard_epoch()
+    if rec.get("week_start") == current_week_start(now, epoch):
+        return int(rec.get("week_earned", 0) or 0)
+    return 0
+
+
+def _bump_week(rec: dict, granted: int, now: datetime | None = None) -> None:
+    """Add a positive earning to the current-period counter, resetting it first
+    when the stored counter belongs to an older period. Mutates ``rec``."""
+    granted = int(granted)
+    if granted <= 0:
+        return
+    cur = current_week_start(now, _leaderboard_epoch())
+    if rec.get("week_start") != cur:
+        rec["week_earned"] = granted
+        rec["week_start"] = cur
+    else:
+        rec["week_earned"] = int(rec.get("week_earned", 0) or 0) + granted
+
+
 # ── Storage-backed flows ──────────────────────────────────────────────────────
 def credit_points(chat_id, amount, source: str = "topup") -> tuple[int, int, int]:
     """Add points under the cap. Returns ``(granted, discarded, new_balance)``.
@@ -198,6 +260,7 @@ def credit_points(chat_id, amount, source: str = "topup") -> tuple[int, int, int
     rec["lifetime_earned"] = int(rec["lifetime_earned"]) + granted
     if source == "topup":
         rec["has_topped_up"] = True
+    _bump_week(rec, granted)
     data[uid] = rec
     save_all_points(data)
 
@@ -247,6 +310,7 @@ def try_claim(chat_id, now: datetime | None = None,
         # Re-arm the cooldown-ready reminder: a fresh claim starts a new
         # 4-hour window, so the next scan should be allowed to notify again.
         rec["reminder_sent"] = False
+        _bump_week(rec, granted, now)
         data[uid] = rec
         save_all_points(data)
 
@@ -348,6 +412,7 @@ def admin_adjust_points(chat_id, delta, admin_id="Admin", reason: str = "") -> d
     if delta >= 0:
         new_bal, applied, discarded = _apply_cap(current, delta)
         rec["lifetime_earned"] = int(rec["lifetime_earned"]) + applied
+        _bump_week(rec, applied)
     else:
         new_bal = max(0, current + delta)
         applied = new_bal - current   # negative or zero

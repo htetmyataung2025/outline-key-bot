@@ -28,6 +28,7 @@ def get_main_menu_keyboard(chat_id=None):
     btn_history = KeyboardButton("📇 ဝယ်ယူမှုမှတ်တမ်း")
     btn_replace = KeyboardButton("♻️ Key လဲရန်")
     btn_reward = KeyboardButton("🎁 Daily Reward")
+    btn_leaderboard = KeyboardButton("🏆 Leaderboard")
     btn_admin = KeyboardButton("👨‍💻 Admin ဆက်သွယ်ရန်")
     btn_refresh = KeyboardButton("🤖 Bot Refresh")
 
@@ -41,7 +42,7 @@ def get_main_menu_keyboard(chat_id=None):
     except Exception:
         reward_on = True
     if reward_on:
-        markup.add(btn_reward)
+        markup.add(btn_reward, btn_leaderboard)
     markup.add(btn_admin, btn_refresh)
 
     if chat_id and is_admin(chat_id):
