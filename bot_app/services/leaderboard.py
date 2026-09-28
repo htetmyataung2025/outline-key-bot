@@ -11,18 +11,33 @@ users are shown as a masked id so raw chat_ids are never exposed.
 
 from bot_app.services.points import _leaderboard_epoch, week_score
 
+import re
+
+_NAME_MAX = 20
+
+
+def _clean(text: str) -> str:
+    """Collapse newlines/tabs/runs of spaces so a multi-line profile name can
+    never break the single-line board layout."""
+    return re.sub(r"\s+", " ", text or "").strip()
+
 
 def _leader_name(uid, profile: dict | None) -> str:
-    """Display label: ``@username`` → full name → masked id (``User ••1234``)."""
+    """Display label: display name → ``@username`` → masked id (``User ••1234``).
+
+    The human display name is preferred so the board reads as a roster of names;
+    long names are capped so every row stays tidy. ``@username`` handles are left
+    intact (bounded + meaningful/clickable); the masked id never leaks a raw
+    chat_id.
+    """
     profile = profile or {}
+    full = _clean(profile.get("full_name") or "")
+    if full:
+        return full if len(full) <= _NAME_MAX else full[:_NAME_MAX - 1] + "…"
     username = (profile.get("username") or "").strip()
     if username:
         return "@" + username
-    full = (profile.get("full_name") or "").strip()
-    if full:
-        return full
-    tail = str(uid)[-4:]
-    return f"User ••{tail}"
+    return f"User ••{str(uid)[-4:]}"
 
 
 def _score_for(rec: dict, mode: str, now, epoch) -> int:

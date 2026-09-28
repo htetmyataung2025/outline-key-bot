@@ -152,10 +152,18 @@ def test_leaderboard_self_with_zero_has_no_rank():
 
 
 def test_leader_name_fallback_chain():
+    # Display name is preferred over @username; @username only when no name.
+    assert _leader_name("111", {"full_name": "Aung Aung", "username": "bob"}) == "Aung Aung"
     assert _leader_name("111", {"username": "bob"}) == "@bob"
-    assert _leader_name("111", {"full_name": "Aung Aung"}) == "Aung Aung"
     assert _leader_name("987654", None) == "User ••7654"
     assert _leader_name("987654", {"username": "", "full_name": ""}) == "User ••7654"
+
+
+def test_leader_name_cleans_and_caps():
+    # Newlines/extra spaces collapsed; over-long names capped with an ellipsis.
+    assert _leader_name("1", {"full_name": "Ko\n  Ko   naing"}) == "Ko Ko naing"
+    long = _leader_name("1", {"full_name": "A" * 40})
+    assert long.endswith("…") and len(long) == 20
 
 
 # ── Bot view + toggle + gating ────────────────────────────────────────────────
