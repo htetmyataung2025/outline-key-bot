@@ -19,6 +19,7 @@ import {
   NPopconfirm,
   NSwitch,
   useMessage,
+  useDialog,
 } from 'naive-ui'
 import {
   SaveOutline,
@@ -33,6 +34,7 @@ import {
 } from '@vicons/ionicons5'
 
 const message = useMessage()
+const dialog = useDialog()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -130,6 +132,51 @@ function normalizePoints(raw: any): PointsConfig {
   }
 }
 
+// A cleared NInputNumber yields null; coerce every numeric field back to a
+// finite integer (falling back to the default) so the whole /settings save can
+// never be rejected by one empty box.
+function sanitizePoints(p: PointsConfig): PointsConfig {
+  const num = (v: any, d: number) => {
+    const n = Math.round(Number(v))
+    return Number.isFinite(n) ? n : d
+  }
+  return {
+    enabled: !!p.enabled,
+    claim_cooldown_h: num(p.claim_cooldown_h, DEFAULT_POINTS.claim_cooldown_h),
+    balance_cap: num(p.balance_cap, DEFAULT_POINTS.balance_cap),
+    topup_rate: num(p.topup_rate, DEFAULT_POINTS.topup_rate),
+    topup_cap: num(p.topup_cap, DEFAULT_POINTS.topup_cap),
+    starter_cost: num(p.starter_cost, DEFAULT_POINTS.starter_cost),
+    streak_target_days: num(p.streak_target_days, DEFAULT_POINTS.streak_target_days),
+    streak_reward: [
+      num(p.streak_reward?.[0], DEFAULT_POINTS.streak_reward[0]),
+      num(p.streak_reward?.[1], DEFAULT_POINTS.streak_reward[1]),
+    ],
+    on_admin_topup: !!p.on_admin_topup,
+    reward_table: (p.reward_table || []).map((r) => [num(r[0], 10), num(r[1], 20), num(r[2], 1)]),
+  }
+}
+
+// Master switch: turning the whole system OFF is significant, so confirm it
+// first (and remind the owner it only takes effect after Save).
+function onToggleEnabled(val: boolean) {
+  if (val) {
+    form.value.points.enabled = true
+    return
+  }
+  dialog.warning({
+    title: 'Points System ကို ပိတ်မှာလား?',
+    content:
+      'ပိတ်လိုက်ရင် bot ထဲက 🎁 Daily Reward ခလုတ် ပျောက်ပြီး ငွေဖြည့်ရင် Points မရတော့ပါ။ '
+      + 'သိမ်းထားတဲ့ balance တွေတော့ မပျက်ပါ။ ("Save Changes" နှိပ်မှသာ အတည်ဖြစ်ပါမည်။)',
+    positiveText: 'ပိတ်မည်',
+    negativeText: 'မလုပ်တော့ပါ',
+    onPositiveClick: () => {
+      form.value.points.enabled = false
+    },
+  })
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -160,7 +207,7 @@ async function handleSave() {
       required_channel: form.value.required_channel.trim(),
       ocr_api_key: form.value.ocr_api_key.trim(),
       plans: form.value.plans,
-      points: form.value.points,
+      points: sanitizePoints(form.value.points),
     })
 
     if (res.success && res.settings) {
@@ -611,7 +658,7 @@ onMounted(() => {
                     <span class="switch-status-label" :class="{ 'is-manual': form.points.enabled }">
                       {{ form.points.enabled ? 'Enabled' : 'Disabled' }}
                     </span>
-                    <NSwitch v-model:value="form.points.enabled" />
+                    <NSwitch :value="form.points.enabled" @update:value="onToggleEnabled" />
                   </div>
                 </div>
 

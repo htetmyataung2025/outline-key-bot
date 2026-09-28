@@ -192,3 +192,30 @@ def test_master_on_reward_view_reflects_dynamic_values(isolated_state, mock_bot)
     text, _markup = build_reward_view(610000998)
     assert "30,000" in text        # dynamic cap surfaced
     assert "6,000 Points" in text  # dynamic starter cost surfaced
+
+
+def test_api_toggle_off_then_on_round_trip_gates_the_bot(client, monkeypatch):
+    """Mirror the dashboard flow exactly: POST the full points block with
+    enabled toggled, GET it back, and confirm the bot menu button follows.
+    """
+    from bot_app.keyboards import get_main_menu_keyboard
+
+    # 1. Turn OFF via the same endpoint/payload the SettingsView sends.
+    resp = _post_points(client, monkeypatch, _full_points_block(enabled=False))
+    assert resp.status_code == 200
+    assert resp.get_json()["settings"]["points"]["enabled"] is False
+
+    # 2. A fresh GET reflects the persisted value…
+    got = client.get(
+        "/api/admin/settings",
+        headers={"Authorization": "Bearer test-pin-123", "X-Admin-ID": "111000111"},
+    ).get_json()
+    assert got["points"]["enabled"] is False
+    # …and the customer menu no longer shows the reward button.
+    assert "Daily Reward" not in get_main_menu_keyboard().to_json()
+
+    # 3. Turn it back ON — the button returns.
+    resp2 = _post_points(client, monkeypatch, _full_points_block(enabled=True))
+    assert resp2.status_code == 200
+    assert resp2.get_json()["settings"]["points"]["enabled"] is True
+    assert "Daily Reward" in get_main_menu_keyboard().to_json()
