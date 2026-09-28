@@ -20,6 +20,10 @@
       "destination": "/api/index.py"
     },
     {
+      "source": "/reminder-check",
+      "destination": "/api/index.py"
+    },
+    {
       "source": "/diag",
       "destination": "/api/index.py"
     },

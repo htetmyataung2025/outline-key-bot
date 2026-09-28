@@ -1037,6 +1037,7 @@ def _validate_points_settings(raw, current=None):
         "streak_target_days": streak_target,
         "streak_reward": [band_low, band_high],
         "on_admin_topup": bool(merged.get("on_admin_topup", False)),
+        "cooldown_reminder": bool(merged.get("cooldown_reminder", True)),
         "reward_table": norm_table,
     }
     return True, None, normalized

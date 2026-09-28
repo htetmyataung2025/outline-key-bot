@@ -2,7 +2,9 @@
 
 import time
 import threading
+import math
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 
 import requests
 
@@ -166,6 +168,32 @@ def reset_telemetry_cache() -> None:
         _refreshing["active"] = False
 
 
+def _reward_velocity() -> tuple[int, int]:
+    """Config-derived tuning signal for the reward table.
+
+    Returns ``(expected_value_per_claim, est_days_to_starter)`` computed purely
+    from the CURRENT dynamic Points settings — no user data — so it re-answers
+    "how many days of daily claiming earn one free Starter under this preset?"
+    the moment the owner switches Conservative/Balanced/Generous. ``0`` days
+    means the table is empty/invalid (guarded so the overview never raises).
+    """
+    from bot_app.config import points_settings
+
+    cfg = points_settings()
+    table = cfg.get("reward_table") or []
+    total_weight = sum(int(w) for _, _, w in table)
+    if total_weight <= 0:
+        return 0, 0
+    ev = sum(((int(lo) + int(hi)) / 2) * int(w) for lo, hi, w in table) / total_weight
+
+    cooldown_h = int(cfg.get("claim_cooldown_h", 4)) or 4
+    claims_per_day = max(1, 24 // cooldown_h)
+    per_day = ev * claims_per_day
+    starter_cost = int(cfg.get("starter_cost", 5000))
+    days = math.ceil(starter_cost / per_day) if per_day > 0 else 0
+    return round(ev), days
+
+
 def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
     """Aggregate live telemetry, KPIs, and revenue metrics."""
     now = myanmar_now()
@@ -227,10 +255,17 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
         {"timestamp": now.strftime("%Y-%m-%dT%H:00:00Z"), "used_gb": total_gb}
     ]
 
-    # 6. Loyalty-points KPIs (single cheap dict scan)
+    # 6. Loyalty-points KPIs (single cheap dict scan) + reward-tuning velocity.
+    #    Circulation/holders/redeemed come from live user records; the velocity
+    #    block ("how fast does a daily-active user reach a free Starter") is
+    #    derived from the CURRENT reward table so it recomputes the instant the
+    #    owner switches Conservative/Balanced — the signal for tuning §8.
     points_circulation = 0
     points_holders = 0
     points_starters_redeemed = 0
+    points_total_claims = 0
+    points_active_claimers = 0
+    active_cutoff = now - timedelta(hours=48)
     for rec in points_data.values():
         if not isinstance(rec, dict):
             continue
@@ -239,6 +274,17 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
         if pts > 0:
             points_holders += 1
         points_starters_redeemed += int(rec.get("redeemed_count", 0) or 0)
+        points_total_claims += int(rec.get("lifetime_claims", 0) or 0)
+        last_claim = rec.get("last_claim_at")
+        if last_claim:
+            try:
+                if datetime.strptime(last_claim, "%Y-%m-%d %H:%M:%S") >= active_cutoff:
+                    points_active_claimers += 1
+            except (ValueError, TypeError):
+                pass
+
+    points_avg_balance = points_circulation // points_holders if points_holders else 0
+    points_reward_ev, points_est_days_to_starter = _reward_velocity()
 
     return {
         "servers": servers,
@@ -251,6 +297,11 @@ def get_admin_overview_telemetry(force_refresh: bool = False) -> dict:
             "points_circulation": points_circulation,
             "points_holders": points_holders,
             "points_starters_redeemed": points_starters_redeemed,
+            "points_total_claims": points_total_claims,
+            "points_active_claimers": points_active_claimers,
+            "points_avg_balance": points_avg_balance,
+            "points_reward_ev": points_reward_ev,
+            "points_est_days_to_starter": points_est_days_to_starter,
         },
         "traffic_trend": traffic_trend,
     }

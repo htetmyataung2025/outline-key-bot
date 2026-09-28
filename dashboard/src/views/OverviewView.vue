@@ -21,6 +21,7 @@ import {
   RefreshOutline,
   AddOutline,
   GiftOutline,
+  TrendingUpOutline,
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -233,6 +234,22 @@ defineExpose({
             </div>
             <div class="kpi-sub">
               <span>{{ overviewData.metrics.points_holders || 0 }} holders · {{ overviewData.metrics.points_starters_redeemed || 0 }} redeemed</span>
+              <ArrowForwardOutline class="sub-arrow" />
+            </div>
+          </div>
+
+          <!-- KPI 6: Reward Velocity (tuning signal for the reward table) -->
+          <div class="kpi-card" @click="router.push('/settings')">
+            <div class="kpi-meta">
+              <span class="kpi-label">Reward Velocity</span>
+              <TrendingUpOutline class="kpi-icon amber" />
+            </div>
+            <div class="kpi-value font-mono text-amber">
+              {{ overviewData.metrics.points_est_days_to_starter || 0 }}
+              <span class="kpi-unit">days → Starter</span>
+            </div>
+            <div class="kpi-sub">
+              <span>~{{ overviewData.metrics.points_reward_ev || 0 }} pts/claim · {{ overviewData.metrics.points_active_claimers || 0 }} active (48h)</span>
               <ArrowForwardOutline class="sub-arrow" />
             </div>
           </div>

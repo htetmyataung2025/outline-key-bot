@@ -66,6 +66,7 @@ interface PointsConfig {
   streak_target_days: number
   streak_reward: number[]     // [low, high]
   on_admin_topup: boolean
+  cooldown_reminder: boolean
   reward_table: number[][]    // [[low, high, weight], ...]
 }
 
@@ -79,6 +80,7 @@ const DEFAULT_POINTS: PointsConfig = {
   streak_target_days: 7,
   streak_reward: [150, 200],
   on_admin_topup: false,
+  cooldown_reminder: true,
   reward_table: [
     [10, 19, 35], [20, 30, 35], [31, 50, 18],
     [51, 99, 8], [100, 150, 3], [151, 200, 1],
@@ -128,6 +130,7 @@ function normalizePoints(raw: any): PointsConfig {
     streak_target_days: Number(p.streak_target_days ?? DEFAULT_POINTS.streak_target_days),
     streak_reward: band,
     on_admin_topup: !!p.on_admin_topup,
+    cooldown_reminder: p.cooldown_reminder !== false,
     reward_table: table,
   }
 }
@@ -153,6 +156,7 @@ function sanitizePoints(p: PointsConfig): PointsConfig {
       num(p.streak_reward?.[1], DEFAULT_POINTS.streak_reward[1]),
     ],
     on_admin_topup: !!p.on_admin_topup,
+    cooldown_reminder: p.cooldown_reminder !== false,
     reward_table: (p.reward_table || []).map((r) => [num(r[0], 10), num(r[1], 20), num(r[2], 1)]),
   }
 }
@@ -672,6 +676,19 @@ onMounted(() => {
                       {{ form.points.on_admin_topup ? 'Yes' : 'No' }}
                     </span>
                     <NSwitch v-model:value="form.points.on_admin_topup" size="small" />
+                  </div>
+                </div>
+
+                <div class="field-switch-row">
+                  <span class="field-label">
+                    Cooldown ready reminder
+                    <span class="item-hint">Cooldown ပြည့်တဲ့အခါ "Claim လုပ်လို့ ရပြီ" Telegram noti ပို့ပေးမယ် (တစ်ကြိမ်တည်း၊ engagement အတွက်)။</span>
+                  </span>
+                  <div class="switch-toggle-wrap">
+                    <span class="switch-status-label" :class="{ 'is-manual': form.points.cooldown_reminder }">
+                      {{ form.points.cooldown_reminder ? 'On' : 'Off' }}
+                    </span>
+                    <NSwitch v-model:value="form.points.cooldown_reminder" size="small" />
                   </div>
                 </div>
               </NCard>

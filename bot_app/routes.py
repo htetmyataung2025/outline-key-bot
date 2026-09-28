@@ -26,12 +26,13 @@ from flask import jsonify, request
 from bot_app.config import (
     MY_PAYMENT_PHONES, OCR_API_KEY, REQUIRED_CHANNEL, TELEGRAM_TOKEN,
     admin_chat_ids, admin_env_sources, admin_ids_masked, is_telegram_configured,
-    outline_api_urls,
+    outline_api_urls, reminder_cron_secret,
 )
 from bot_app.extensions import bot
 from bot_app.extensions import flask_app as app
 from bot_app.helpers.webhook_guard import ensure_webhook, expected_webhook_url
 from bot_app.services.notifier import run_expiry_cron
+from bot_app.services.points_reminder import run_cooldown_reminders
 
 CRON_USER_AGENT = "vercel-cron"
 
@@ -57,6 +58,23 @@ def _process_update():
 def _is_cron_request():
     ua = request.headers.get("User-Agent", "")
     return ua.startswith(CRON_USER_AGENT) or request.headers.get("x-vercel-cron") == "1"
+
+
+def _is_reminder_request():
+    """True for an authorised cooldown-reminder ping.
+
+    Driven by an EXTERNAL scheduler (Vercel Hobby crons only fire daily), so it
+    is guarded by a shared secret instead of the Vercel cron user-agent. The
+    secret may arrive as ``Authorization: Bearer <secret>`` or ``?key=<secret>``.
+    Disabled (never matches) when ``REMINDER_CRON_SECRET`` is unset.
+    """
+    secret = reminder_cron_secret()
+    if not secret:
+        return False
+    auth = request.headers.get("Authorization", "")
+    if auth == f"Bearer {secret}":
+        return True
+    return request.args.get("key") == secret
 
 
 def _notify_webhook_restore(guard):
@@ -187,6 +205,10 @@ def entry(path=""):
             _notify_webhook_restore(guard)
         result = run_expiry_cron()
         return jsonify({"status": "cron completed", "webhook_guard": guard, **result}), 200
+
+    if _is_reminder_request():
+        result = run_cooldown_reminders()
+        return jsonify({"status": "reminder completed", **result}), 200
 
     # Hide secret-ish probe paths when the real path reaches us (dev/local).
     if path and path.rsplit("/", 1)[-1].startswith("."):

@@ -33,6 +33,7 @@ def _default_record() -> dict:
         "redeemed_count": 0,
         "lifetime_earned": 0,
         "lifetime_claims": 0,
+        "reminder_sent": False,
     }
 
 
@@ -243,6 +244,9 @@ def try_claim(chat_id, now: datetime | None = None,
         rec["last_claim_at"] = now.strftime(_TS_FMT)
         rec["streak_days"] = new_streak
         rec["last_streak_day"] = today.strftime(_DAY_FMT)
+        # Re-arm the cooldown-ready reminder: a fresh claim starts a new
+        # 4-hour window, so the next scan should be allowed to notify again.
+        rec["reminder_sent"] = False
         data[uid] = rec
         save_all_points(data)
 
