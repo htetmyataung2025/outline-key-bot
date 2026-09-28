@@ -287,6 +287,11 @@ function applyPreset(name: string) {
   }
 }
 
+function isPresetActive(name: string): boolean {
+  const preset = REWARD_PRESETS[name]
+  return !!preset && JSON.stringify(preset) === JSON.stringify(form.value.points.reward_table)
+}
+
 function totalWeight(): number {
   return form.value.points.reward_table.reduce((sum, r) => sum + (Number(r[2]) || 0), 0)
 }
@@ -588,11 +593,13 @@ onMounted(() => {
               </div>
 
               <!-- Master switch + admin top-up -->
-              <NCard size="small" class="settings-card points-master-card">
+              <NCard size="small" class="settings-card points-card points-master-card">
                 <div class="points-master-row">
                   <div class="master-text">
                     <div class="master-title">
-                      <GiftOutline class="master-icon" />
+                      <span class="master-icon-tile">
+                        <GiftOutline class="master-icon" />
+                      </span>
                       Points System
                     </div>
                     <span class="item-hint">
@@ -622,105 +629,131 @@ onMounted(() => {
                 </div>
               </NCard>
 
-              <!-- Economy numbers -->
-              <NCard size="small" class="settings-card">
-                <div class="points-grid">
-                  <div class="field-col">
-                    <label class="field-label">Claim cooldown (hours)</label>
-                    <NInputNumber v-model:value="form.points.claim_cooldown_h" size="small" :min="1" :max="24" />
-                  </div>
-                  <div class="field-col">
-                    <label class="field-label">Balance cap (points)</label>
-                    <NInputNumber v-model:value="form.points.balance_cap" size="small" :min="1" :step="1000" />
-                  </div>
-                  <div class="field-col">
-                    <label class="field-label">Top-up rate (Ks per point)</label>
-                    <NInputNumber v-model:value="form.points.topup_rate" size="small" :min="1" :step="10" />
-                  </div>
-                  <div class="field-col">
-                    <label class="field-label">Top-up point cap</label>
-                    <NInputNumber v-model:value="form.points.topup_cap" size="small" :min="0" :step="100" />
-                  </div>
-                  <div class="field-col">
-                    <label class="field-label">Starter cost (points)</label>
-                    <NInputNumber
-                      v-model:value="form.points.starter_cost"
-                      size="small"
-                      :min="1"
-                      :max="form.points.balance_cap"
-                      :step="500"
-                    />
-                  </div>
-                  <div class="field-col">
-                    <label class="field-label">Streak target (days)</label>
-                    <NInputNumber v-model:value="form.points.streak_target_days" size="small" :min="1" :max="30" />
-                  </div>
-                  <div class="field-col">
-                    <label class="field-label">Streak reward — low</label>
-                    <NInputNumber v-model:value="form.points.streak_reward[0]" size="small" :min="1" :max="form.points.balance_cap" />
-                  </div>
-                  <div class="field-col">
-                    <label class="field-label">Streak reward — high</label>
-                    <NInputNumber v-model:value="form.points.streak_reward[1]" size="small" :min="1" :max="form.points.balance_cap" />
-                  </div>
-                </div>
-              </NCard>
+              <div class="points-layout">
+                <!-- Economy numbers -->
+                <NCard size="small" class="settings-card points-card">
+                  <div class="card-section-title">Economy Rules</div>
 
-              <!-- Reward table -->
-              <NCard size="small" class="settings-card reward-table-card">
-                <div class="reward-header">
-                  <div>
-                    <div class="item-title">Claim reward table</div>
-                    <span class="item-hint">
-                      Each row is a range and its weight. Higher weight = more likely.
-                      Total weight: <b>{{ totalWeight() }}</b>
-                    </span>
+                  <div class="points-group">
+                    <div class="group-label">Claims &amp; Balance</div>
+                    <div class="points-grid">
+                      <div class="field-col">
+                        <label class="field-label">Claim cooldown (hours)</label>
+                        <NInputNumber v-model:value="form.points.claim_cooldown_h" size="small" :min="1" :max="24" />
+                      </div>
+                      <div class="field-col">
+                        <label class="field-label">Balance cap (points)</label>
+                        <NInputNumber v-model:value="form.points.balance_cap" size="small" :min="1" :step="1000" />
+                      </div>
+                    </div>
                   </div>
-                  <div class="preset-buttons">
-                    <NButton
-                      v-for="name in Object.keys(REWARD_PRESETS)"
-                      :key="name"
-                      size="tiny"
-                      secondary
-                      @click="applyPreset(name)"
+
+                  <div class="points-group">
+                    <div class="group-label">Top-up Earning</div>
+                    <div class="points-grid">
+                      <div class="field-col">
+                        <label class="field-label">Top-up rate (Ks per point)</label>
+                        <NInputNumber v-model:value="form.points.topup_rate" size="small" :min="1" :step="10" />
+                      </div>
+                      <div class="field-col">
+                        <label class="field-label">Top-up point cap</label>
+                        <NInputNumber v-model:value="form.points.topup_cap" size="small" :min="0" :step="100" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="points-group">
+                    <div class="group-label">Redemption &amp; Streak</div>
+                    <div class="points-grid">
+                      <div class="field-col">
+                        <label class="field-label">Starter cost (points)</label>
+                        <NInputNumber
+                          v-model:value="form.points.starter_cost"
+                          size="small"
+                          :min="1"
+                          :max="form.points.balance_cap"
+                          :step="500"
+                        />
+                      </div>
+                      <div class="field-col">
+                        <label class="field-label">Streak target (days)</label>
+                        <NInputNumber v-model:value="form.points.streak_target_days" size="small" :min="1" :max="30" />
+                      </div>
+                      <div class="field-col">
+                        <label class="field-label">Streak reward — low</label>
+                        <NInputNumber v-model:value="form.points.streak_reward[0]" size="small" :min="1" :max="form.points.balance_cap" />
+                      </div>
+                      <div class="field-col">
+                        <label class="field-label">Streak reward — high</label>
+                        <NInputNumber v-model:value="form.points.streak_reward[1]" size="small" :min="1" :max="form.points.balance_cap" />
+                      </div>
+                    </div>
+                  </div>
+                </NCard>
+
+                <!-- Reward table -->
+                <NCard size="small" class="settings-card points-card reward-table-card">
+                  <div class="reward-header">
+                    <div>
+                      <div class="card-section-title">Claim reward table</div>
+                      <span class="item-hint">
+                        Each row is a range and its weight. Higher weight = more likely.
+                        Total weight: <b class="total-weight">{{ totalWeight() }}</b>
+                      </span>
+                    </div>
+                    <div class="preset-buttons">
+                      <NButton
+                        v-for="name in Object.keys(REWARD_PRESETS)"
+                        :key="name"
+                        size="tiny"
+                        :type="isPresetActive(name) ? 'primary' : 'default'"
+                        :secondary="isPresetActive(name)"
+                        :quaternary="!isPresetActive(name)"
+                        @click="applyPreset(name)"
+                      >
+                        {{ name }}
+                      </NButton>
+                    </div>
+                  </div>
+
+                  <div class="reward-rows">
+                    <div class="reward-row reward-row-head">
+                      <span>Low</span>
+                      <span>High</span>
+                      <span>Weight</span>
+                      <span class="chance-head">Chance</span>
+                      <span></span>
+                    </div>
+                    <div
+                      v-for="(row, idx) in form.points.reward_table"
+                      :key="idx"
+                      class="reward-row"
                     >
-                      {{ name }}
-                    </NButton>
+                      <NInputNumber v-model:value="row[0]" size="tiny" :min="1" :max="form.points.balance_cap" />
+                      <NInputNumber v-model:value="row[1]" size="tiny" :min="1" :max="form.points.balance_cap" />
+                      <NInputNumber v-model:value="row[2]" size="tiny" :min="1" />
+                      <div class="chance-cell">
+                        <span class="chance-pct">{{ rowChancePct(row[2]) }}</span>
+                        <div class="chance-bar">
+                          <div class="chance-fill" :style="{ width: rowChancePct(row[2]) }" />
+                        </div>
+                      </div>
+                      <NButton quaternary circle size="tiny" type="error" @click="removeRewardRow(idx)">
+                        <template #icon>
+                          <TrashOutline />
+                        </template>
+                      </NButton>
+                    </div>
                   </div>
-                </div>
 
-                <div class="reward-rows">
-                  <div class="reward-row reward-row-head">
-                    <span>Low</span>
-                    <span>High</span>
-                    <span>Weight</span>
-                    <span>Chance</span>
-                    <span></span>
-                  </div>
-                  <div
-                    v-for="(row, idx) in form.points.reward_table"
-                    :key="idx"
-                    class="reward-row"
-                  >
-                    <NInputNumber v-model:value="row[0]" size="tiny" :min="1" :max="form.points.balance_cap" />
-                    <NInputNumber v-model:value="row[1]" size="tiny" :min="1" :max="form.points.balance_cap" />
-                    <NInputNumber v-model:value="row[2]" size="tiny" :min="1" />
-                    <span class="chance-cell">{{ rowChancePct(row[2]) }}</span>
-                    <NButton quaternary circle size="tiny" type="error" @click="removeRewardRow(idx)">
-                      <template #icon>
-                        <TrashOutline />
-                      </template>
-                    </NButton>
-                  </div>
-                </div>
-
-                <NButton size="tiny" type="primary" dashed @click="addRewardRow" class="add-row-btn">
-                  <template #icon>
-                    <AddOutline />
-                  </template>
-                  Add Range
-                </NButton>
-              </NCard>
+                  <NButton size="tiny" type="primary" dashed @click="addRewardRow" class="add-row-btn">
+                    <template #icon>
+                      <AddOutline />
+                    </template>
+                    Add Range
+                  </NButton>
+                </NCard>
+              </div>
             </div>
           </NTabPane>
         </NTabs>
@@ -1001,6 +1034,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .switch-status-label {
@@ -1022,49 +1057,86 @@ onMounted(() => {
 }
 
 /* Loyalty Points */
-.points-master-card {
-  max-width: 640px;
+.points-card {
+  max-width: none;
 }
 
 .points-master-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  margin-bottom: 12px;
+  gap: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 14px;
 }
 
 .master-text {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .master-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   font-size: 14px;
   font-weight: 700;
   color: var(--text-1);
 }
 
+.master-icon-tile {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
 .master-icon {
   width: 18px;
   height: 18px;
-  color: #f59e0b;
+  color: var(--warn);
+}
+
+/* Two-column body: Economy Rules | Claim Reward Table */
+.points-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.card-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 12px;
+}
+
+.points-group + .points-group {
+  margin-top: 16px;
+}
+
+.group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: 8px;
 }
 
 .points-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-}
-
-.reward-table-card {
-  max-width: 640px;
 }
 
 .reward-header {
@@ -1073,13 +1145,21 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.total-weight {
+  color: var(--text-2);
 }
 
 .preset-buttons {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 .reward-rows {
@@ -1090,7 +1170,7 @@ onMounted(() => {
 
 .reward-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 56px 28px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 92px) 28px;
   gap: 8px;
   align-items: center;
 }
@@ -1102,20 +1182,58 @@ onMounted(() => {
   padding: 0 2px 2px;
 }
 
-.chance-cell {
-  font-size: 12px;
-  color: var(--accent);
-  font-weight: 600;
+.reward-row-head .chance-head {
   text-align: right;
 }
 
+.chance-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chance-pct {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.chance-bar {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--fill-subtle);
+  overflow: hidden;
+}
+
+.chance-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
 .add-row-btn {
-  margin-top: 12px;
+  margin-top: 14px;
+}
+
+@media (max-width: 1100px) {
+  .points-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
   .points-grid {
     grid-template-columns: 1fr;
+  }
+
+  .reward-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 56px 24px;
+    gap: 6px;
   }
 }
 </style>
