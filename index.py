@@ -117,13 +117,38 @@ def main() -> None:
             print(f"remove_webhook သတိပေးချက်: {e}")
         bot.infinity_polling(skip_pending=True, timeout=30)
     elif args.mode == "hybrid":
+        import faulthandler
+        import signal
         import threading
+
         print("🤖 Background Bot Polling စတင်နေသည်...")
         try:
             bot.remove_webhook()
         except Exception:
             pass
-        t = threading.Thread(target=lambda: bot.infinity_polling(skip_pending=False, timeout=30), daemon=True)
+
+        # `kill -USR1 <pid>` dumps every thread's stack to the console — the
+        # only way to see WHERE polling froze when the bot stops replying.
+        def _dump_stacks(signum, frame):
+            print("🧵 Thread stacks (SIGUSR1):", flush=True)
+            faulthandler.dump_traceback()
+
+        signal.signal(signal.SIGUSR1, _dump_stacks)
+
+        def _supervised_polling():
+            # infinity_polling swallows its own errors; if the thread ever
+            # exits anyway, say so loudly and restart instead of dying silent.
+            import time
+            import traceback
+            while True:
+                try:
+                    bot.infinity_polling(skip_pending=False, timeout=30)
+                except Exception:
+                    traceback.print_exc()
+                print("⚠️ Polling thread exited — restarting in 3s", flush=True)
+                time.sleep(3)
+
+        t = threading.Thread(target=_supervised_polling, daemon=True)
         t.start()
         print(f"🌐 Flask API server running on http://127.0.0.1:{args.port} (Dashboard backend)")
         app.run(host="0.0.0.0", port=args.port, debug=False)

@@ -35,6 +35,38 @@ def test_api_error_fails_open(mock_bot):
     assert is_user_subscribed(USER) is True
 
 
+def test_empty_channel_disables_check_without_api_call(mock_bot, monkeypatch):
+    """``REQUIRED_CHANNEL`` empty/None = force-join off (local dev bots):
+    every user passes and the Telegram API is never touched."""
+    import bot_app.config as config
+
+    monkeypatch.setattr(config, "REQUIRED_CHANNEL", None)
+    assert is_user_subscribed(USER) is True
+    assert mock_bot.calls["get_chat_member"] == []
+
+
+def test_blank_channel_env_disables_check(monkeypatch):
+    """``REQUIRED_CHANNEL=`` (set-but-empty in .env) must parse to None, not
+    an empty string — an empty chat id made get_chat_member fail with
+    'Bad Request: chat_id is empty' on every message."""
+    import importlib
+    import os
+
+    import bot_app.config as config
+
+    original = os.environ.get("REQUIRED_CHANNEL")
+    try:
+        monkeypatch.setenv("REQUIRED_CHANNEL", "   ")
+        importlib.reload(config)
+        assert config.REQUIRED_CHANNEL is None
+    finally:
+        if original is None:
+            monkeypatch.delenv("REQUIRED_CHANNEL", raising=False)
+        else:
+            monkeypatch.setenv("REQUIRED_CHANNEL", original)
+        importlib.reload(config)
+
+
 # ── Mini App entry points (zero-click admin auth) ──────────────────────────
 
 def _start_message(chat_id):

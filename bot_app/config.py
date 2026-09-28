@@ -19,7 +19,10 @@ except ImportError:  # pragma: no cover - production always has python-dotenv
 # Real deployments MUST set TELEGRAM_TOKEN env var.
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "0000000000:AAADummyTokenForTestsOnly00000000000")
 
-REQUIRED_CHANNEL = os.environ.get("REQUIRED_CHANNEL", "@hefeature")
+# Force-join channel. An explicitly empty value (``REQUIRED_CHANNEL=`` in .env)
+# disables the membership check entirely — intended for local/dev bots.
+# Unset keeps the production default.
+REQUIRED_CHANNEL = os.environ.get("REQUIRED_CHANNEL", "@hefeature").strip() or None
 
 # Telegram Mini App entry points. Admins open the Control Center directly
 # from the menu button and sign in with their Admin ID + password; everyone
@@ -153,6 +156,15 @@ ADMIN_CHAT_IDS = _AdminIdList()
 OCR_API_KEY = os.environ.get("OCR_API_KEY", "")
 
 
+def env_payment_phones():
+    """Payment phones parsed straight from the env baseline (no settings read).
+
+    Safe to call from anywhere — unlike ``MY_PAYMENT_PHONES`` it never re-enters
+    ``get_system_settings()``, so it can be used while defaults are being built.
+    """
+    return [p.strip() for p in os.environ.get("MY_PAYMENT_PHONES", "").split(",") if p.strip()]
+
+
 class _DynamicPaymentPhones(Sequence):
     """Dynamic view of payment phones from Supabase settings with env fallback."""
 
@@ -164,7 +176,7 @@ class _DynamicPaymentPhones(Sequence):
                 return [str(p).strip() for p in phones if str(p).strip()]
         except Exception:
             pass
-        return [p.strip() for p in os.environ.get("MY_PAYMENT_PHONES", "").split(",") if p.strip()]
+        return env_payment_phones()
 
     def __iter__(self):
         return iter(self._phones())
@@ -274,6 +286,15 @@ class _DynamicPlans(dict):
 
 
 PLANS = _DynamicPlans()
+
+
+def default_plans() -> dict:
+    """Baseline plans straight from the constants (no settings read).
+
+    Same re-entrancy rationale as ``env_payment_phones``: use this when
+    building settings defaults, never ``PLANS`` itself.
+    """
+    return dict(_DEFAULT_PLANS)
 
 
 # 🎁 Loyalty Points / Daily Reward System (see memory/05_POINTS_SYSTEM_PLAN.md)

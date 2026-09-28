@@ -38,11 +38,14 @@ def is_user_subscribed(user_id):
     Admins bypass the check. Unknown API errors fail-open (old behaviour:
     bot stays usable when Telegram API hiccups). ``restricted`` members
     (invite-link joins) count as subscribed so legit users are not locked
-    out -- this was a Phase-1 TODO, now fixed.
+    out -- this was a Phase-1 TODO, now fixed. An empty/missing
+    ``REQUIRED_CHANNEL`` disables the check entirely (local dev bots).
     """
     from bot_app.config import REQUIRED_CHANNEL, is_admin
     from bot_app.extensions import bot
 
+    if not REQUIRED_CHANNEL:
+        return True
     if is_admin(user_id):
         return True
     try:

@@ -33,14 +33,14 @@ def _get_default_settings() -> dict:
         return dict(_FALLBACK_SETTINGS)
 
     from bot_app.config import (
-        MY_PAYMENT_PHONES,
         OCR_API_KEY,
         OUTLINE_API_URL_1,
         OUTLINE_API_URL_2,
         OUTLINE_API_URL_3,
-        PLANS,
         REQUIRED_CHANNEL,
+        default_plans,
         default_points_settings,
+        env_payment_phones,
     )
 
     # Only servers actually configured in the environment become part of the
@@ -56,12 +56,17 @@ def _get_default_settings() -> dict:
         if url
     ]
 
+    # NOTE: every value here must come from env/constants only. Reading the
+    # dynamic views (``MY_PAYMENT_PHONES``, ``PLANS``) re-enters
+    # ``get_system_settings`` before the cache is populated — that mutual
+    # recursion swallowed a whole /start handler in ~300 RecursionError
+    # unwinds (each doing a Redis round-trip) and froze the bot.
     return {
         "servers": servers,
-        "payment_phones": list(MY_PAYMENT_PHONES),
+        "payment_phones": env_payment_phones(),
         "required_channel": REQUIRED_CHANNEL,
         "ocr_api_key": OCR_API_KEY,
-        "plans": dict(PLANS),
+        "plans": default_plans(),
         "points": default_points_settings(),
     }
 
