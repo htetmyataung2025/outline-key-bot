@@ -376,6 +376,16 @@ def handle_all_messages(message):
     # 🎁 Daily Reward (Points)
     if input_value in ["🎁 Daily Reward", "Daily Reward"]:
         clear_all_states(chat_id)
+        from bot_app.config import points_enabled
+
+        if not points_enabled():
+            bot.send_message(
+                chat_id,
+                "🎁 <b>Daily Reward စနစ်ကို ယာယီ ပိတ်ထားပါသည်။</b>\n\n"
+                "မကြာမီ ပြန်လည် ဖွင့်လှစ်ပေးပါမည်ခင်ဗျာ။",
+                parse_mode="HTML",
+            )
+            return
         from bot_app.handlers.points import build_reward_view
 
         text, markup = build_reward_view(chat_id)

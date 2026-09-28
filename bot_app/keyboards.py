@@ -7,7 +7,7 @@ from telebot.types import (
     ReplyKeyboardMarkup,
 )
 
-from bot_app.config import REQUIRED_CHANNEL, is_admin
+from bot_app.config import REQUIRED_CHANNEL, is_admin, points_enabled
 
 
 def get_force_join_keyboard():
@@ -34,7 +34,14 @@ def get_main_menu_keyboard(chat_id=None):
     markup.add(btn_buy, btn_topup)
     markup.add(btn_wallet, btn_history)
     markup.add(btn_check, btn_replace)
-    markup.add(btn_reward)
+    # The Daily Reward / Points system can be turned off from Settings without a
+    # redeploy; when off, hide its entry point entirely.
+    try:
+        reward_on = points_enabled()
+    except Exception:
+        reward_on = True
+    if reward_on:
+        markup.add(btn_reward)
     markup.add(btn_admin, btn_refresh)
 
     if chat_id and is_admin(chat_id):

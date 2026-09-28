@@ -11,7 +11,7 @@ import string
 
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot_app.config import PLANS, POINTS_BALANCE_CAP, POINTS_STARTER_COST, POINTS_STREAK_TARGET_DAYS
+from bot_app.config import PLANS, points_enabled, points_settings
 from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.helpers.callback_guard import is_callback_processed
@@ -51,6 +51,13 @@ def build_reward_view(chat_id):
 
     Returns ``(text, InlineKeyboardMarkup)``.
     """
+    cfg = points_settings()
+    cap = int(cfg["balance_cap"])
+    starter_cost = int(cfg["starter_cost"])
+    streak_target = int(cfg["streak_target_days"])
+    cooldown_h = int(cfg["claim_cooldown_h"])
+    band_low, band_high = cfg["streak_reward"]
+
     rec = get_points(chat_id)
     points = int(rec.get("points", 0))
     streak = effective_streak(rec)
@@ -64,20 +71,20 @@ def build_reward_view(chat_id):
 
     if not rec.get("has_topped_up"):
         redeem_hint = "🔒 <i>လဲယူရန် အနည်းဆုံး တစ်ကြိမ် ငွေဖြည့်ရန် လိုအပ်ပါသည်။</i>"
-    elif points < POINTS_STARTER_COST:
-        redeem_hint = f"💡 <i>လဲယူရန် နောက်ထပ် {POINTS_STARTER_COST - points:,} Points လိုအပ်ပါသည်။</i>"
+    elif points < starter_cost:
+        redeem_hint = f"💡 <i>လဲယူရန် နောက်ထပ် {starter_cost - points:,} Points လိုအပ်ပါသည်။</i>"
     else:
         redeem_hint = "✅ <i>Starter Plan လဲယူရန် အသင့်ဖြစ်ပါပြီ!</i>"
 
     text = (
         f"🎁 <b>Daily Reward — Points</b>\n\n"
-        f"💎 <b>လက်ရှိ Points:</b> {points:,} / {POINTS_BALANCE_CAP:,}\n"
+        f"💎 <b>လက်ရှိ Points:</b> {points:,} / {cap:,}\n"
         f"🔥 <b>ဆက်တိုက် Claim:</b> {streak} ရက်\n"
         f"{next_line}\n\n"
-        f"🎫 <b>Starter Plan</b> (25GB / {_STARTER_VALID_DAYS} ရက်) = <b>{POINTS_STARTER_COST:,} Points</b>\n"
+        f"🎫 <b>Starter Plan</b> (25GB / {_STARTER_VALID_DAYS} ရက်) = <b>{starter_cost:,} Points</b>\n"
         f"{redeem_hint}\n\n"
-        f"💡 <i>၄ နာရီ တစ်ကြိမ် Claim လုပ်၍ Points ရယူပါ။ {POINTS_STREAK_TARGET_DAYS} ရက် ဆက်တိုက် Claim လုပ်ပါက "
-        f"Points (150 မှ 200) ကြား ရရှိရန် အာမခံပါသည်။</i>"
+        f"💡 <i>{cooldown_h} နာရီ တစ်ကြိမ် Claim လုပ်၍ Points ရယူပါ။ {streak_target} ရက် ဆက်တိုက် Claim လုပ်ပါက "
+        f"Points ({band_low} မှ {band_high}) ကြား ရရှိရန် အာမခံပါသည်။</i>"
     )
 
     markup = InlineKeyboardMarkup()
@@ -85,11 +92,21 @@ def build_reward_view(chat_id):
         markup.row(InlineKeyboardButton("🎁 Claim Now", callback_data="points_claim"))
     else:
         markup.row(InlineKeyboardButton("🔄 Refresh", callback_data="points_view"))
-    if rec.get("has_topped_up") and points >= POINTS_STARTER_COST:
+    if rec.get("has_topped_up") and points >= starter_cost:
         markup.row(InlineKeyboardButton(
-            f"🎫 Starter Plan လဲမည် ({POINTS_STARTER_COST:,})", callback_data="points_redeem"))
+            f"🎫 Starter Plan လဲမည် ({starter_cost:,})", callback_data="points_redeem"))
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return text, markup
+
+
+_DISABLED_NOTICE = "🎁 Daily Reward စနစ်ကို ယာယီ ပိတ်ထားပါသည်။"
+
+
+def _reward_disabled() -> bool:
+    try:
+        return not points_enabled()
+    except Exception:
+        return False
 
 
 def _refresh_panel(chat_id, message_id):
@@ -110,6 +127,9 @@ def handle_points_view(call):
 @bot.callback_query_handler(func=lambda call: call.data == "points_claim")
 def handle_points_claim(call):
     chat_id = call.message.chat.id
+    if _reward_disabled():
+        bot.answer_callback_query(call.id, _DISABLED_NOTICE, show_alert=True)
+        return
     if not is_user_subscribed(chat_id):
         bot.answer_callback_query(call.id)
         send_force_join_message(chat_id)
@@ -142,17 +162,21 @@ def handle_points_redeem_confirm(call):
     """Show a confirmation step before spending points on a Starter Plan."""
     bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
+    if _reward_disabled():
+        bot.answer_callback_query(call.id, _DISABLED_NOTICE, show_alert=True)
+        return
+    starter_cost = int(points_settings()["starter_cost"])
     rec = get_points(chat_id)
     if not rec.get("has_topped_up"):
         bot.answer_callback_query(call.id, "🔒 လဲယူရန် အနည်းဆုံး တစ်ကြိမ် ငွေဖြည့်ရန် လိုအပ်ပါသည်။", show_alert=True)
         return
-    if int(rec.get("points", 0)) < POINTS_STARTER_COST:
+    if int(rec.get("points", 0)) < starter_cost:
         bot.answer_callback_query(call.id, "❌ Points မလုံလောက်ပါ။", show_alert=True)
         return
 
     text = (
         f"🎫 <b>Starter Plan လဲယူခြင်း</b>\n\n"
-        f"💎 သုံးစွဲမည့် Points: <b>{POINTS_STARTER_COST:,}</b>\n"
+        f"💎 သုံးစွဲမည့် Points: <b>{starter_cost:,}</b>\n"
         f"🛍️ ရရှိမည့် Plan: <b>Starter Plan (25GB / {_STARTER_VALID_DAYS} ရက်)</b>\n\n"
         f"👇 လဲယူရန် သေချာပါက အောက်ပါခလုတ်ကို နှိပ်ပါ:"
     )
@@ -171,6 +195,9 @@ def handle_points_redeem_do(call):
     bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
 
+    if _reward_disabled():
+        bot.answer_callback_query(call.id, _DISABLED_NOTICE, show_alert=True)
+        return
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
         return
@@ -205,10 +232,11 @@ def handle_points_redeem_do(call):
 
     if not vpn_key:
         refund = refund_starter(chat_id)
+        spent = int(points_settings()["starter_cost"])
         bot.send_message(
             chat_id,
             f"❌ <b>ဆာဗာလိုင်းမရသဖြင့် Key ထုတ်မရပါ။</b>\n\n"
-            f"💎 သုံးထားသော <b>{POINTS_STARTER_COST:,} Points</b> အား ပြန်လည် ထည့်သွင်းပေးထားပါသည် "
+            f"💎 သုံးထားသော <b>{spent:,} Points</b> အား ပြန်လည် ထည့်သွင်းပေးထားပါသည် "
             f"(လက်ကျန်: {refund.get('new_balance', 0):,} Points)။ ကျေးဇူးပြု၍ ခဏနေ ပြန်ကြိုးစားပါ။",
             parse_mode="HTML", reply_markup=get_back_inline_keyboard())
         return

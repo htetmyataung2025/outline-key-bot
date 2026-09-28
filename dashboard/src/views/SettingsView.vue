@@ -29,6 +29,7 @@ import {
   TrashOutline,
   WifiOutline,
   CloudDoneOutline,
+  GiftOutline,
 } from '@vicons/ionicons5'
 
 const message = useMessage()
@@ -53,21 +54,81 @@ interface PlanConfig {
   manual?: boolean
 }
 
+interface PointsConfig {
+  enabled: boolean
+  claim_cooldown_h: number
+  balance_cap: number
+  topup_rate: number
+  topup_cap: number
+  starter_cost: number
+  streak_target_days: number
+  streak_reward: number[]     // [low, high]
+  on_admin_topup: boolean
+  reward_table: number[][]    // [[low, high, weight], ...]
+}
+
+const DEFAULT_POINTS: PointsConfig = {
+  enabled: true,
+  claim_cooldown_h: 4,
+  balance_cap: 20000,
+  topup_rate: 100,
+  topup_cap: 1000,
+  starter_cost: 5000,
+  streak_target_days: 7,
+  streak_reward: [150, 200],
+  on_admin_topup: false,
+  reward_table: [
+    [10, 19, 35], [20, 30, 35], [31, 50, 18],
+    [51, 99, 8], [100, 150, 3], [151, 200, 1],
+  ],
+}
+
+// Reward-table presets so the owner rarely hand-edits weights.
+const REWARD_PRESETS: Record<string, number[][]> = {
+  Conservative: [[10, 15, 45], [16, 25, 35], [26, 40, 15], [41, 60, 4], [61, 100, 1]],
+  Balanced: [[10, 19, 35], [20, 30, 35], [31, 50, 18], [51, 99, 8], [100, 150, 3], [151, 200, 1]],
+  Generous: [[20, 40, 30], [41, 70, 30], [71, 120, 25], [121, 180, 10], [181, 250, 5]],
+}
+
 const form = ref<{
   servers: OutlineServerConfig[]
   payment_phones: string[]
   required_channel: string
   ocr_api_key: string
   plans: Record<string, PlanConfig>
+  points: PointsConfig
 }>({
   servers: [],
   payment_phones: [],
   required_channel: '',
   ocr_api_key: '',
   plans: {},
+  points: { ...DEFAULT_POINTS },
 })
 
 const originalSettings = ref<string>('')
+
+function normalizePoints(raw: any): PointsConfig {
+  const p = raw && typeof raw === 'object' ? raw : {}
+  const band = Array.isArray(p.streak_reward) && p.streak_reward.length === 2
+    ? [Number(p.streak_reward[0]), Number(p.streak_reward[1])]
+    : [...DEFAULT_POINTS.streak_reward]
+  const table = Array.isArray(p.reward_table) && p.reward_table.length
+    ? p.reward_table.map((r: any) => [Number(r[0]), Number(r[1]), Number(r[2])])
+    : DEFAULT_POINTS.reward_table.map((r) => [...r])
+  return {
+    enabled: p.enabled !== undefined ? !!p.enabled : DEFAULT_POINTS.enabled,
+    claim_cooldown_h: Number(p.claim_cooldown_h ?? DEFAULT_POINTS.claim_cooldown_h),
+    balance_cap: Number(p.balance_cap ?? DEFAULT_POINTS.balance_cap),
+    topup_rate: Number(p.topup_rate ?? DEFAULT_POINTS.topup_rate),
+    topup_cap: Number(p.topup_cap ?? DEFAULT_POINTS.topup_cap),
+    starter_cost: Number(p.starter_cost ?? DEFAULT_POINTS.starter_cost),
+    streak_target_days: Number(p.streak_target_days ?? DEFAULT_POINTS.streak_target_days),
+    streak_reward: band,
+    on_admin_topup: !!p.on_admin_topup,
+    reward_table: table,
+  }
+}
 
 async function loadData() {
   loading.value = true
@@ -79,6 +140,7 @@ async function loadData() {
       required_channel: data.required_channel || '',
       ocr_api_key: data.ocr_api_key || '',
       plans: data.plans || {},
+      points: normalizePoints(data.points),
     }
     originalSettings.value = JSON.stringify(form.value)
   } catch (err: any) {
@@ -98,6 +160,7 @@ async function handleSave() {
       required_channel: form.value.required_channel.trim(),
       ocr_api_key: form.value.ocr_api_key.trim(),
       plans: form.value.plans,
+      points: form.value.points,
     })
 
     if (res.success && res.settings) {
@@ -107,6 +170,7 @@ async function handleSave() {
         required_channel: res.settings.required_channel || '',
         ocr_api_key: res.settings.ocr_api_key || '',
         plans: res.settings.plans || {},
+        points: normalizePoints(res.settings.points),
       }
       originalSettings.value = JSON.stringify(form.value)
       triggerHapticNotification('success')
@@ -204,6 +268,33 @@ function addPlan() {
 
 function removePlan(key: string) {
   delete form.value.plans[key]
+}
+
+// Loyalty Points — reward table management
+function addRewardRow() {
+  form.value.points.reward_table.push([10, 20, 10])
+}
+
+function removeRewardRow(index: number) {
+  form.value.points.reward_table.splice(index, 1)
+}
+
+function applyPreset(name: string) {
+  const preset = REWARD_PRESETS[name]
+  if (preset) {
+    form.value.points.reward_table = preset.map((r) => [...r])
+    message.info(`${name} reward table applied. Save to confirm.`)
+  }
+}
+
+function totalWeight(): number {
+  return form.value.points.reward_table.reduce((sum, r) => sum + (Number(r[2]) || 0), 0)
+}
+
+function rowChancePct(weight: number): string {
+  const total = totalWeight()
+  if (total <= 0) return '0%'
+  return `${((Number(weight) / total) * 100).toFixed(1)}%`
 }
 
 onMounted(() => {
@@ -486,6 +577,150 @@ onMounted(() => {
                   </div>
                 </NCard>
               </div>
+            </div>
+          </NTabPane>
+
+          <!-- TAB 5: LOYALTY POINTS -->
+          <NTabPane name="points" tab="🎁 Loyalty Points">
+            <div class="tab-content">
+              <div class="section-desc-row">
+                <span>Tune the Daily Reward / Points economy. Changes apply live — no redeploy.</span>
+              </div>
+
+              <!-- Master switch + admin top-up -->
+              <NCard size="small" class="settings-card points-master-card">
+                <div class="points-master-row">
+                  <div class="master-text">
+                    <div class="master-title">
+                      <GiftOutline class="master-icon" />
+                      Points System
+                    </div>
+                    <span class="item-hint">
+                      Turn the whole Daily Reward system on or off. When off, the reward button
+                      is hidden and top-ups grant no points — stored balances are preserved.
+                    </span>
+                  </div>
+                  <div class="switch-toggle-wrap">
+                    <span class="switch-status-label" :class="{ 'is-manual': form.points.enabled }">
+                      {{ form.points.enabled ? 'Enabled' : 'Disabled' }}
+                    </span>
+                    <NSwitch v-model:value="form.points.enabled" />
+                  </div>
+                </div>
+
+                <div class="field-switch-row">
+                  <span class="field-label">
+                    Admin manual top-ups grant points
+                    <span class="item-hint">Default OFF — admin comps are not customer payments.</span>
+                  </span>
+                  <div class="switch-toggle-wrap">
+                    <span class="switch-status-label" :class="{ 'is-manual': form.points.on_admin_topup }">
+                      {{ form.points.on_admin_topup ? 'Yes' : 'No' }}
+                    </span>
+                    <NSwitch v-model:value="form.points.on_admin_topup" size="small" />
+                  </div>
+                </div>
+              </NCard>
+
+              <!-- Economy numbers -->
+              <NCard size="small" class="settings-card">
+                <div class="points-grid">
+                  <div class="field-col">
+                    <label class="field-label">Claim cooldown (hours)</label>
+                    <NInputNumber v-model:value="form.points.claim_cooldown_h" size="small" :min="1" :max="24" />
+                  </div>
+                  <div class="field-col">
+                    <label class="field-label">Balance cap (points)</label>
+                    <NInputNumber v-model:value="form.points.balance_cap" size="small" :min="1" :step="1000" />
+                  </div>
+                  <div class="field-col">
+                    <label class="field-label">Top-up rate (Ks per point)</label>
+                    <NInputNumber v-model:value="form.points.topup_rate" size="small" :min="1" :step="10" />
+                  </div>
+                  <div class="field-col">
+                    <label class="field-label">Top-up point cap</label>
+                    <NInputNumber v-model:value="form.points.topup_cap" size="small" :min="0" :step="100" />
+                  </div>
+                  <div class="field-col">
+                    <label class="field-label">Starter cost (points)</label>
+                    <NInputNumber
+                      v-model:value="form.points.starter_cost"
+                      size="small"
+                      :min="1"
+                      :max="form.points.balance_cap"
+                      :step="500"
+                    />
+                  </div>
+                  <div class="field-col">
+                    <label class="field-label">Streak target (days)</label>
+                    <NInputNumber v-model:value="form.points.streak_target_days" size="small" :min="1" :max="30" />
+                  </div>
+                  <div class="field-col">
+                    <label class="field-label">Streak reward — low</label>
+                    <NInputNumber v-model:value="form.points.streak_reward[0]" size="small" :min="1" :max="form.points.balance_cap" />
+                  </div>
+                  <div class="field-col">
+                    <label class="field-label">Streak reward — high</label>
+                    <NInputNumber v-model:value="form.points.streak_reward[1]" size="small" :min="1" :max="form.points.balance_cap" />
+                  </div>
+                </div>
+              </NCard>
+
+              <!-- Reward table -->
+              <NCard size="small" class="settings-card reward-table-card">
+                <div class="reward-header">
+                  <div>
+                    <div class="item-title">Claim reward table</div>
+                    <span class="item-hint">
+                      Each row is a range and its weight. Higher weight = more likely.
+                      Total weight: <b>{{ totalWeight() }}</b>
+                    </span>
+                  </div>
+                  <div class="preset-buttons">
+                    <NButton
+                      v-for="name in Object.keys(REWARD_PRESETS)"
+                      :key="name"
+                      size="tiny"
+                      secondary
+                      @click="applyPreset(name)"
+                    >
+                      {{ name }}
+                    </NButton>
+                  </div>
+                </div>
+
+                <div class="reward-rows">
+                  <div class="reward-row reward-row-head">
+                    <span>Low</span>
+                    <span>High</span>
+                    <span>Weight</span>
+                    <span>Chance</span>
+                    <span></span>
+                  </div>
+                  <div
+                    v-for="(row, idx) in form.points.reward_table"
+                    :key="idx"
+                    class="reward-row"
+                  >
+                    <NInputNumber v-model:value="row[0]" size="tiny" :min="1" :max="form.points.balance_cap" />
+                    <NInputNumber v-model:value="row[1]" size="tiny" :min="1" :max="form.points.balance_cap" />
+                    <NInputNumber v-model:value="row[2]" size="tiny" :min="1" />
+                    <span class="chance-cell">{{ rowChancePct(row[2]) }}</span>
+                    <NButton quaternary circle size="tiny" type="error" @click="removeRewardRow(idx)">
+                      <template #icon>
+                        <TrashOutline />
+                      </template>
+                    </NButton>
+                  </div>
+                </div>
+
+                <NButton size="tiny" type="primary" dashed @click="addRewardRow" class="add-row-btn">
+                  <template #icon>
+                    <AddOutline />
+                  </template>
+                  Add Range
+                </NButton>
+              </NCard>
             </div>
           </NTabPane>
         </NTabs>
@@ -782,6 +1017,104 @@ onMounted(() => {
 @media (max-width: 768px) {
   .servers-grid,
   .plans-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Loyalty Points */
+.points-master-card {
+  max-width: 640px;
+}
+
+.points-master-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 12px;
+}
+
+.master-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.master-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.master-icon {
+  width: 18px;
+  height: 18px;
+  color: #f59e0b;
+}
+
+.points-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.reward-table-card {
+  max-width: 640px;
+}
+
+.reward-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.preset-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.reward-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reward-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 56px 28px;
+  gap: 8px;
+  align-items: center;
+}
+
+.reward-row-head {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 600;
+  padding: 0 2px 2px;
+}
+
+.chance-cell {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  text-align: right;
+}
+
+.add-row-btn {
+  margin-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .points-grid {
     grid-template-columns: 1fr;
   }
 }

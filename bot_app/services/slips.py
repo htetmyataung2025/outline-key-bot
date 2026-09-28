@@ -197,11 +197,13 @@ def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", rea
         # failure must never block the money credit or the approval itself.
         pts_granted = 0
         try:
+            from bot_app.config import points_enabled
             from bot_app.services.points import credit_points, topup_points_for
 
-            pts_granted, _pts_discarded, _pts_balance = credit_points(
-                chat_id, topup_points_for(amount), "topup"
-            )
+            if points_enabled():
+                pts_granted, _pts_discarded, _pts_balance = credit_points(
+                    chat_id, topup_points_for(amount), "topup"
+                )
         except Exception:
             pts_granted = 0
 

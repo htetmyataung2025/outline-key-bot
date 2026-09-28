@@ -45,3 +45,6 @@ This directory contains the complete technical blueprints, database schemas, API
 9. [**2026-09-27_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-27_PROGRESS.md)
    - Incident log: prod webhook re-pointed to site root (405) — local run ruled out, fixed via `scripts/set_webhook.py reset`
 
+10. [**2026-09-28_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-28_PROGRESS.md)
+   - Settings-configurable Points system (§9) implemented: config resolver + master toggle, strict POST validation, SettingsView "🎁 Loyalty Points" tab, 281 tests passing
+

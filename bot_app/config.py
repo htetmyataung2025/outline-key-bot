@@ -297,3 +297,98 @@ POINTS_REWARD_TABLE = [
     (151, 200, 1),
 ]
 
+
+def default_points_settings() -> dict:
+    """Baseline Points economy as a plain JSON-friendly dict.
+
+    This is the seed written into the dynamic settings store; every field is
+    also the ultimate hardcoded fallback used by ``points_settings()`` when a
+    key is missing or unreadable.
+    """
+    return {
+        "enabled": True,
+        "claim_cooldown_h": POINTS_CLAIM_COOLDOWN_H,
+        "balance_cap": POINTS_BALANCE_CAP,
+        "topup_rate": POINTS_TOPUP_RATE,
+        "topup_cap": POINTS_TOPUP_CAP,
+        "starter_cost": POINTS_STARTER_COST,
+        "streak_target_days": POINTS_STREAK_TARGET_DAYS,
+        "streak_reward": [POINTS_STREAK_REWARD[0], POINTS_STREAK_REWARD[1]],
+        "on_admin_topup": POINTS_ON_ADMIN_TOPUP,
+        "reward_table": [[lo, hi, w] for lo, hi, w in POINTS_REWARD_TABLE],
+    }
+
+
+def points_settings() -> dict:
+    """Call-time Points economy config: dynamic settings → env/const fallback.
+
+    Read fresh on every call (never at import time) so the owner's dashboard
+    edits apply without a redeploy — same pattern as ``PLANS`` /
+    ``MY_PAYMENT_PHONES``. Each field independently falls back to the hardcoded
+    ``POINTS_*`` constant if the stored value is missing or malformed, so a
+    partial/legacy ``points`` dict can never break the economy.
+    """
+    dyn = {}
+    try:
+        from bot_app.services.settings import get_system_settings
+        stored = get_system_settings().get("points")
+        if isinstance(stored, dict):
+            dyn = stored
+    except Exception:
+        pass
+
+    def _int(key, fallback, minimum=None):
+        try:
+            val = int(dyn[key])
+        except (KeyError, TypeError, ValueError):
+            return fallback
+        if minimum is not None and val < minimum:
+            return fallback
+        return val
+
+    def _band(fallback):
+        v = dyn.get("streak_reward")
+        if isinstance(v, (list, tuple)) and len(v) == 2:
+            try:
+                lo, hi = int(v[0]), int(v[1])
+                if 1 <= lo <= hi:
+                    return (lo, hi)
+            except (TypeError, ValueError):
+                pass
+        return tuple(fallback)
+
+    def _table(fallback):
+        v = dyn.get("reward_table")
+        if isinstance(v, list) and v:
+            rows = []
+            try:
+                for row in v:
+                    lo, hi, w = row
+                    lo, hi, w = int(lo), int(hi), int(w)
+                    if not (1 <= lo <= hi and w > 0):
+                        raise ValueError
+                    rows.append((lo, hi, w))
+                return rows
+            except (TypeError, ValueError):
+                pass
+        return [tuple(r) for r in fallback]
+
+    return {
+        "enabled": bool(dyn.get("enabled", True)),
+        "claim_cooldown_h": _int("claim_cooldown_h", POINTS_CLAIM_COOLDOWN_H, minimum=1),
+        "balance_cap": _int("balance_cap", POINTS_BALANCE_CAP, minimum=1),
+        "topup_rate": _int("topup_rate", POINTS_TOPUP_RATE, minimum=1),
+        "topup_cap": _int("topup_cap", POINTS_TOPUP_CAP, minimum=0),
+        "starter_cost": _int("starter_cost", POINTS_STARTER_COST, minimum=1),
+        "streak_target_days": _int("streak_target_days", POINTS_STREAK_TARGET_DAYS, minimum=1),
+        "streak_reward": _band(POINTS_STREAK_REWARD),
+        "on_admin_topup": bool(dyn.get("on_admin_topup", POINTS_ON_ADMIN_TOPUP)),
+        "reward_table": _table(POINTS_REWARD_TABLE),
+    }
+
+
+def points_enabled() -> bool:
+    """Master switch for the whole Points system (call-time read)."""
+    return points_settings()["enabled"]
+
+

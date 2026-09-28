@@ -795,6 +795,16 @@ def adjust_customer_balance(chat_id):
     if adj_type == "TOPUP":
         new_balance, _ = update_user_balance(chat_id, amount)
         notice = build_admin_topup_notice(amount, new_balance, reason)
+        # Manual admin credits grant points only when the owner explicitly
+        # enables it in Settings (default OFF — comps are not customer
+        # payments). Best-effort: a points failure must not fail the top-up.
+        try:
+            from bot_app.config import points_enabled, points_settings
+            if points_enabled() and points_settings()["on_admin_topup"]:
+                from bot_app.services.points import credit_points, topup_points_for
+                credit_points(chat_id, topup_points_for(amount), "topup")
+        except Exception:
+            pass
     elif adj_type == "DEDUCT":
         from bot_app.services.billing import (
             admin_deduct_specific_funds,
@@ -942,11 +952,110 @@ def get_settings_endpoint():
     return jsonify(get_system_settings()), 200
 
 
+def _validate_points_settings(raw, current=None):
+    """Strict guardrails for the dynamic Points economy block.
+
+    Merges ``raw`` over ``current`` so partial updates keep prior values, then
+    validates every field plus the cross-field rules (starter_cost ≤ cap,
+    reward-table ranges within cap, etc). Returns ``(ok, error, normalized)``;
+    on failure ``normalized`` is ``None``.
+    """
+    if not isinstance(raw, dict):
+        return False, "points must be an object", None
+
+    merged = {}
+    if isinstance(current, dict):
+        merged.update(current)
+    merged.update(raw)
+
+    def _get_int(key):
+        try:
+            return int(merged.get(key))
+        except (TypeError, ValueError):
+            return None
+
+    cooldown = _get_int("claim_cooldown_h")
+    if cooldown is None or not (1 <= cooldown <= 24):
+        return False, "claim_cooldown_h must be an integer 1–24", None
+
+    cap = _get_int("balance_cap")
+    if cap is None or cap < 1:
+        return False, "balance_cap must be an integer ≥ 1", None
+
+    topup_rate = _get_int("topup_rate")
+    if topup_rate is None or topup_rate < 1:
+        return False, "topup_rate must be an integer ≥ 1", None
+
+    topup_cap = _get_int("topup_cap")
+    if topup_cap is None or topup_cap < 0:
+        return False, "topup_cap must be an integer ≥ 0", None
+
+    starter_cost = _get_int("starter_cost")
+    if starter_cost is None or starter_cost < 1:
+        return False, "starter_cost must be an integer ≥ 1", None
+    if starter_cost > cap:
+        return False, "starter_cost must be ≤ balance_cap", None
+
+    streak_target = _get_int("streak_target_days")
+    if streak_target is None or not (1 <= streak_target <= 30):
+        return False, "streak_target_days must be an integer 1–30", None
+
+    band = merged.get("streak_reward")
+    if not (isinstance(band, (list, tuple)) and len(band) == 2):
+        return False, "streak_reward must be [low, high]", None
+    try:
+        band_low, band_high = int(band[0]), int(band[1])
+    except (TypeError, ValueError):
+        return False, "streak_reward values must be integers", None
+    if not (1 <= band_low <= band_high <= cap):
+        return False, "streak_reward must satisfy 1 ≤ low ≤ high ≤ balance_cap", None
+
+    table = merged.get("reward_table")
+    if not (isinstance(table, list) and table):
+        return False, "reward_table must be a non-empty list", None
+    norm_table = []
+    for row in table:
+        if not (isinstance(row, (list, tuple)) and len(row) == 3):
+            return False, "each reward_table row must be [low, high, weight]", None
+        try:
+            lo, hi, w = int(row[0]), int(row[1]), int(row[2])
+        except (TypeError, ValueError):
+            return False, "reward_table values must be integers", None
+        if not (1 <= lo <= hi <= cap):
+            return False, "reward_table row must satisfy 1 ≤ low ≤ high ≤ balance_cap", None
+        if w <= 0:
+            return False, "reward_table weight must be > 0", None
+        norm_table.append([lo, hi, w])
+
+    normalized = {
+        "enabled": bool(merged.get("enabled", True)),
+        "claim_cooldown_h": cooldown,
+        "balance_cap": cap,
+        "topup_rate": topup_rate,
+        "topup_cap": topup_cap,
+        "starter_cost": starter_cost,
+        "streak_target_days": streak_target,
+        "streak_reward": [band_low, band_high],
+        "on_admin_topup": bool(merged.get("on_admin_topup", False)),
+        "reward_table": norm_table,
+    }
+    return True, None, normalized
+
+
 @admin_bp.route("/settings", methods=["POST"])
 def update_settings_endpoint():
     from bot_app.services.settings import save_system_settings
     data = request.get_json(silent=True) or {}
     admin_id = current_admin_id()
+
+    # Strict guardrails on the Points economy block before it reaches storage.
+    if "points" in data:
+        from bot_app.services.settings import get_system_settings
+        current_points = get_system_settings().get("points") or {}
+        ok, err, normalized = _validate_points_settings(data["points"], current_points)
+        if not ok:
+            return jsonify({"error": f"Invalid points settings: {err}"}), 400
+        data = {**data, "points": normalized}
 
     updated = save_system_settings(data, updated_by=admin_id)
     # Server list / names may have changed — drop cached telemetry so the next

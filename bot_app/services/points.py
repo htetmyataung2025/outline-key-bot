@@ -13,16 +13,7 @@ import os
 import random
 from datetime import date, datetime
 
-from bot_app.config import (
-    POINTS_BALANCE_CAP,
-    POINTS_CLAIM_COOLDOWN_H,
-    POINTS_REWARD_TABLE,
-    POINTS_STARTER_COST,
-    POINTS_STREAK_REWARD,
-    POINTS_STREAK_TARGET_DAYS,
-    POINTS_TOPUP_CAP,
-    POINTS_TOPUP_RATE,
-)
+from bot_app.config import points_settings
 from bot_app.storage.kv import redis_delete, redis_get, redis_set, redis_set_nx
 from bot_app.storage.paths import POINTS_FILE
 from bot_app.timeutil import myanmar_now
@@ -91,7 +82,9 @@ def _audit(chat_id, action: str, details: dict) -> None:
 # ── Pure helpers (offline-testable) ──────────────────────────────────────────
 def topup_points_for(amount_ks) -> int:
     """Points granted for a wallet top-up: 1% of the amount, capped."""
-    return min(POINTS_TOPUP_CAP, int(amount_ks) // POINTS_TOPUP_RATE)
+    cfg = points_settings()
+    rate = max(1, int(cfg["topup_rate"]))
+    return min(int(cfg["topup_cap"]), int(amount_ks) // rate)
 
 
 def claim_cooldown_remaining(rec: dict, now: datetime | None = None) -> int:
@@ -104,13 +97,15 @@ def claim_cooldown_remaining(rec: dict, now: datetime | None = None) -> int:
         last_dt = datetime.strptime(last, _TS_FMT)
     except (ValueError, TypeError):
         return 0
-    remaining = POINTS_CLAIM_COOLDOWN_H * 3600 - (now - last_dt).total_seconds()
+    cooldown_h = int(points_settings()["claim_cooldown_h"])
+    remaining = cooldown_h * 3600 - (now - last_dt).total_seconds()
     return int(remaining) if remaining > 0 else 0
 
 
 def is_streak_reward_day(streak_days: int) -> bool:
     """True on every Nth consecutive claim-day (7, 14, 21…) — guaranteed band."""
-    return streak_days > 0 and streak_days % POINTS_STREAK_TARGET_DAYS == 0
+    target = int(points_settings()["streak_target_days"])
+    return streak_days > 0 and target > 0 and streak_days % target == 0
 
 
 def effective_streak(rec: dict, now: datetime | None = None) -> int:
@@ -153,19 +148,22 @@ def _next_streak(rec: dict, today: date) -> int:
 
 
 def roll_claim_reward(streak_days: int, rng: random.Random | None = None) -> int:
-    """Weighted random claim reward in [10, 200].
+    """Weighted random claim reward.
 
     On a streak-target day the reward is drawn from the guaranteed high band
     instead of the weighted table.
     """
     rng = rng or random
-    if is_streak_reward_day(streak_days):
-        low, high = POINTS_STREAK_REWARD
-        return rng.randint(low, high)
-    ranges = [(lo, hi) for lo, hi, _ in POINTS_REWARD_TABLE]
-    weights = [w for _, _, w in POINTS_REWARD_TABLE]
+    cfg = points_settings()
+    target = int(cfg["streak_target_days"])
+    if streak_days > 0 and target > 0 and streak_days % target == 0:
+        low, high = cfg["streak_reward"]
+        return rng.randint(int(low), int(high))
+    table = cfg["reward_table"]
+    ranges = [(lo, hi) for lo, hi, _ in table]
+    weights = [w for _, _, w in table]
     lo, hi = rng.choices(ranges, weights=weights, k=1)[0]
-    return rng.randint(lo, hi)
+    return rng.randint(int(lo), int(hi))
 
 
 def _apply_cap(current: int, amount: int) -> tuple[int, int, int]:
@@ -173,7 +171,8 @@ def _apply_cap(current: int, amount: int) -> tuple[int, int, int]:
 
     Returns ``(new_balance, granted, discarded)``.
     """
-    room = POINTS_BALANCE_CAP - int(current)
+    cap = int(points_settings()["balance_cap"])
+    room = cap - int(current)
     if room <= 0:
         return int(current), 0, int(amount)
     granted = min(int(amount), room)
@@ -254,7 +253,7 @@ def try_claim(chat_id, now: datetime | None = None,
         return {"ok": True, "awarded": awarded, "granted": granted,
                 "discarded": discarded, "new_balance": new_bal,
                 "streak_days": new_streak, "is_streak_bonus": is_bonus,
-                "next_in_s": POINTS_CLAIM_COOLDOWN_H * 3600}
+                "next_in_s": int(points_settings()["claim_cooldown_h"]) * 3600}
     finally:
         if lock is True:
             redis_delete(lock_key)
@@ -268,7 +267,7 @@ def can_redeem(rec: dict, cost: int | None = None) -> tuple[bool, str | None]:
     who has topped up at least once may redeem it as often as their balance
     (≤ 20,000 cap) allows.
     """
-    cost = POINTS_STARTER_COST if cost is None else cost
+    cost = int(points_settings()["starter_cost"]) if cost is None else cost
     if not rec.get("has_topped_up"):
         return False, "needs_topup"
     if int(rec.get("points", 0)) < cost:
@@ -292,12 +291,13 @@ def redeem_starter(chat_id) -> dict:
     if not ok:
         return {"ok": False, "error": reason, "points": rec["points"]}
 
-    rec["points"] = int(rec["points"]) - POINTS_STARTER_COST
+    cost = int(points_settings()["starter_cost"])
+    rec["points"] = int(rec["points"]) - cost
     rec["redeemed_count"] = int(rec.get("redeemed_count", 0)) + 1
     data[uid] = rec
     save_all_points(data)
 
-    _audit(uid, "POINTS_REDEEM", {"cost": POINTS_STARTER_COST,
+    _audit(uid, "POINTS_REDEEM", {"cost": cost,
                                   "new_balance": rec["points"], "product": "starter",
                                   "redeemed_count": rec["redeemed_count"]})
     return {"ok": True, "new_balance": rec["points"], "product": "starter",
@@ -312,13 +312,13 @@ def refund_starter(chat_id) -> dict:
     if isinstance(data.get(uid), dict):
         rec.update(data[uid])
 
-    new_bal, _granted, _discarded = _apply_cap(rec["points"], POINTS_STARTER_COST)
+    new_bal, _granted, _discarded = _apply_cap(rec["points"], int(points_settings()["starter_cost"]))
     rec["points"] = new_bal
     rec["redeemed_count"] = max(0, int(rec.get("redeemed_count", 0)) - 1)
     data[uid] = rec
     save_all_points(data)
 
-    _audit(uid, "POINTS_REDEEM_REFUND", {"amount": POINTS_STARTER_COST,
+    _audit(uid, "POINTS_REDEEM_REFUND", {"amount": int(points_settings()["starter_cost"]),
                                          "new_balance": new_bal})
     return {"ok": True, "new_balance": new_bal}
 

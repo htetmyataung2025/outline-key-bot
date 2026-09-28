@@ -40,6 +40,7 @@ def _get_default_settings() -> dict:
         OUTLINE_API_URL_3,
         PLANS,
         REQUIRED_CHANNEL,
+        default_points_settings,
     )
 
     # Only servers actually configured in the environment become part of the
@@ -61,6 +62,7 @@ def _get_default_settings() -> dict:
         "required_channel": REQUIRED_CHANNEL,
         "ocr_api_key": OCR_API_KEY,
         "plans": dict(PLANS),
+        "points": default_points_settings(),
     }
 
 
@@ -106,6 +108,7 @@ def get_system_settings(force_refresh: bool = False) -> dict:
                 "required_channel": settings_map.get("required_channel", defaults["required_channel"]),
                 "ocr_api_key": settings_map.get("ocr_api_key", defaults["ocr_api_key"]),
                 "plans": settings_map.get("plans", defaults["plans"]),
+                "points": settings_map.get("points", defaults["points"]),
             }
             _SETTINGS_CACHE = merged
             _LAST_CACHE_TIME = now
@@ -139,6 +142,7 @@ def save_system_settings(new_settings: dict, updated_by: str = "Admin") -> dict:
     required_channel = new_settings.get("required_channel", current.get("required_channel"))
     ocr_api_key = new_settings.get("ocr_api_key", current.get("ocr_api_key"))
     plans = new_settings.get("plans", current.get("plans"))
+    points = new_settings.get("points", current.get("points"))
 
     payload_rows = [
         {"key": "servers", "value": servers, "updated_at": now_str, "updated_by": str(updated_by)},
@@ -146,6 +150,7 @@ def save_system_settings(new_settings: dict, updated_by: str = "Admin") -> dict:
         {"key": "required_channel", "value": required_channel, "updated_at": now_str, "updated_by": str(updated_by)},
         {"key": "ocr_api_key", "value": ocr_api_key, "updated_at": now_str, "updated_by": str(updated_by)},
         {"key": "plans", "value": plans, "updated_at": now_str, "updated_by": str(updated_by)},
+        {"key": "points", "value": points, "updated_at": now_str, "updated_by": str(updated_by)},
     ]
 
     global _FALLBACK_SETTINGS
@@ -155,6 +160,7 @@ def save_system_settings(new_settings: dict, updated_by: str = "Admin") -> dict:
         "required_channel": required_channel,
         "ocr_api_key": ocr_api_key,
         "plans": plans,
+        "points": points,
     }
 
     if is_supabase_configured():

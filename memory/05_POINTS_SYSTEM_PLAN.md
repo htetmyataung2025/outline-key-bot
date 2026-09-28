@@ -284,9 +284,42 @@ Streak never expires the points, only affects that one bonus draw.
 
 1. Backend: settings default+merge, `points_settings()` + `points_enabled()`,
    `points.py` consumption, master-toggle gating, strict POST validation +
-   tests. (No UI yet — everything already tunable via the API.)
+   tests. (No UI yet — everything already tunable via the API.) ✅ DONE
 2. Frontend: SettingsView "Loyalty Points" card + reward-table editor/presets.
+   ✅ DONE
 
-> Status: design only. No code written for §9 yet — implement after the owner
-> approves this plan.
+> Status: **IMPLEMENTED 2026-09-28.** Both phases shipped.
+
+### 9.6 What shipped (2026-09-28)
+
+- **`config.py`** — `default_points_settings()` (JSON seed built from the
+  `POINTS_*` constants), `points_settings()` (call-time resolver: dynamic
+  settings → per-field constant fallback, malformed values ignored),
+  `points_enabled()` (master switch).
+- **`services/settings.py`** — `points` added to `_get_default_settings()`,
+  both merge branches (KV-only iterates defaults automatically; Supabase branch
+  explicit), and `save_system_settings` payload + `_FALLBACK_SETTINGS`.
+- **`services/points.py`** — every economics function now reads
+  `points_settings()` at call time instead of the module constants (cooldown,
+  cap, top-up formula, reward table, streak target/band, starter cost).
+  Signatures unchanged, so all prior unit tests still pass on the defaults.
+- **Master-toggle gating** — `keyboards.get_main_menu_keyboard` hides the
+  🎁 button; `handlers/menu` 🎁 branch shows a "ယာယီ ပိတ်ထားသည်" notice;
+  `handlers/points` claim/redeem/redeem_do callbacks reject when off;
+  `slips.review_slip` skips the credit hook when off. `build_reward_view` now
+  renders the live cap / starter cost / cooldown / streak band.
+- **`routes_admin.py`** — `_validate_points_settings()` enforces every range +
+  reward-table rule on `POST /settings` (400 on violation); `on_admin_topup`
+  now honored in `adjust_customer_balance` (grants points on admin TOPUP only
+  when the owner enabled it).
+- **`SettingsView.vue`** — new "🎁 Loyalty Points" tab: master switch, admin
+  top-up switch, 8 economy number inputs (with cap-linked maxes), streak band
+  low/high, and a reward-table editor with live chance % + 3 presets
+  (Conservative / Balanced / Generous).
+- **Tests** — `tests/test_points_settings.py` (27 tests): defaults shape,
+  `points_settings()` resolution + malformed fallback, dynamic top-up formula,
+  master switch, strict POST validation (16 parametrized rejects + accepts),
+  and master-OFF gating (button hidden, top-up hook skipped, reward view
+  reflects dynamic values). **Full suite: 281 passing.**
+
 
