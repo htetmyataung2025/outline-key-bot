@@ -24,5 +24,7 @@ venv/
 htmlcov/
 
 backup_dd09255/
+# Admin tool output: removed-user backups (contain PII — never commit)
+scripts/removed_user_*.json
 # ZCode agent workspace
 .zcode/
