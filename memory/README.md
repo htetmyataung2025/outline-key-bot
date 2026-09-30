@@ -48,3 +48,9 @@ This directory contains the complete technical blueprints, database schemas, API
 10. [**2026-09-28_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-28_PROGRESS.md)
    - Settings-configurable Points system (§9) implemented: config resolver + master toggle, strict POST validation, SettingsView "🎁 Loyalty Points" tab, 281 tests passing
 
+11. [**2026-09-29_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-29_PROGRESS.md)
+   - Full DB purge of @fafafa1721 (7672856636): reusable probe + purge scripts, 8 KV stores cleaned (wallet, purchases, slips, key mapping, profile, audit logs), backup kept gitignored, 332 tests passing
+
+12. [**2026-09-30_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-30_PROGRESS.md)
+   - Server 4 routing bug fixed: hard-coded ternary chains replaced with `resolve_server_api_url`/`iter_configured_server_urls` (dynamic Settings store source of truth + env-1-2-3 fallback). Key issuance, renew, search, usage report, notifier, and admin/key handlers now address all configured servers. Replace-to buttons in menu.py are generated dynamically. 8 regression tests added; 340 tests passing.
+

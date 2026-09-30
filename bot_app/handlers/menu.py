@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 from bot_app.timeutil import myanmar_now
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot_app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
+from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.helpers.payment_text import get_payment_instruction_text
@@ -25,8 +25,8 @@ from bot_app.services.orders import (
     save_user_purchase_record,
 )
 from bot_app.services.outline import (
-    fetch_key_from_server, get_customer_summary_stats, get_servers_total_usage,
-    search_users_by_query,
+    fetch_key_from_server, get_configured_servers, get_customer_summary_stats,
+    get_servers_total_usage, search_users_by_query,
 )
 from bot_app.services.slips import record_audit_log, review_slip
 from bot_app.services.registry import save_persistent_key
@@ -611,10 +611,17 @@ def handle_all_messages(message):
     if get_replacement_state(chat_id):
         set_replacement_state(chat_id, False)
         bot.send_message(chat_id, "⏳ Key အား စစ်ဆေးနေပါသည်...")
-        
-        target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
-        if not target_key: target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
-        if not target_key: target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
+
+        target_key, bytes_transferred, server_num = None, None, None
+        for api_url in [
+            (srv.get("api_url", "")).rstrip("/") or ""
+            for srv in get_configured_servers()
+        ]:
+            if not api_url:
+                continue
+            target_key, bytes_transferred, server_num = fetch_key_from_server(api_url, input_value)
+            if target_key:
+                break
 
         if target_key:
             full_name = target_key.get("name", "HMA User")
@@ -638,11 +645,13 @@ def handle_all_messages(message):
                 f"⏰ သက်တမ်းကုန်ရက်: <b>{exp_date}</b>"
             )
             markup = InlineKeyboardMarkup()
-            markup.row(
-                InlineKeyboardButton("📡 S1 သို့", callback_data=f"replace_srv1_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
-                InlineKeyboardButton("📡 S2 သို့", callback_data=f"replace_srv2_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"),
-                InlineKeyboardButton("📡 S3 သို့", callback_data=f"replace_srv3_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}")
-            )
+            target_servers = get_configured_servers()
+            if target_servers:
+                for srv in target_servers:
+                    sid = str(srv.get("id"))
+                    label = srv.get("name", f"S{sid}").replace("📡 ", "").replace("🇸🇬", "").replace("⚡ ", "").strip()
+                    btn_label = f"📡 {label} သို့"
+                    markup.add(InlineKeyboardButton(btn_label, callback_data=f"replace_srv{sid}_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"))
             markup.row(InlineKeyboardButton("❌ Reject", callback_data=f"replace_reject_{chat_id}_{key_id}"))
 
             for aid in ADMIN_CHAT_IDS:
@@ -680,9 +689,16 @@ def handle_all_messages(message):
         return
 
     # ⚡️ Data ပမာဏစစ်ဆေးခြင်း (User Paste Key)
-    target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_1, input_value)
-    if not target_key: target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_2, input_value)
-    if not target_key: target_key, bytes_transferred, server_num = fetch_key_from_server(OUTLINE_API_URL_3, input_value)
+    target_key, bytes_transferred, server_num = None, None, None
+    for api_url in [
+        (srv.get("api_url", "")).rstrip("/") or ""
+        for srv in get_configured_servers()
+    ]:
+        if not api_url:
+            continue
+        target_key, bytes_transferred, server_num = fetch_key_from_server(api_url, input_value)
+        if target_key:
+            break
 
     if target_key:
         try:

@@ -2,10 +2,10 @@
 
 import requests
 
-from bot_app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
+from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.helpers.callback_guard import is_callback_processed
-from bot_app.services.outline import create_outline_key
+from bot_app.services.outline import create_outline_key, resolve_server_api_url
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
@@ -37,7 +37,8 @@ def handle_admin_replace_callback(call):
     rem_gb = float(parts[5])
     exp_date = parts[6]
 
-    api_url_old = OUTLINE_API_URL_1 if old_server_num == "1" else (OUTLINE_API_URL_2 if old_server_num == "2" else OUTLINE_API_URL_3)
+    api_url_old = resolve_server_api_url(old_server_num)
+    api_url_old = api_url_old.rstrip('/') if api_url_old else ""
     try:
         requests.delete(f"{api_url_old}/access-keys/{old_key_id}", verify=False, timeout=8)
     except:

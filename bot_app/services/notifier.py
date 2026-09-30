@@ -7,8 +7,9 @@ from bot_app.timeutil import myanmar_today
 
 import requests
 
-from bot_app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
+from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
+from bot_app.services.outline import iter_configured_server_urls
 from bot_app.services.orders import load_key_mappings
 from bot_app.utils import extract_chat_id_from_key_name
 
@@ -24,7 +25,7 @@ def run_expiry_cron():
     notified_count = 0
     deleted_count = 0
 
-    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
+    for api_url in iter_configured_server_urls():
         try:
             keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
             metrics_resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=8)

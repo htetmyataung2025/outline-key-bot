@@ -11,7 +11,8 @@ from dateutil.relativedelta import relativedelta
 from bot_app.timeutil import myanmar_now
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot_app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
+from bot_app import config as _config
+from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.services.orders import load_key_orders, map_key_to_order
 from bot_app.services.registry import (load_persistent_keys, save_persistent_key,
                                  sync_keys_to_persistent_registry,
@@ -39,6 +40,69 @@ def get_server_api_url(server_id):
         if str(srv.get("id")) == str(server_id):
             return srv.get("api_url", "") or None
     return None
+
+
+_LEGACY_ENV_URL_SLOTS = {"1": "OUTLINE_API_URL_1", "2": "OUTLINE_API_URL_2", "3": "OUTLINE_API_URL_3"}
+
+
+def _env_server_api_url(server_id):
+    """Legacy .env slot (OUTLINE_API_URL_1/2/3) for a server id, read at call
+    time so monkeypatched/late-injected config values are honoured."""
+    attr = _LEGACY_ENV_URL_SLOTS.get(str(server_id))
+    return (getattr(_config, attr, "") or "").rstrip("/") if attr else ""
+
+
+def resolve_server_api_url(server_id):
+    """Authoritative API URL for a server id ('' when it resolves to nothing).
+
+    The dynamic settings store (Settings page) is the source of truth so
+    servers added there (e.g. Server 4) are honoured on every code path.
+    The legacy .env slots (ids 1-3) remain a fallback for env-only setups
+    and for rows saved mid-edit without a URL.
+    """
+    return (get_server_api_url(server_id) or "").rstrip("/") or _env_server_api_url(server_id)
+
+
+def server_num_for_api_url(api_url):
+    """Reverse-map an Outline API URL back to its configured server id, or None."""
+    needle = (api_url or "").rstrip("/")
+    if not needle:
+        return None
+    for srv in get_configured_servers():
+        if (srv.get("api_url") or "").rstrip("/") == needle:
+            return str(srv.get("id"))
+    for slot_id in _LEGACY_ENV_URL_SLOTS:
+        if _env_server_api_url(slot_id) == needle:
+            return slot_id
+    return None
+
+
+def iter_configured_server_urls():
+    """Yield API URLs for every configured server.
+
+    When the dynamic settings store (Settings page) has servers, those are the
+    sole source of truth — env-only .env slots are NOT mixed in, because a
+    server saved to Settings may point at the same host under a different path
+    than its legacy OUTLINE_API_URL_* env var, producing duplicate probes.
+
+    Only when NO server is configured via Settings do we fall back to the
+    legacy .env slots (OUTLINE_API_URL_1/2/3) so env-only setups keep working.
+    """
+    servers = get_configured_servers()
+    if servers:
+        seen = set()
+        for srv in servers:
+            url = (srv.get("api_url") or "").rstrip("/")
+            if url and url not in seen:
+                seen.add(url)
+                yield url
+        return
+    seen = set()
+    for slot_id in _LEGACY_ENV_URL_SLOTS:
+        url = _env_server_api_url(slot_id)
+        if url and url not in seen:
+            seen.add(url)
+            yield url
 
 
 def refresh_registry_from_servers():
@@ -157,43 +221,49 @@ def get_servers_total_usage():
 
         return total_keys, total_bytes
 
-    s1_total, s1_bytes = get_server_stats(OUTLINE_API_URL_1)
-    s2_total, s2_bytes = get_server_stats(OUTLINE_API_URL_2)
-    s3_total, s3_bytes = get_server_stats(OUTLINE_API_URL_3)
+    servers = get_configured_servers()
+    per_server = []
+    for srv in servers:
+        sid = str(srv.get("id"))
+        sname = srv.get("name", f"Server {sid}").replace("📡 ", "").replace("🇸🇬", "").replace("⚡ ", "").strip()
+        s_total, s_bytes = get_server_stats(srv.get("api_url", ""))
+        per_server.append((sname, s_total, s_bytes))
 
-    s1_gb = bytes_to_gb(s1_bytes)
-    s2_gb = bytes_to_gb(s2_bytes)
-    s3_gb = bytes_to_gb(s3_bytes)
-    
-    overall_bytes = s1_bytes + s2_bytes + s3_bytes
+    if not servers:
+        # Legacy env-only setup: fall back to the hard .env slots.
+        env_urls = list(iter_configured_server_urls())
+        names = ["Server 1", "Server 2", "Server 3"]
+        per_server = [(names[i] if i < len(names) else f"Server {i+1}",) +
+                      get_server_stats(u) for i, u in enumerate(env_urls)]
+
+    report_lines = []
+    overall_bytes = 0
+    for sname, s_total, s_bytes in per_server:
+        s_gb = bytes_to_gb(s_bytes)
+        overall_bytes += s_bytes
+        report_lines.append(
+            f"📡 <b>{sname} 🇸🇬</b>\n🔑 Total Keys: <b>{s_total}</b>\n🧰 Total Usage: <b>{s_gb} GB</b>\n"
+        )
+
     overall_gb = bytes_to_gb(overall_bytes)
     overall_tb = round(overall_gb / 1000, 2)
 
     report = (
-        f"📊 <b>SERVER DATA STATS REPORT</b>\n\n"
-        f"📡 <b>Server 1 🇸🇬</b>\n"
-        f"🔑 Total Keys: <b>{s1_total}</b>\n"
-        f"🧰 Total Usage: <b>{s1_gb} GB</b>\n\n"
-        f"📡 <b>Server 2 🇸🇬</b>\n"
-        f"🔑 Total Keys: <b>{s2_total}</b>\n"
-        f"🧰 Total Usage: <b>{s2_gb} GB</b>\n\n"
-        f"📡 <b>Server 3 🇸🇬</b>\n"
-        f"🔑 Total Keys: <b>{s3_total}</b>\n"
-        f"🧰 Total Usage: <b>{s3_gb} GB</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━\n"
+        "📊 <b>SERVER DATA STATS REPORT</b>\n\n"
+        + "\n".join(report_lines)
+        + "━━━━━━━━━━━━━━━━━\n"
         f"🌟 <b>Overall Total Usage:</b> <b>{overall_gb} GB (~{overall_tb} TB)</b>"
     )
     return report
 
 def get_customer_summary_stats():
-    s1_users = set()
-    s2_users = set()
-    s3_users = set()
+    per_server_users = {}
     total_unique_users = set()
 
-    for srv_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
+    for srv in get_configured_servers():
+        sid = str(srv.get("id"))
         try:
-            res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
+            res = requests.get(f"{srv.get('api_url')}/access-keys", verify=False, timeout=4)
             if res.status_code == 200:
                 keys = res.json().get("accessKeys", [])
                 for k in keys:
@@ -201,16 +271,14 @@ def get_customer_summary_stats():
                     cid_match = re.search(r'\((\d+)\)', k_name)
                     identifier = cid_match.group(1) if cid_match else k_name.lower()
                     if identifier:
-                        if srv_num == "1": s1_users.add(identifier)
-                        elif srv_num == "2": s2_users.add(identifier)
-                        elif srv_num == "3": s3_users.add(identifier)
+                        per_server_users.setdefault(sid, set()).add(identifier)
                         total_unique_users.add(identifier)
-        except:
+        except Exception:
             pass
 
     try:
         sync_legacy_redis_data_to_registry()
-    except:
+    except Exception:
         pass
 
     persistent_registry = load_persistent_keys()
@@ -220,16 +288,25 @@ def get_customer_summary_stats():
         srv = str(k_data.get("server", "1"))
         identifier = cid if cid else k_name.lower()
         if identifier:
-            if srv == "1": s1_users.add(identifier)
-            elif srv == "2": s2_users.add(identifier)
-            elif srv == "3": s3_users.add(identifier)
+            per_server_users.setdefault(srv, set()).add(identifier)
             total_unique_users.add(identifier)
+
+    servers = get_configured_servers()
+    if servers:
+        server_lines = "\n".join(
+            f"📡 {srv.get('name', f'Server {srv.get('id')}')} 🇸🇬 : <b>{len(per_server_users.get(str(srv.get('id')), set()))}</b> ယောက်\n"
+            for srv in servers
+        )
+    else:
+        server_lines = (
+            f"📡 Server 1 🇸🇬 : <b>{len(per_server_users.get('1', set()))}</b> ယောက်\n"
+            f"📡 Server 2 🇸🇬 : <b>{len(per_server_users.get('2', set()))}</b> ယောက်\n"
+            f"📡 Server 3 🇸🇬 : <b>{len(per_server_users.get('3', set()))}</b> ယောက်\n"
+        )
 
     summary_text = (
         f"👥 <b>လက်ရှိ Customer စာရင်း အကျဉ်းချုပ်</b>\n\n"
-        f"📡 Server 1 🇸🇬 : <b>{len(s1_users)}</b> ယောက်\n"
-        f"📡 Server 2 🇸🇬 : <b>{len(s2_users)}</b> ယောက်\n"
-        f"📡 Server 3 🇸🇬 : <b>{len(s3_users)}</b> ယောက်\n"
+        f"{server_lines}"
         f"━━━━━━━━━━━━━━━━━\n"
         f"🌟 <b>စုစုပေါင်း Customer ဦးရေ:</b> <b>{len(total_unique_users)}</b> ယောက်\n\n"
         f"👇 ရှာဖွေလိုသော <b>Cus နာမည်အစ စာလုံး (ဥပမာ - H, T, A) သို့မဟုတ် Chat ID / Order ID</b> ကို ဒီ Chat ထဲသို့ ရိုက်ပို့ပေးပါခင်ဗျာ:"
@@ -248,7 +325,9 @@ def search_users_by_query(query):
     except:
         pass
 
-    for server_num, api_url in [("1", OUTLINE_API_URL_1), ("2", OUTLINE_API_URL_2), ("3", OUTLINE_API_URL_3)]:
+    for srv in get_configured_servers():
+        server_num = str(srv.get("id"))
+        api_url = srv.get("api_url", "")
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
             if res.status_code == 200:
@@ -269,7 +348,7 @@ def search_users_by_query(query):
                         if query_clean in k_name_lower or (assigned_ord and query_clean in assigned_ord):
                             found_matches.append((server_num, k_id, k_name))
                             seen_identifiers.add(uid)
-        except:
+        except Exception:
             pass
 
     persistent_registry = load_persistent_keys()
@@ -324,7 +403,7 @@ def get_user_next_key_number(user_name, target_chat_id=None):
                 except:
                     pass
 
-    for api_url in [OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3]:
+    for api_url in iter_configured_server_urls():
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
             if res.status_code == 200:
@@ -355,7 +434,9 @@ def get_user_next_key_number(user_name, target_chat_id=None):
         return max_num, max_num + 1
 
 def get_user_ultimate_keys(chat_id, server_num="1"):
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    api_url = resolve_server_api_url(server_num)
+    if not api_url:
+        return []
     user_keys = []
     try:
         res = requests.get(f"{api_url}/access-keys", verify=False, timeout=6)
@@ -376,7 +457,9 @@ def get_user_ultimate_keys(chat_id, server_num="1"):
     return user_keys
 
 def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days=None, order_id=None):
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    api_url = resolve_server_api_url(server_num)
+    if not api_url:
+        return None, None, None
     today = myanmar_now()
     if custom_days:
         new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
@@ -423,7 +506,9 @@ def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days
     return None, None, None
 
 def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_count=1, custom_days=None, order_id=None):
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    api_url = resolve_server_api_url(server_num)
+    if not api_url:
+        return None, None, None, False
     today = myanmar_now()
     if custom_days:
         new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
@@ -497,7 +582,10 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     else:
         key_name = f"{user_name}{crown_str}{id_str}{gw_str} ({next_number}) {expire_date}"
     
-    api_url = OUTLINE_API_URL_1 if str(server_num) == "1" else (OUTLINE_API_URL_2 if str(server_num) == "2" else OUTLINE_API_URL_3)
+    api_url = resolve_server_api_url(server_num)
+    if not api_url:
+        print(f"Key Generation Error: Server {server_num} is not configured — no API URL resolved.")
+        return None, None, None
     
     try:
         res = requests.post(f"{api_url}/access-keys", verify=False, timeout=10)
@@ -536,7 +624,7 @@ def fetch_key_from_server(api_url, input_value):
         return None, None, None
         
     api_url = api_url.rstrip('/')
-    server_num = "1" if api_url == OUTLINE_API_URL_1.rstrip('/') else ("2" if api_url == OUTLINE_API_URL_2.rstrip('/') else "3")
+    server_num = server_num_for_api_url(api_url) or "1"
     
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=5)

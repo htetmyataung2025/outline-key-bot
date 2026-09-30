@@ -7,9 +7,10 @@ import requests
 
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot_app.config import ADMIN_CHAT_IDS, OUTLINE_API_URL_1, OUTLINE_API_URL_2, OUTLINE_API_URL_3
+from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.helpers.callback_guard import is_callback_processed
+from bot_app.services.outline import create_outline_key, resolve_server_api_url
 from bot_app.keyboards import (
     get_admin_rd_amounts_keyboard, get_admin_rd_count_keyboard, get_admin_rd_days_keyboard,
     get_admin_rd_mode_keyboard, get_back_inline_keyboard, get_main_menu_keyboard,
@@ -219,8 +220,8 @@ def handle_view_key_detail(call):
     server_num = parts[1]
     key_id = parts[2]
     
-    api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
-    api_url = api_url.rstrip('/')
+    api_url = resolve_server_api_url(server_num)
+    api_url = api_url.rstrip('/') if api_url else ""
     
     target_key = None
     bytes_transferred = {}
@@ -330,7 +331,8 @@ def handle_admin_del_key(call):
             {"server": str(server_num), "via": "telegram"},
         )
 
-        api_url = OUTLINE_API_URL_1 if server_num == "1" else (OUTLINE_API_URL_2 if server_num == "2" else OUTLINE_API_URL_3)
+        api_url = resolve_server_api_url(server_num)
+        api_url = api_url.rstrip('/') if api_url else ""
         try:
             requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
             bot.edit_message_text(f"✅ <b>Server {server_num} ပေါ်မှ Key (ID: {key_id}) အား အောင်မြင်စွာ ဖျက်ဆီးပြီးပါပြီဗျာ။</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")

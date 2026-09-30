@@ -7,6 +7,22 @@ from bot_app.extensions import bot
 from bot_app.services import notifier
 
 
+# Servers the cron is expected to scan. Pinned (rather than read from .env,
+# which loads prod URLs during test runs) so the count is deterministic.
+_TEST_SERVERS = [
+    {"id": 1, "name": "Server 1", "api_url": "https://srv1.example.com/api"},
+    {"id": 2, "name": "Server 2", "api_url": "https://srv2.example.com/api"},
+    {"id": 3, "name": "Server 3", "api_url": "https://srv3.example.com/api"},
+]
+
+
+class FakeSettings:
+    """Lightweight stand-in for bot_app.services.settings.get_system_settings."""
+
+    def __call__(self, force_refresh=False):
+        return {"servers": _TEST_SERVERS}
+
+
 class FakeResp:
     def __init__(self, payload, status=200):
         self._payload = payload
@@ -38,6 +54,10 @@ def _fake_outline(monkeypatch, keys):
 
     monkeypatch.setattr(notifier.requests, "get", fake_get)
     monkeypatch.setattr(notifier.requests, "delete", fake_delete)
+    # Pin the server list so the cron scans exactly the 3 mock servers,
+    # independent of whatever .env happens to load during the test run.
+    from bot_app.services import settings as settings_svc
+    monkeypatch.setattr(settings_svc, "get_system_settings", FakeSettings())
     return calls
 
 
