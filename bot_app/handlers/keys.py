@@ -5,6 +5,7 @@ import requests
 from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.helpers.callback_guard import is_callback_processed
+from bot_app.helpers.deeplink import get_key_delivery_markup
 from bot_app.services.outline import create_outline_key, resolve_server_api_url
 
 
@@ -65,7 +66,7 @@ def handle_admin_replace_callback(call):
                 f"<code>{new_key}</code>\n\n"
                 f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။"
             )
-            bot.send_message(target_chat_id, success_msg, parse_mode="HTML")
+            bot.send_message(target_chat_id, success_msg, parse_mode="HTML", reply_markup=get_key_delivery_markup(new_key))
             bot.edit_message_text(call.message.text + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
             bot.answer_callback_query(call.id, "✅ Key အသစ် အစားထိုး ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
     except Exception as e:

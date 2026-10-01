@@ -18,6 +18,7 @@ from bot_app.handlers.common import send_force_join_message
 from bot_app.helpers.callback_guard import is_callback_processed
 from bot_app.keyboards import get_back_inline_keyboard
 from bot_app.services.orders import save_key_mapping, save_user_purchase_record
+from bot_app.helpers.deeplink import get_key_delivery_markup
 from bot_app.services.outline import create_outline_key, get_server_display_name
 from bot_app.services.points import (
     claim_cooldown_remaining, effective_streak, get_points, redeem_starter,
@@ -273,7 +274,7 @@ def handle_points_redeem_do(call):
     )
     try:
         bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id,
-                              parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+                              parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
     except Exception:
-        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
 

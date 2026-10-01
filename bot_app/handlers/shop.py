@@ -12,6 +12,7 @@ from bot_app.config import ADMIN_CHAT_IDS, PLANS
 from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.helpers.callback_guard import is_callback_processed
+from bot_app.helpers.deeplink import get_key_delivery_markup
 from bot_app.keyboards import get_back_inline_keyboard, get_plan_keyboard
 from bot_app.services.billing import get_user_balance, get_user_balance_breakdown, update_user_balance
 from bot_app.services.orders import (
@@ -191,9 +192,9 @@ def handle_renew_choice(call):
         f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
     )
     try:
-        bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
     except Exception:
-        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
@@ -314,9 +315,9 @@ def handle_buy_with_wallet(call):
         f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
     )
     try:
-        bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
     except Exception:
-        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
+        bot.send_message(chat_id, success_text, parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
 
     for aid in ADMIN_CHAT_IDS:
         try:

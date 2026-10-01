@@ -21,7 +21,7 @@ import os
 import platform
 
 import telebot
-from flask import jsonify, request
+from flask import jsonify, render_template_string, request
 
 from bot_app.config import (
     MY_PAYMENT_PHONES, OCR_API_KEY, REQUIRED_CHANNEL, TELEGRAM_TOKEN,
@@ -160,6 +160,83 @@ from bot_app.routes_admin import admin_bp
 
 # Register Admin REST API Blueprint
 app.register_blueprint(admin_bp)
+
+
+# ── One-tap key import landing page (/go/<token>) ───────────────────
+# Telegram URL buttons reject custom schemes (ss://), so the bot hands out
+# signed https links to this page; it fires the target app's scheme and keeps
+# manual/copy fallbacks for restricted in-app browsers.
+_GO_PAGE = """<!doctype html>
+<html lang="my">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🔑 VPN Key Import</title>
+<style>
+  body { font-family:-apple-system,'Segoe UI',Roboto,sans-serif; background:#0b1120; color:#e2e8f0;
+         display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:24px; box-sizing:border-box; }
+  .card { background:#1e293b; border-radius:16px; padding:28px 22px; max-width:420px; width:100%; text-align:center; }
+  h1 { font-size:18px; margin:0 0 6px; color:#10b981; }
+  p { font-size:13.5px; line-height:1.6; color:#94a3b8; margin:8px 0 18px; word-break:break-all; }
+  a.btn, button.btn { display:block; width:100%; box-sizing:border-box; padding:13px 16px; margin:10px 0;
+         border-radius:10px; border:none; font-size:15px; font-weight:600; text-decoration:none; cursor:pointer; }
+  .primary { background:#10b981; color:#04281c; }
+  .ghost { background:transparent; color:#10b981; border:1px solid rgba(16,185,129,.45); }
+  .hint { font-size:12px; color:#64748b; margin-top:14px; }
+  .ok { color:#10b981; display:none; margin:6px 0 0; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔑 VPN Key Import</h1>
+  <p>{{ key_label }}</p>
+  <a class="btn primary" href="{{ ss_attr }}">📲 Outline တွင် ဖွင့်မည်</a>
+  <a class="btn ghost" href="{{ incy_attr }}">🧩 INCY တွင် ဖွင့်မည်</a>
+  <button class="btn ghost" id="copy">📋 Key ကို Copy မည် (V2Box / အခြား App)</button>
+  <p class="ok" id="copied">✅ Copy ကူးပြီးပါပြီ — V2Box → ➕ → Import from clipboard မှ ထည့်ပါ</p>
+  <p class="hint">ဖွင့်လို့ မရပါက Outline / INCY app ကို အရင် ထည့်သွင်းပါ။ V2Box သုံးပါက အပေါ်က Copy ခလုတ်ဖြင့် ထည့်နိုင်ပါသည်။</p>
+</div>
+<script>
+var ss = {{ ss_url | tojson }};
+try { window.location.href = ss; } catch (e) {}
+document.getElementById('copy').addEventListener('click', function () {
+  var done = function () { document.getElementById('copied').style.display = 'block'; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ss).then(done);
+  } else {
+    var t = document.createElement('textarea'); t.value = ss;
+    document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(t); done();
+  }
+});
+</script>
+</body>
+</html>"""
+
+
+@app.route("/go/<token>", methods=["GET"])
+def go_deep_link(token):
+    from bot_app.helpers.deeplink import verify_go_token
+    from bot_app.services.registry import load_persistent_keys
+
+    ref = verify_go_token(token)
+    if not ref:
+        return "Invalid link", 404
+
+    entry = load_persistent_keys().get(f"{ref[0]}_{ref[1]}") or {}
+    access_url = (entry.get("access_url") or "").strip()
+    if not access_url:
+        return "Key not found", 404
+
+    key_label = access_url.split("#", 1)[1] if "#" in access_url else "VPN Access Key"
+    return render_template_string(
+        _GO_PAGE,
+        key_label=key_label,
+        ss_attr=access_url,
+        incy_attr=f"incy://add/{access_url}",
+        ss_url=access_url,
+    ), 200, {"Cache-Control": "no-store"}
 
 
 class VercelPathFixMiddleware:

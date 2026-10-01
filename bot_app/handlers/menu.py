@@ -11,6 +11,7 @@ from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.helpers.payment_text import get_payment_instruction_text
+from bot_app.helpers.deeplink import get_key_delivery_markup
 from bot_app.keyboards import (
     get_admin_deduct_type_keyboard, get_admin_rd_amounts_keyboard, get_back_inline_keyboard,
     get_main_menu_keyboard, get_plan_keyboard, get_topup_amounts_keyboard,
@@ -208,7 +209,7 @@ def handle_all_messages(message):
                 f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
             )
             try:
-                bot.send_message(target_user_id, success_message, parse_mode="HTML")
+                bot.send_message(target_user_id, success_message, parse_mode="HTML", reply_markup=get_key_delivery_markup(input_value))
                 bot.reply_to(message, f"✅ <b>Order ID: {order_id} အတွက် Customer ထံသို့ Key အား အောင်မြင်စွာ ပို့ပေးလိုက်ပါပြီခင်ဗျာ။</b>", parse_mode="HTML")
             except Exception as e:
                 bot.reply_to(message, f"❌ Customer ထံ ပို့မရပါ - {str(e)}")
