@@ -206,7 +206,7 @@ def handle_all_messages(message):
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
                 f"<code>{input_value}</code>\n\n"
-                f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+                f"☝️ Key ကို တစ်ချက်နှိပ်ရုံဖြင့် Auto Copy ကူးနိုင်သလို၊ အောက်က Button များကို နှိပ်ပြီးလည်း တိုက်ရိုက်ထည့်သွင်း အသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
             )
             try:
                 bot.send_message(target_user_id, success_message, parse_mode="HTML", reply_markup=get_key_delivery_markup(input_value))

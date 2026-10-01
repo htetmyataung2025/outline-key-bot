@@ -9,7 +9,8 @@ travels in the button URL and the endpoint is not enumerable.
 App support (researched 2026-10, see memory/2026-10-01_PROGRESS.md):
 - Outline registers ``ss://`` on Android+iOS → direct link works.
 - INCY documents ``incy://add/{url}`` → works with the raw ss:// appended.
-- V2Box has NO single-key scheme → the page offers a copy button instead.
+- V2Box: ``v2box://install-config?url=<encoded config>`` (App Store changelog;
+  needs an up-to-date app) → the page percent-encodes the ss:// URL.
 """
 
 import base64
@@ -71,7 +72,7 @@ def find_key_ref_by_url(access_url: str) -> tuple | None:
 
 
 def get_key_import_keyboard(access_url: str) -> InlineKeyboardMarkup | None:
-    """Two one-tap import buttons for a delivered key; None if the key is not
+    """One-tap import buttons for a delivered key; None if the key is not
     in the registry (e.g. admin-pasted custom text) → callers fall back."""
     ref = find_key_ref_by_url(access_url)
     if not ref:
@@ -79,6 +80,7 @@ def get_key_import_keyboard(access_url: str) -> InlineKeyboardMarkup | None:
     go_url = f"{DASHBOARD_URL}/go/{make_go_token(*ref)}"
     markup = InlineKeyboardMarkup()
     markup.row(InlineKeyboardButton("📲 Outline တွင် တစ်ခါထဲ ထည့်ရန်", url=f"{go_url}?app=outline"))
+    markup.row(InlineKeyboardButton("🟩 V2Box တွင် တစ်ခါထဲ ထည့်ရန်", url=f"{go_url}?app=v2box"))
     markup.row(InlineKeyboardButton("🧩 INCY တွင် တစ်ခါထဲ ထည့်ရန်", url=f"{go_url}?app=incy"))
     return markup
 

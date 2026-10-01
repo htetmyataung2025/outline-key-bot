@@ -191,14 +191,16 @@ _GO_PAGE = """<!doctype html>
   <h1>🔑 VPN Key Import</h1>
   <p>{{ key_label }}</p>
   <a class="btn primary" href="{{ ss_attr }}">📲 Outline တွင် ဖွင့်မည်</a>
+  <a class="btn ghost" href="{{ v2box_attr }}">🟩 V2Box တွင် ဖွင့်မည်</a>
   <a class="btn ghost" href="{{ incy_attr }}">🧩 INCY တွင် ဖွင့်မည်</a>
-  <button class="btn ghost" id="copy">📋 Key ကို Copy မည် (V2Box / အခြား App)</button>
-  <p class="ok" id="copied">✅ Copy ကူးပြီးပါပြီ — V2Box → ➕ → Import from clipboard မှ ထည့်ပါ</p>
-  <p class="hint">ဖွင့်လို့ မရပါက Outline / INCY app ကို အရင် ထည့်သွင်းပါ။ V2Box သုံးပါက အပေါ်က Copy ခလုတ်ဖြင့် ထည့်နိုင်ပါသည်။</p>
+  <button class="btn ghost" id="copy">📋 Key ကို Copy မည်</button>
+  <p class="ok" id="copied">✅ Copy ကူးပြီးပါပြီ — V2Box → ➕ → Import from clipboard မှလည်း ထည့်နိုင်ပါသည်</p>
+  <p class="hint">ဖွင့်လို့ မရပါက Outline / V2Box / INCY app ကို နောက်ဆုံး version အထိ update လုပ်ပါ (သို့) install လုပ်ပါ။</p>
 </div>
 <script>
-var ss = {{ ss_url | tojson }};
-try { window.location.href = ss; } catch (e) {}
+var ss = {{ ss_attr | tojson }};
+var auto = {{ auto_url | tojson }};
+try { window.location.href = auto; } catch (e) {}
 document.getElementById('copy').addEventListener('click', function () {
   var done = function () { document.getElementById('copied').style.display = 'block'; };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -219,6 +221,7 @@ document.getElementById('copy').addEventListener('click', function () {
 def go_deep_link(token):
     from bot_app.helpers.deeplink import verify_go_token
     from bot_app.services.registry import load_persistent_keys
+    from urllib.parse import quote
 
     ref = verify_go_token(token)
     if not ref:
@@ -230,12 +233,20 @@ def go_deep_link(token):
         return "Key not found", 404
 
     key_label = access_url.split("#", 1)[1] if "#" in access_url else "VPN Access Key"
+    scheme_for = {
+        "outline": access_url,
+        "incy": f"incy://add/{access_url}",
+        # V2Box install-config expects a URL-encoded config link.
+        "v2box": f"v2box://install-config?url={quote(access_url, safe='')}",
+    }
+    auto_url = scheme_for.get(request.args.get("app"), access_url)
     return render_template_string(
         _GO_PAGE,
         key_label=key_label,
         ss_attr=access_url,
-        incy_attr=f"incy://add/{access_url}",
-        ss_url=access_url,
+        v2box_attr=scheme_for["v2box"],
+        incy_attr=scheme_for["incy"],
+        auto_url=auto_url,
     ), 200, {"Cache-Control": "no-store"}
 
 

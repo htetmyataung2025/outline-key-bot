@@ -7,6 +7,8 @@ tests pin the signing, the registry lookup, the landing page, and the
 delivery keyboards.
 """
 
+from urllib.parse import quote
+
 from bot_app.config import DASHBOARD_URL
 from bot_app.extensions import flask_app
 from bot_app.helpers import deeplink
@@ -64,17 +66,18 @@ def test_find_key_ref_unknown_url_returns_none(isolated_state):
 # delivery keyboards
 # ---------------------------------------------------------------------------
 
-def test_import_keyboard_has_two_valid_url_buttons(isolated_state):
+def test_import_keyboard_has_three_valid_url_buttons(isolated_state):
     _seed_key()
     markup = deeplink.get_key_import_keyboard(SS_URL)
     assert markup is not None
     buttons = [b for row in markup.keyboard for b in row]
     urls = [b.url for b in buttons]
-    assert len(urls) == 2
+    assert len(urls) == 3
     for u in urls:
         assert u.startswith(f"{DASHBOARD_URL}/go/")
         assert len(u) <= 256  # Telegram URL button limit
     assert any("app=outline" in u for u in urls)
+    assert any("app=v2box" in u for u in urls)
     assert any("app=incy" in u for u in urls)
     # the ss:// secret itself must never appear in the button URL
     assert all("YWJj" not in u for u in urls)
@@ -98,7 +101,7 @@ def test_delivery_markup_appends_back_row(isolated_state):
 # /go/<token> landing page
 # ---------------------------------------------------------------------------
 
-def test_go_page_renders_ss_and_incy_links(isolated_state):
+def test_go_page_renders_ss_v2box_and_incy_links(isolated_state):
     _seed_key()
     token = deeplink.make_go_token("1", "777")
     client = flask_app.test_client()
@@ -108,10 +111,13 @@ def test_go_page_renders_ss_and_incy_links(isolated_state):
     body = resp.get_data(as_text=True)
     assert SS_URL in body                     # js payload + href
     assert f"incy://add/{SS_URL}" in body     # INCY one-tap link
-    assert "Copy" in body                     # V2Box fallback
+    expected_v2box = f"v2box://install-config?url={quote(SS_URL, safe='')}"
+    assert expected_v2box in body             # V2Box one-tap link
+    assert "Copy" in body                     # fallback for other apps
 
-    resp2 = client.get(f"/go/{token}?app=incy")
-    assert resp2.status_code == 200
+    for app in ("incy", "v2box"):
+        resp2 = client.get(f"/go/{token}?app={app}")
+        assert resp2.status_code == 200
 
 
 def test_go_page_rejects_bad_token_and_missing_key(isolated_state):

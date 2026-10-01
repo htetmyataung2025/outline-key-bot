@@ -269,8 +269,7 @@ def handle_points_redeem_do(call):
         f"💎 <b>ကျန်ရှိ Points:</b> {res.get('new_balance', 0):,}\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
         f"<code>{vpn_key}</code>\n\n"
-        f"☝️ အပေါ်က Key ကို <b>တစ်ချက်တည်း နှိပ်လိုက်ရုံဖြင့်</b> Auto Copy ကူးသွားပါလိမ့်မယ်ခင်ဗျာ။ "
-        f"V2BOX VPN App ထဲသို့ ထည့်သွင်းအသုံးပြုနိုင်ပါပြီ။"
+        f"☝️ Key ကို တစ်ချက်နှိပ်ရုံဖြင့် Auto Copy ကူးနိုင်သလို၊ အောက်က Button များကို နှိပ်ပြီးလည်း တိုက်ရိုက်ထည့်သွင်း အသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
     )
     try:
         bot.edit_message_text(success_text, chat_id=chat_id, message_id=call.message.message_id,
