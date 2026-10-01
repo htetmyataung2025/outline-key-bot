@@ -69,21 +69,39 @@ def test_find_key_ref_unknown_url_returns_none(isolated_state):
 # delivery keyboards
 # ---------------------------------------------------------------------------
 
-def test_import_keyboard_has_three_valid_url_buttons(isolated_state):
+def test_grid_markup_single_key_is_two_by_two(isolated_state):
     _seed_key()
-    markup = deeplink.get_key_import_keyboard(SS_URL)
-    assert markup is not None
-    buttons = [b for row in markup.keyboard for b in row]
-    urls = [b.url for b in buttons]
-    assert len(urls) == 3
-    for u in urls:
-        assert u.startswith(f"{DASHBOARD_URL}/go/")
-        assert len(u) <= 256  # Telegram URL button limit
-    assert any("app=outline" in u for u in urls)
-    assert any("app=v2box" in u for u in urls)
-    assert any("app=incy" in u for u in urls)
-    # the ss:// secret itself must never appear in the button URL
-    assert all("YWJj" not in u for u in urls)
+    markup = deeplink.get_key_grid_markup([SS_URL])
+    rows = markup.keyboard
+    assert len(rows) == 2
+    r1 = [b.text for b in rows[0]]
+    r2 = [(b.text, b.url or b.callback_data) for b in rows[1]]
+    assert r1 == ["📲 Outline", "🟩 V2Box"]
+    assert r2[0][0] == "🧩 INCY"
+    assert "app=outline" in rows[0][0].url and "app=incy" in r2[0][1]
+    assert "app=v2box" in rows[0][1].url
+    assert r2[1] == ("🔙 မူလ Menu", "back_to_main")
+    for row in rows:
+        for b in row:
+            if b.url:
+                assert b.url.startswith(f"{DASHBOARD_URL}/go/")
+                assert len(b.url) <= 256      # Telegram URL button limit
+                assert "YWJj" not in b.url    # ss:// secret never in the URL
+
+
+def test_grid_markup_multi_key_flows_with_numbered_labels(isolated_state):
+    _seed_key()
+    save_persistent_key("1", "778", "Second User (456) 01.11.2026",
+                        SS_URL.split("#")[0] + "#Second User")
+    urls = [SS_URL, SS_URL.split("#")[0] + "#Second User"]
+    rows = deeplink.get_key_grid_markup(urls).keyboard
+    texts = [[b.text for b in row] for row in rows]
+    assert texts[0] == ["📲 #1 Outline", "🟩 #1 V2Box"]
+    assert texts[1][0] == "🧩 #1 INCY"
+    flat = [t for row in texts for t in row]
+    assert flat[-1] == "🔙 မူလ Menu"             # back always present, last cell
+    assert all(len(row) == 2 for row in rows[:-1])
+    assert len(rows[-1]) == 1                    # even button count → back sits alone
 
 
 def test_delivery_markup_falls_back_for_unregistered_key(isolated_state):
@@ -92,12 +110,13 @@ def test_delivery_markup_falls_back_for_unregistered_key(isolated_state):
     assert datas == ["back_to_main"]
 
 
-def test_delivery_markup_appends_back_row(isolated_state):
+def test_delivery_markup_uses_the_grid(isolated_state):
     _seed_key()
     markup = deeplink.get_key_delivery_markup(SS_URL)
-    texts = [b.text for row in markup.keyboard for b in row]
-    assert any("Outline" in t for t in texts)
-    assert any("Menu" in t for t in texts)
+    rows = markup.keyboard
+    assert [b.text for b in rows[0]] == ["📲 Outline", "🟩 V2Box"]
+    assert rows[1][0].text == "🧩 INCY"
+    assert rows[1][1].callback_data == "back_to_main"
 
 
 # ---------------------------------------------------------------------------

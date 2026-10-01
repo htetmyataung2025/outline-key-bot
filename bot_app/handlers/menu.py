@@ -11,7 +11,7 @@ from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.helpers.payment_text import get_payment_instruction_text
-from bot_app.helpers.deeplink import build_go_url, get_key_delivery_markup
+from bot_app.helpers.deeplink import get_key_delivery_markup, get_key_grid_markup
 from bot_app.keyboards import (
     get_admin_deduct_type_keyboard, get_admin_rd_amounts_keyboard, get_back_inline_keyboard,
     get_main_menu_keyboard, get_plan_keyboard, get_topup_amounts_keyboard,
@@ -347,16 +347,12 @@ def handle_all_messages(message):
             "\n\n☝️ <i>Key ကို တစ်ချက်နှိပ်ရုံဖြင့် Auto Copy ကူးနိုင်သလို၊ အောက်က Button များကို နှိပ်ပြီးလည်း တိုက်ရိုက်ထည့်သွင်း အသုံးပြုနိုင်ပါပြီခင်ဗျာ။</i>"
         )
 
-        # One-tap import row per purchased key (the /go page then offers
-        # Outline / V2Box / INCY + copy — keeps the keyboard compact).
-        history_markup = InlineKeyboardMarkup()
-        for idx, rec in enumerate(reversed(records), 1):
-            vpn_k = rec.get('vpn_key', '')
-            if vpn_k and vpn_k != "N/A":
-                go_url = build_go_url(vpn_k)
-                if go_url:
-                    history_markup.add(InlineKeyboardButton(f"📱 #{idx} Key ကို App ထဲ တစ်ခါထဲ ထည့်ရန်", url=go_url))
-        history_markup.add(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+        # Neat 2-column app grid (Outline | V2Box / INCY | မူလ Menu) — each
+        # button relays through the /go page into the app; keys not in the
+        # registry are skipped automatically.
+        key_urls = [rec.get('vpn_key') for rec in reversed(records)
+                    if rec.get('vpn_key') and rec.get('vpn_key') != "N/A"]
+        history_markup = get_key_grid_markup(key_urls)
 
         if len(final_history_msg) > 4000:
             pieces = [final_history_msg[i:i+4000] for i in range(0, len(final_history_msg), 4000)]

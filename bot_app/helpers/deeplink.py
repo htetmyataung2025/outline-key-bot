@@ -79,25 +79,42 @@ def build_go_url(access_url: str) -> str | None:
     return f"{DASHBOARD_URL}/go/{make_go_token(*ref)}"
 
 
-def get_key_import_keyboard(access_url: str) -> InlineKeyboardMarkup | None:
-    """One-tap import buttons for a delivered key; None if the key is not
-    in the registry (e.g. admin-pasted custom text) → callers fall back."""
-    go_url = build_go_url(access_url)
-    if not go_url:
-        return None
+def get_key_grid_markup(access_urls, back_callback: str = "back_to_main") -> InlineKeyboardMarkup:
+    """Neat 2-column app grid over the /go landing page.
+
+    Single key renders exactly:
+        [📲 Outline  ] [🟩 V2Box  ]
+        [🧩 INCY     ] [🔙 မူလ Menu]
+    Multiple keys flow through the same grid with "#N" prefixes and the back
+    button always fills the last free cell. Keys not found in the registry are
+    skipped.
+    """
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("📲 Outline တွင် တစ်ခါထဲ ထည့်ရန်", url=f"{go_url}?app=outline"))
-    markup.row(InlineKeyboardButton("🟩 V2Box တွင် တစ်ခါထဲ ထည့်ရန်", url=f"{go_url}?app=v2box"))
-    markup.row(InlineKeyboardButton("🧩 INCY တွင် တစ်ခါထဲ ထည့်ရန်", url=f"{go_url}?app=incy"))
+    buttons = []
+    total = len(access_urls)
+    for idx, access_url in enumerate(access_urls, 1):
+        go_url = build_go_url(access_url)
+        if not go_url:
+            continue
+        prefix = "" if total == 1 else f"#{idx} "
+        buttons.append(InlineKeyboardButton(f"📲 {prefix}Outline", url=f"{go_url}?app=outline"))
+        buttons.append(InlineKeyboardButton(f"🟩 {prefix}V2Box", url=f"{go_url}?app=v2box"))
+        buttons.append(InlineKeyboardButton(f"🧩 {prefix}INCY", url=f"{go_url}?app=incy"))
+
+    if not buttons:
+        markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data=back_callback))
+        return markup
+
+    buttons.append(InlineKeyboardButton("🔙 မူလ Menu", callback_data=back_callback))
+    for i in range(0, len(buttons), 2):
+        pair = buttons[i:i + 2]
+        markup.row(*pair)
     return markup
 
 
 def get_key_delivery_markup(access_url: str) -> InlineKeyboardMarkup:
-    """Import buttons + the usual back row; falls back to the plain back
-    keyboard when no /go link can be built for this key."""
-    markup = get_key_import_keyboard(access_url)
-    if markup is None:
-        return get_back_inline_keyboard()
-    for row in get_back_inline_keyboard().keyboard:
-        markup.row(*row)
-    return markup
+    """Grid of one-tap import buttons; falls back to the plain back keyboard
+    when no /go link can be built for this key."""
+    if build_go_url(access_url):
+        return get_key_grid_markup([access_url])
+    return get_back_inline_keyboard()
