@@ -319,7 +319,12 @@ const confirmAction = ref<ConfirmAction>('extend')
 const confirmTarget = ref<any>(null)
 const confirmBusy = ref(false)
 const extendAddGb = ref(0)
-const TOPUP_PRESETS = [25, 50, 100, 200]
+const TOPUP_PRESETS = [25, 50, 100, 200, 500, 1000]
+
+// Decimal units app-wide (GB = 1000³): 1000 GB renders as "+1 TB".
+function topupChipLabel(gb: number): string {
+  return gb >= 1000 ? `+${gb / 1000} TB` : `+${gb} GB`
+}
 
 function openConfirm(action: ConfirmAction, row: any) {
   triggerHaptic('light')
@@ -354,7 +359,7 @@ const confirmTitle = computed(() =>
   confirmAction.value === 'extend' ? 'Extend Access Key' : 'Delete Access Key')
 const confirmVerb = computed(() =>
   confirmAction.value === 'extend'
-    ? (extendAddGb.value > 0 ? `Extend +30 Days · +${extendAddGb.value} GB` : 'Extend +30 Days')
+    ? (extendAddGb.value > 0 ? `Extend +30 Days · ${topupChipLabel(extendAddGb.value)}` : 'Extend +30 Days')
     : 'Delete Permanently')
 
 // Outline's cap is lifetime and usage never resets, so the backend raises the
@@ -363,7 +368,7 @@ const topupPreview = computed(() => {
   const gb = extendAddGb.value
   if (!(gb > 0)) return ''
   const used = confirmTarget.value?.bytes_used
-  const fresh = `+${gb} GB fresh data (used bytes are not counted against it)`
+  const fresh = `${topupChipLabel(gb)} fresh data (used bytes are not counted against it)`
   return used === null || used === undefined
     ? fresh
     : `New cap ≈ ${formatData(Number(used) + gb * 1000 ** 3)} · ${fresh}`
@@ -681,7 +686,7 @@ defineExpose({
               :class="{ active: extendAddGb === gb }"
               @click="extendAddGb = gb"
             >
-              +{{ gb }} GB
+              {{ topupChipLabel(gb) }}
             </button>
           </div>
           <p v-if="topupPreview" class="topup-preview">{{ topupPreview }}</p>

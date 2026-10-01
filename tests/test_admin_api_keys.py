@@ -144,6 +144,51 @@ def test_extend_key_with_data_topup(client, make_telegram_init_data, monkeypatch
     assert registry["1_77"]["expire_date"] == "31/01/2030"
 
 
+def test_extend_topup_1tb_bytes(client, make_telegram_init_data, monkeypatch):
+    """1 TB chip = 1000 GB = 10**12 bytes on the wire; app uses decimal GB."""
+    init_data = make_telegram_init_data(user_id=ADMIN_ID)
+    headers = {"X-Telegram-Init-Data": init_data}
+
+    save_persistent_key(
+        server_num="1",
+        key_id="55",
+        name="tb_user 01.01.2030",
+        access_url="ss://conf55",
+    )
+
+    monkeypatch.setattr(
+        "bot_app.services.outline.get_server_api_url",
+        lambda sid: "https://sg1.example.com/api",
+    )
+
+    puts = []
+
+    def fake_get(url, *a, **k):
+        if "/metrics/transfer" in url:
+            return _Resp(200, {"bytesTransferredByUserId": {"55": 999 * GB}})
+        if "/access-keys" in url:
+            return _Resp(200, {"accessKeys": []})
+        return _Resp(404, {})
+
+    def fake_put(url, *a, **k):
+        puts.append((url, k))
+        return _Resp(204)
+
+    monkeypatch.setattr("requests.get", fake_get)
+    monkeypatch.setattr("requests.put", fake_put)
+
+    resp = client.post(
+        "/api/admin/keys/55/extend",
+        json={"add_days": 30, "add_gb": 1000},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json["data_topup"]["new_limit_bytes"] == (999 + 1000) * GB
+
+    limit_puts = [(u, kw) for u, kw in puts if "/data-limit" in u]
+    assert limit_puts[0][1]["json"] == {"limit": {"bytes": (999 + 1000) * GB}}
+
+
 def test_extend_topup_failure_still_extends_days(client, make_telegram_init_data, monkeypatch):
     """An unreachable Outline server must not block the day-extension: the
     response flags the failed top-up so the admin can retry just the data."""
