@@ -267,10 +267,16 @@ async function loadKeys(opts?: { silent?: boolean }) {
 async function handleExtend(row: any): Promise<boolean> {
   triggerHaptic('medium')
   try {
-    const res = await extendKey(row.key_id, 30)
+    const res = await extendKey(row.key_id, 30, extendAddGb.value)
     if (res.success) {
       triggerHapticNotification('success')
-      message.success(`Extended key ${row.key_id} to ${res.new_expire_date}`)
+      if (res.data_topup?.applied) {
+        message.success(`Extended to ${res.new_expire_date} · new data cap ${formatData(res.data_topup.new_limit_bytes)}`)
+      } else if (extendAddGb.value > 0) {
+        message.warning(`Extended to ${res.new_expire_date}, but the data top-up failed: ${res.data_topup?.error || 'unknown error'}`)
+      } else {
+        message.success(`Extended key ${row.key_id} to ${res.new_expire_date}`)
+      }
       await loadKeys()
       return true
     }
@@ -312,11 +318,14 @@ const confirmOpen = ref(false)
 const confirmAction = ref<ConfirmAction>('extend')
 const confirmTarget = ref<any>(null)
 const confirmBusy = ref(false)
+const extendAddGb = ref(0)
+const TOPUP_PRESETS = [25, 50, 100, 200]
 
 function openConfirm(action: ConfirmAction, row: any) {
   triggerHaptic('light')
   confirmAction.value = action
   confirmTarget.value = row
+  extendAddGb.value = 0
   confirmOpen.value = true
 }
 
@@ -344,7 +353,21 @@ async function runConfirm() {
 const confirmTitle = computed(() =>
   confirmAction.value === 'extend' ? 'Extend Access Key' : 'Delete Access Key')
 const confirmVerb = computed(() =>
-  confirmAction.value === 'extend' ? 'Extend +30 Days' : 'Delete Permanently')
+  confirmAction.value === 'extend'
+    ? (extendAddGb.value > 0 ? `Extend +30 Days · +${extendAddGb.value} GB` : 'Extend +30 Days')
+    : 'Delete Permanently')
+
+// Outline's cap is lifetime and usage never resets, so the backend raises the
+// limit to (used + add_gb): the fresh allowance is what the user gets on top.
+const topupPreview = computed(() => {
+  const gb = extendAddGb.value
+  if (!(gb > 0)) return ''
+  const used = confirmTarget.value?.bytes_used
+  const fresh = `+${gb} GB fresh data (used bytes are not counted against it)`
+  return used === null || used === undefined
+    ? fresh
+    : `New cap ≈ ${formatData(Number(used) + gb * 1000 ** 3)} · ${fresh}`
+})
 
 const newExpiryText = computed(() => {
   const dt = parseExpiry(confirmTarget.value?.expire_date)
@@ -639,6 +662,30 @@ defineExpose({
             This cannot be undone.
           </template>
         </p>
+        <div v-if="confirmAction === 'extend'" class="topup-block">
+          <p class="topup-label">➕ Add data (optional)</p>
+          <div class="topup-chips">
+            <button
+              type="button"
+              class="topup-chip"
+              :class="{ active: extendAddGb === 0 }"
+              @click="extendAddGb = 0"
+            >
+              Days only
+            </button>
+            <button
+              v-for="gb in TOPUP_PRESETS"
+              :key="gb"
+              type="button"
+              class="topup-chip"
+              :class="{ active: extendAddGb === gb }"
+              @click="extendAddGb = gb"
+            >
+              +{{ gb }} GB
+            </button>
+          </div>
+          <p v-if="topupPreview" class="topup-preview">{{ topupPreview }}</p>
+        </div>
       </div>
       <div class="confirm-actions">
         <NButton class="confirm-cancel" :disabled="confirmBusy" @click="closeConfirm">
@@ -1126,6 +1173,55 @@ defineExpose({
   font-weight: 600;
   margin-bottom: 2px;
   word-break: break-word;
+}
+
+/* ── Extend modal: optional data top-up ─────────────────────────── */
+.topup-block {
+  margin-top: 12px;
+  padding: 10px 12px;
+  text-align: left;
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 10px;
+}
+
+.topup-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2, var(--text-1));
+}
+
+.topup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.topup-chip {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.topup-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(16, 185, 129, 0.12);
+  font-weight: 600;
+}
+
+.topup-preview {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--accent);
 }
 
 .confirm-actions {

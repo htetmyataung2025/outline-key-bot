@@ -178,8 +178,8 @@ export const fetchKeys = (params?: { server_id?: string; search?: string; page?:
 export const createKey = (payload: { server_id: string; name: string; data_limit_gb?: number; valid_days?: number; assign_to_user_id?: string | number }) =>
   api.post('/keys', payload).then((r) => r.data)
 
-export const extendKey = (keyId: string, addDays: number) =>
-  api.post(`/keys/${keyId}/extend`, { add_days: addDays }).then((r) => r.data)
+export const extendKey = (keyId: string, addDays: number, addGb: number = 0) =>
+  api.post(`/keys/${keyId}/extend`, { add_days: addDays, add_gb: addGb }).then((r) => r.data)
 
 export const deleteKey = (serverId: string | number, keyId: string | number) =>
   api.delete(`/keys/${serverId}/${keyId}`).then((r) => r.data)

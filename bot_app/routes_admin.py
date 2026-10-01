@@ -385,10 +385,49 @@ def _persist_expiry_on_server(server_num, key_id, new_dt, entry):
         pass
 
 
+def _apply_data_topup(server_num, key_id, add_gb):
+    """Raise a key's Outline data limit to (current usage + add_gb).
+
+    Outline enforces a lifetime byte cap per key and its usage counters never
+    reset, so "add N GB" must mean new_limit = used + N GB — the same
+    carry-over rule the Ultimate renewal flow applies (renew_specific_
+    unlimited_key). Returns {"applied": bool, ...}; never raises so a data
+    problem can't block the day-extension that already succeeded.
+    """
+    import requests
+    from bot_app.services.outline import get_server_api_url
+
+    out = {"applied": False, "add_gb": add_gb}
+    api_url = get_server_api_url(server_num)
+    if not api_url:
+        out["error"] = f"Server {server_num} is not configured"
+        return out
+    try:
+        metrics = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=6)
+        used = 0
+        if metrics.status_code == 200:
+            used = int(metrics.json().get("bytesTransferredByUserId", {}).get(str(key_id), 0))
+        new_limit = used + int(round(add_gb * 1000 ** 3))
+        resp = requests.put(
+            f"{api_url}/access-keys/{key_id}/data-limit",
+            json={"limit": {"bytes": new_limit}},
+            verify=False,
+            timeout=8,
+        )
+        if resp.status_code in (200, 201, 204):
+            out.update(applied=True, used_bytes=used, new_limit_bytes=new_limit)
+        else:
+            out["error"] = f"Outline responded HTTP {resp.status_code}"
+    except Exception as e:
+        out["error"] = str(e)
+    return out
+
+
 @admin_bp.route("/keys/<key_id>/extend", methods=["POST"])
 def extend_key_endpoint(key_id):
     data = request.get_json(silent=True) or {}
     add_days = int(data.get("add_days", 30))
+    add_gb = float(data.get("add_gb") or 0)  # optional data top-up
 
     registry = load_persistent_keys()
     matched_entry = None
@@ -429,6 +468,15 @@ def extend_key_endpoint(key_id):
     _persist_expiry_on_server(server_num, key_id, new_dt, matched_entry)
 
     matched_entry["expire_date"] = new_exp_date
+
+    # Optional data top-up: raise the Outline lifetime cap to used + add_gb so
+    # a 100%-used key becomes usable again without waiting for renewal.
+    data_topup = {"applied": False, "add_gb": add_gb}
+    if add_gb > 0:
+        data_topup = _apply_data_topup(server_num, key_id, add_gb)
+        if data_topup.get("applied"):
+            matched_entry["limit_bytes"] = data_topup["new_limit_bytes"]
+
     registry[matched_key] = matched_entry
 
     import json
@@ -442,17 +490,28 @@ def extend_key_endpoint(key_id):
     except Exception:
         pass
 
-
     admin_id = current_admin_id()
+    audit_details = {"add_days": add_days, "new_expire_date": new_exp_date}
+    if add_gb > 0:
+        audit_details.update({
+            "add_gb": add_gb,
+            "data_topup_applied": bool(data_topup.get("applied")),
+            "new_limit_bytes": data_topup.get("new_limit_bytes"),
+        })
     record_audit_log(
         admin_id=admin_id,
         action="KEY_EXTEND",
         target_type="key",
         target_id=str(key_id),
-        details={"add_days": add_days, "new_expire_date": new_exp_date},
+        details=audit_details,
     )
 
-    return jsonify({"success": True, "new_expire_date": new_exp_date, "key": matched_entry}), 200
+    return jsonify({
+        "success": True,
+        "new_expire_date": new_exp_date,
+        "key": matched_entry,
+        "data_topup": data_topup,
+    }), 200
 
 
 @admin_bp.route("/keys/<server_id>/<key_id>", methods=["DELETE"])

@@ -1,5 +1,7 @@
 """Tests for Admin Key Management endpoints."""
 
+import requests
+
 from bot_app.services.registry import load_persistent_keys, save_persistent_key
 
 ADMIN_ID = 111000111
@@ -48,10 +50,13 @@ def test_extend_key_expiry(client, make_telegram_init_data, monkeypatch):
     # Keep hermetic: no live server, so extend just updates the local registry.
     monkeypatch.setattr("bot_app.services.outline.get_server_api_url", lambda sid: None)
 
+    # Far-future expiry: the endpoint extends from the stored date only when it
+    # is still ahead of "now", so a near-date here would make this test
+    # time-bombed (base silently becomes today once the date passes).
     save_persistent_key(
         server_num="1",
         key_id="99",
-        name="expiring_user 01.10.2026",
+        name="expiring_user 01.01.2030",
         access_url="ss://conf99",
     )
 
@@ -63,11 +68,120 @@ def test_extend_key_expiry(client, make_telegram_init_data, monkeypatch):
     assert resp.status_code == 200
     data = resp.json
     assert data["success"] is True
-    assert data["new_expire_date"] == "31/10/2026"
+    assert data["new_expire_date"] == "31/01/2030"
+    assert data["data_topup"] == {"applied": False, "add_gb": 0}
 
     # Verify persisted in storage
     registry = load_persistent_keys()
-    assert registry["1_99"]["expire_date"] == "31/10/2026"
+    assert registry["1_99"]["expire_date"] == "31/01/2030"
+
+
+GB = 1000 ** 3
+
+
+class _Resp:
+    def __init__(self, status_code, payload=None):
+        self.status_code = status_code
+        self._payload = payload or {}
+
+    def json(self):
+        return self._payload
+
+
+def test_extend_key_with_data_topup(client, make_telegram_init_data, monkeypatch):
+    """add_gb > 0 raises the Outline lifetime cap to (used + add_gb) — the same
+    carry-over rule as the Ultimate renewal — and persists the new limit."""
+    init_data = make_telegram_init_data(user_id=ADMIN_ID)
+    headers = {"X-Telegram-Init-Data": init_data}
+
+    save_persistent_key(
+        server_num="1",
+        key_id="77",
+        name="capped_user 01.01.2030",
+        access_url="ss://conf77",
+    )
+
+    monkeypatch.setattr(
+        "bot_app.services.outline.get_server_api_url",
+        lambda sid: "https://sg1.example.com/api",
+    )
+
+    puts = []
+
+    def fake_get(url, *a, **k):
+        if "/metrics/transfer" in url:
+            return _Resp(200, {"bytesTransferredByUserId": {"77": 30 * GB}})
+        if "/access-keys" in url:
+            return _Resp(200, {"accessKeys": [
+                {"id": "77", "name": "capped_user 01.01.2030", "accessUrl": "ss://conf77"},
+            ]})
+        return _Resp(404, {})
+
+    def fake_put(url, *a, **k):
+        puts.append((url, k))
+        return _Resp(204)
+
+    monkeypatch.setattr("requests.get", fake_get)
+    monkeypatch.setattr("requests.put", fake_put)
+
+    resp = client.post(
+        "/api/admin/keys/77/extend",
+        json={"add_days": 30, "add_gb": 50},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json
+    assert body["success"] is True
+    assert body["data_topup"]["applied"] is True
+    assert body["data_topup"]["new_limit_bytes"] == 80 * GB   # 30 used + 50 fresh
+
+    limit_puts = [(u, kw) for u, kw in puts if "/data-limit" in u]
+    assert len(limit_puts) == 1
+    assert limit_puts[0][1]["json"] == {"limit": {"bytes": 80 * GB}}
+
+    registry = load_persistent_keys()
+    assert registry["1_77"]["limit_bytes"] == 80 * GB
+    assert registry["1_77"]["expire_date"] == "31/01/2030"
+
+
+def test_extend_topup_failure_still_extends_days(client, make_telegram_init_data, monkeypatch):
+    """An unreachable Outline server must not block the day-extension: the
+    response flags the failed top-up so the admin can retry just the data."""
+    init_data = make_telegram_init_data(user_id=ADMIN_ID)
+    headers = {"X-Telegram-Init-Data": init_data}
+
+    save_persistent_key(
+        server_num="1",
+        key_id="88",
+        name="offline_user 01.01.2030",
+        access_url="ss://conf88",
+    )
+
+    monkeypatch.setattr(
+        "bot_app.services.outline.get_server_api_url",
+        lambda sid: "https://sg1.example.com/api",
+    )
+
+    def unreachable(url, *a, **k):
+        raise requests.exceptions.ConnectionError("server down")
+
+    monkeypatch.setattr("requests.get", unreachable)
+    monkeypatch.setattr("requests.put", unreachable)
+
+    resp = client.post(
+        "/api/admin/keys/88/extend",
+        json={"add_days": 30, "add_gb": 50},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json
+    assert body["success"] is True
+    assert body["new_expire_date"] == "31/01/2030"
+    assert body["data_topup"]["applied"] is False
+    assert body["data_topup"]["error"]
+
+    registry = load_persistent_keys()
+    assert registry["1_88"]["expire_date"] == "31/01/2030"
 
 
 def test_list_keys_syncs_live_server_keys(client, make_telegram_init_data, monkeypatch):
