@@ -18,7 +18,7 @@ from bot_app.handlers.common import send_force_join_message
 from bot_app.helpers.callback_guard import is_callback_processed
 from bot_app.keyboards import get_back_inline_keyboard
 from bot_app.services.orders import save_key_mapping, save_user_purchase_record
-from bot_app.services.outline import create_outline_key
+from bot_app.services.outline import create_outline_key, get_server_display_name
 from bot_app.services.points import (
     claim_cooldown_remaining, effective_streak, get_points, redeem_starter,
     refund_starter, try_claim,
@@ -263,7 +263,7 @@ def handle_points_redeem_do(call):
         f"🎉 <b>Points ဖြင့် Starter Plan လဲယူမှု အောင်မြင်ပါသည်!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
         f"🛍️ <b>Plan:</b> {plan['name']} ({plan.get('data', '25 GB')})\n\n"
-        f"📡 <b>Server:</b> Singapore Server 1 🇸🇬\n\n"
+        f"📡 <b>Server:</b> {get_server_display_name('1')}\n\n"
         f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
         f"💎 <b>ကျန်ရှိ Points:</b> {res.get('new_balance', 0):,}\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"

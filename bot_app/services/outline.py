@@ -77,6 +77,27 @@ def server_num_for_api_url(api_url):
     return None
 
 
+def clean_server_label(name):
+    """Strip decoration emojis the admin may leave in a Settings server name."""
+    cleaned = (name or "").replace("📡", "").replace("🇸🇬", "").replace("⚡", "")
+    return " ".join(cleaned.split())
+
+
+def get_server_display_name(server_id) -> str:
+    """Human-readable name for a server id ("Server 1 (SG-1)" …).
+
+    Reads the dynamic Settings store, so renames/removals there are reflected
+    everywhere this is shown. Ids missing from the store (e.g. a server that
+    was later deleted but still referenced by historical sales) fall back to
+    "Server <id>".
+    """
+    sid = str(server_id)
+    for srv in get_configured_servers():
+        if str(srv.get("id")) == sid:
+            return clean_server_label(srv.get("name", "")) or f"Server {sid}"
+    return f"Server {sid}"
+
+
 def iter_configured_server_urls():
     """Yield API URLs for every configured server.
 
@@ -225,9 +246,8 @@ def get_servers_total_usage():
     per_server = []
     for srv in servers:
         sid = str(srv.get("id"))
-        sname = srv.get("name", f"Server {sid}").replace("📡 ", "").replace("🇸🇬", "").replace("⚡ ", "").strip()
         s_total, s_bytes = get_server_stats(srv.get("api_url", ""))
-        per_server.append((sname, s_total, s_bytes))
+        per_server.append((get_server_display_name(sid), s_total, s_bytes))
 
     if not servers:
         # Legacy env-only setup: fall back to the hard .env slots.

@@ -17,7 +17,10 @@ from bot_app.services.billing import get_user_balance, get_user_balance_breakdow
 from bot_app.services.orders import (
     save_key_mapping, save_sale_transaction, save_user_purchase_record,
 )
-from bot_app.services.outline import create_outline_key, get_user_ultimate_keys, renew_or_create_unlimited_key, renew_specific_unlimited_key
+from bot_app.services.outline import (
+    create_outline_key, get_configured_servers, get_server_display_name,
+    get_user_ultimate_keys, renew_or_create_unlimited_key, renew_specific_unlimited_key,
+)
 from bot_app.utils import is_user_subscribed
 
 
@@ -66,12 +69,15 @@ def handle_select_plan(call):
             if plan.get("manual"):
                 markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
             elif plan_code == "ultimate" or has_redeem_credit:
-                srv1_label = "📡 Server 1 🇸🇬 (Redeem Credit)" if has_redeem_credit else "📡 Server 1 🇸🇬 (Main Server) ဖြင့် ဝယ်မည်"
-                markup.row(InlineKeyboardButton(srv1_label, callback_data=f"buywallet_{plan_code}_1"))
+                srv1_tag = "Redeem Credit" if has_redeem_credit else "Main Server"
+                markup.row(InlineKeyboardButton(f"📡 {get_server_display_name('1')} 🇸🇬 ({srv1_tag}) ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
             else:
-                markup.row(InlineKeyboardButton("📡 Server 1 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
-                markup.row(InlineKeyboardButton("📡 Server 2 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_2"))
-                markup.row(InlineKeyboardButton("📡 Server 3 🇸🇬 ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_3"))
+                # One button per configured server — the Settings page is the
+                # source of truth, so adding/removing servers there updates
+                # this list without a redeploy.
+                for srv in get_configured_servers():
+                    sid = str(srv.get("id"))
+                    markup.row(InlineKeyboardButton(f"📡 {get_server_display_name(sid)} ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_{sid}"))
         else:
             shortfall = amount - balance
             markup.row(InlineKeyboardButton(f"💰 ငွေ {shortfall:,} Ks ထပ်ဖြည့်ရန်", callback_data="btn_open_topup"))
@@ -82,7 +88,7 @@ def handle_select_plan(call):
         balance_disp = "♾️" if is_admin else f"{balance:,} MMK"
         balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
         
-        server_notice = "\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် Server 1 မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
+        server_notice = f"\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် {get_server_display_name('1')} မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
 
         text = (
             f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
@@ -177,7 +183,7 @@ def handle_renew_choice(call):
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
         f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
-        f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
+        f"📡 <b>Server:</b> {get_server_display_name(server_num)}\n\n"
         f"{exp_info_text}\n\n"
         f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{user_disp_bal}</code>\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
@@ -300,7 +306,7 @@ def handle_buy_with_wallet(call):
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
         f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
-        f"📡 <b>Server:</b> Singapore Server {server_num} 🇸🇬\n\n"
+        f"📡 <b>Server:</b> {get_server_display_name(server_num)}\n\n"
         f"{exp_info_text}\n\n"
         f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{user_disp_bal}</code>\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
@@ -320,7 +326,7 @@ def handle_buy_with_wallet(call):
                 f"🧾 Order ID: <code>{order_id}</code>\n"
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
-                f"📡 Server: Server {server_num}\n"
+                f"📡 Server: {get_server_display_name(server_num)}\n"
                 f"💵 ရရှိငွေ: {amount:,} MMK\n"
                 f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else '၁လစာ'})",
                 parse_mode="HTML"

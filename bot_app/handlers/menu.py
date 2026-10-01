@@ -26,7 +26,7 @@ from bot_app.services.orders import (
 )
 from bot_app.services.outline import (
     fetch_key_from_server, get_configured_servers, get_customer_summary_stats,
-    get_servers_total_usage, search_users_by_query,
+    get_server_display_name, get_servers_total_usage, search_users_by_query,
 )
 from bot_app.services.slips import record_audit_log, review_slip
 from bot_app.services.registry import save_persistent_key
@@ -649,8 +649,7 @@ def handle_all_messages(message):
             if target_servers:
                 for srv in target_servers:
                     sid = str(srv.get("id"))
-                    label = srv.get("name", f"S{sid}").replace("📡 ", "").replace("🇸🇬", "").replace("⚡ ", "").strip()
-                    btn_label = f"📡 {label} သို့"
+                    btn_label = f"📡 {get_server_display_name(sid)} သို့"
                     markup.add(InlineKeyboardButton(btn_label, callback_data=f"replace_srv{sid}_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"))
             markup.row(InlineKeyboardButton("❌ Reject", callback_data=f"replace_reject_{chat_id}_{key_id}"))
 

@@ -54,3 +54,6 @@ This directory contains the complete technical blueprints, database schemas, API
 12. [**2026-09-30_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-09-30_PROGRESS.md)
    - Server 4 routing bug fixed: hard-coded ternary chains replaced with `resolve_server_api_url`/`iter_configured_server_urls` (dynamic Settings store source of truth + env-1-2-3 fallback). Key issuance, renew, search, usage report, notifier, and admin/key handlers now address all configured servers. Replace-to buttons in menu.py are generated dynamically. 8 regression tests added; 340 tests passing.
 
+13. [**2026-10-01_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-01_PROGRESS.md)
+   - "Removed Server 3 still shows in bot" fixed: plan-purchase buttons + monthly revenue report now follow the Settings store (`get_server_display_name` helper), legacy removed-server revenue stays visible via history fallback. 9 regression tests added; 349 tests passing.
+
