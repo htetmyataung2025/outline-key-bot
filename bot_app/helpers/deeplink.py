@@ -71,13 +71,20 @@ def find_key_ref_by_url(access_url: str) -> tuple | None:
     return None
 
 
-def get_key_import_keyboard(access_url: str) -> InlineKeyboardMarkup | None:
-    """One-tap import buttons for a delivered key; None if the key is not
-    in the registry (e.g. admin-pasted custom text) → callers fall back."""
+def build_go_url(access_url: str) -> str | None:
+    """Signed /go landing URL for a key; None if it's not in the registry."""
     ref = find_key_ref_by_url(access_url)
     if not ref:
         return None
-    go_url = f"{DASHBOARD_URL}/go/{make_go_token(*ref)}"
+    return f"{DASHBOARD_URL}/go/{make_go_token(*ref)}"
+
+
+def get_key_import_keyboard(access_url: str) -> InlineKeyboardMarkup | None:
+    """One-tap import buttons for a delivered key; None if the key is not
+    in the registry (e.g. admin-pasted custom text) → callers fall back."""
+    go_url = build_go_url(access_url)
+    if not go_url:
+        return None
     markup = InlineKeyboardMarkup()
     markup.row(InlineKeyboardButton("📲 Outline တွင် တစ်ခါထဲ ထည့်ရန်", url=f"{go_url}?app=outline"))
     markup.row(InlineKeyboardButton("🟩 V2Box တွင် တစ်ခါထဲ ထည့်ရန်", url=f"{go_url}?app=v2box"))

@@ -7,12 +7,15 @@ tests pin the signing, the registry lookup, the landing page, and the
 delivery keyboards.
 """
 
+from types import SimpleNamespace
 from urllib.parse import quote
 
 from bot_app.config import DASHBOARD_URL
 from bot_app.extensions import flask_app
 from bot_app.helpers import deeplink
 from bot_app.services.registry import save_persistent_key
+
+UID = 720000777
 
 SS_URL = "ss://YWJjLXNlY3JldA@h.e.feature.hma.qzz.io:443/?outline=1#Test User (123) 01.11.2026"
 
@@ -134,3 +137,43 @@ def test_go_page_survives_local_path_routing(isolated_state):
     client = flask_app.test_client()
     resp = client.get(f"/go/{deeplink.make_go_token('1', '777')}")
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# purchase-history view (menu.py): dynamic server name + per-record buttons
+# ---------------------------------------------------------------------------
+
+def test_history_view_dynamic_name_and_import_buttons(isolated_state, mock_bot, monkeypatch):
+    from bot_app.handlers import menu
+
+    _seed_key()
+    records = [{
+        "order_id": "#F7PPTW", "timestamp": "02/10/2026 (12:24 AM)",
+        "plan_name": "Starter Plan", "disp_gb": "25 GB",
+        "server": "3", "expire_date": "02.11.2026", "vpn_key": SS_URL,
+    }]
+    monkeypatch.setattr(menu, "is_user_subscribed", lambda cid: True)
+    monkeypatch.setattr(menu, "save_user_id", lambda cid: None)
+    monkeypatch.setattr(menu, "touch_user", lambda user: None)
+    monkeypatch.setattr(menu, "get_user_combined_purchase_records", lambda cid: records)
+
+    captured = {}
+    monkeypatch.setattr(menu.bot, "send_message",
+                        lambda *a, **k: captured.update(text=a[1] if len(a) > 1 else k.get("text"),
+                                                        markup=k.get("reply_markup")))
+
+    msg = SimpleNamespace(
+        text=" 📇 ဝယ်ယူမှုမှတ်တမ်း ", chat=SimpleNamespace(id=UID),
+        from_user=SimpleNamespace(id=UID, first_name="T"),
+    )
+    menu.handle_all_messages(msg)
+
+    text = captured["text"]
+    # server label is display-name driven, not the hard-coded "Singapore Server N"
+    assert "Singapore Server 3" not in text
+    assert "Server 3" in text          # Settings fallback for a removed server
+    assert "တိုက်ရိုက်ထည့်သွင်း" in text  # new shared instruction wording
+
+    buttons = [b for row in captured["markup"].keyboard for b in row]
+    assert any(b.url and "/go/" in b.url for b in buttons)
+    assert any(b.callback_data == "back_to_main" for b in buttons)
