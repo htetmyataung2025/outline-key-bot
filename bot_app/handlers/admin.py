@@ -10,7 +10,7 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.helpers.callback_guard import is_callback_processed
-from bot_app.services.outline import create_outline_key, resolve_server_api_url
+from bot_app.services.outline import resolve_server_api_url
 from bot_app.keyboards import (
     get_admin_rd_amounts_keyboard, get_admin_rd_count_keyboard, get_admin_rd_days_keyboard,
     get_admin_rd_mode_keyboard, get_back_inline_keyboard, get_main_menu_keyboard,

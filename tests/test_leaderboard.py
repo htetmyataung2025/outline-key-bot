@@ -5,7 +5,7 @@ Network-free: KV/Supabase disabled by conftest; ``mock_bot`` captures sends and
 rendering a board makes ZERO ``bot.get_chat`` calls (names come from profiles).
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
