@@ -263,8 +263,16 @@ def test_extend_topup_failure_still_extends_days(client, make_telegram_init_data
 def test_list_keys_syncs_live_server_keys(client, make_telegram_init_data, monkeypatch):
     """GET /keys should pull keys that live on the Outline servers, not only
     registry-created ones."""
+    import time as _time
+
+    import bot_app.routes_admin as ra
+
     init_data = make_telegram_init_data(user_id=ADMIN_ID)
     headers = {"X-Telegram-Init-Data": init_data}
+
+    # Force the throttle window open regardless of its configured length
+    # (monotonic can still be < LIVE_SYNC_MIN_INTERVAL on a fresh CI runner).
+    monkeypatch.setattr(ra, "_last_live_sync", _time.monotonic() - 10_000)
 
     monkeypatch.setattr(
         "bot_app.services.outline.get_configured_servers",
@@ -436,8 +444,10 @@ def test_delete_key_unconfigured_server(client, make_telegram_init_data, monkeyp
 
 
 def test_keys_live_sync_throttled_and_force_bypasses(client, make_telegram_init_data, monkeypatch):
-    """Page visits within 30s must reuse the cached registry; ?sync=force
-    always re-syncs (the probe costs 1-2s per visit otherwise)."""
+    """Page visits within the throttle window must reuse the cached registry;
+    ?sync=force always re-syncs (the probe costs 1-2s per visit otherwise)."""
+    import time as _time
+
     import bot_app.routes_admin as ra
 
     calls = {"n": 0}
@@ -449,7 +459,9 @@ def test_keys_live_sync_throttled_and_force_bypasses(client, make_telegram_init_
     # Usage join also probes servers; stub it so this test stays network-free
     # and only asserts the live-sync throttle behaviour.
     monkeypatch.setattr("bot_app.services.outline.get_usage_by_server", lambda *a, **k: {})
-    monkeypatch.setattr(ra, "_last_live_sync", 0.0)
+    # Start stale relative to the monotonic base (not 0.0) so the first visit
+    # re-syncs even on a fresh CI runner where time.monotonic() is still small.
+    monkeypatch.setattr(ra, "_last_live_sync", _time.monotonic() - 10_000)
 
     headers = {"X-Telegram-Init-Data": make_telegram_init_data(user_id=ADMIN_ID)}
 
