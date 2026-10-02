@@ -19,7 +19,7 @@ from bot_app.utils import bytes_to_gb
 # blocking HTTP calls). Cache the probed result and serve it stale-while-revalidate
 # so the dashboard responds instantly after warm-up and a slow/offline VPN server
 # can never make the whole overview time out. The cheap local KPIs stay fresh.
-SERVER_TELEMETRY_TTL = 30  # seconds until a cached probe is considered stale
+SERVER_TELEMETRY_TTL = 120  # seconds until a cached probe is considered stale
 _server_cache = {"key": None, "data": None, "ts": 0.0}
 _server_cache_lock = threading.Lock()
 _refresh_lock = threading.Lock()

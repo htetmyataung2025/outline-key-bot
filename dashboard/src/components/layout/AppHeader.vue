@@ -100,7 +100,7 @@ onUnmounted(() => {
           liveMode === 'stream'
             ? 'Live push connected — updates arrive instantly'
             : liveMode === 'poll'
-              ? 'Push unavailable — checking for changes every 15s'
+              ? 'Push unavailable — checking for changes every 30s'
               : 'Live sync offline'
         }}
       </NTooltip>

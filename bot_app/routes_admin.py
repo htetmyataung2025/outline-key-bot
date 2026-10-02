@@ -41,10 +41,10 @@ admin_bp = Blueprint("admin_bp", __name__, url_prefix="/api/admin")
 # (EventSource cannot attach custom headers). Checked by endpoint name below.
 SSE_STREAM_ENDPOINT = "admin_bp.sse_events"
 
-# Live Outline sync in GET /keys is throttled: the probe costs 1-2 s, so
-# page reloads reuse the cached registry and only re-sync every 30 s
-# (or immediately with ?sync=force).
-LIVE_SYNC_MIN_INTERVAL = 30.0
+# Live Outline sync in GET /keys is throttled: the probe costs 1-2 s of
+# provisioned function time, so page reloads reuse the cached registry and
+# only re-sync every 120 s (or immediately with ?sync=force).
+LIVE_SYNC_MIN_INTERVAL = 120.0
 _last_live_sync = 0.0
 
 

@@ -100,8 +100,21 @@ export interface VersionStreamHandlers {
  * Open the server-push version stream. Reconnects automatically with
  * backoff (each attempt needs a fresh one-time ticket). Returns a close()
  * that stops the stream and any pending reconnect.
+ *
+ * SSE holds a serverless function open for the whole stream duration, which
+ * Vercel bills as provisioned memory-hours — the dashboard's biggest usage
+ * item by far. Production builds therefore skip the stream entirely and the
+ * caller falls back to the cheap version-poll; dev (localhost) keeps true
+ * push. Set VITE_SSE_ENABLED=1 in a production build to re-enable.
  */
+const sseEnabled = import.meta.env.DEV || import.meta.env.VITE_SSE_ENABLED === '1'
+
 export function openVersionStream(handlers: VersionStreamHandlers): () => void {
+  if (!sseEnabled) {
+    // Report "no push channel" synchronously so the caller starts its poll.
+    handlers.onState(false)
+    return () => {}
+  }
   let closed = false
   let source: EventSource | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null

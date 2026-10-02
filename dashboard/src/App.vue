@@ -144,16 +144,17 @@ onMounted(() => {
   startLiveSync()
 })
 
-// ── Live sync: server push (SSE), poll only as fallback ───────────────────
-// Primary path: the Flask server streams every data-version change over
-// Server-Sent Events the instant any shared state is written (slip arrives
-// via Telegram, approve/reject, key/balance/settings edit). No polling —
-// the dashboard just reacts to pushed events.
-// Fallback: while the stream cannot be held (serverless hosting, proxy
-// timeouts, network drops) a lightweight "did the version move?" request
-// runs every 15s and is dropped again the moment the stream recovers.
+// ── Live sync: server push (SSE) in dev, version-poll in production ────────
+// Dev path (localhost): the Flask server streams every data-version change
+// over Server-Sent Events the instant any shared state is written (slip
+// arrives via Telegram, approve/reject, key/balance/settings edit).
+// Production path: on serverless hosting (Vercel) a held-open stream is
+// billed as provisioned memory-hours, so api.ts skips SSE and this poll runs
+// instead — a lightweight "did the version move?" request every 30s
+// (tunable via VITE_VERSION_POLL_INTERVAL_MS at build time).
 const knownVersion = ref<number | null>(null)
 const liveMode = ref<'stream' | 'poll' | 'off'>('off')
+const VERSION_POLL_INTERVAL_MS = Number(import.meta.env.VITE_VERSION_POLL_INTERVAL_MS) || 30000
 let fallbackTimer: ReturnType<typeof setInterval> | null = null
 let closeStream: (() => void) | null = null
 
@@ -181,7 +182,7 @@ function startFallbackPoll() {
     } catch {
       // Transient poll failures are fine; next tick retries. 401 handled in refreshPendingCount.
     }
-  }, 15000)
+  }, VERSION_POLL_INTERVAL_MS)
 }
 
 function stopFallbackPoll() {

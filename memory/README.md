@@ -60,3 +60,6 @@ This directory contains the complete technical blueprints, database schemas, API
 14. [**2026-10-02_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-02_PROGRESS.md)
    - Dashboard "Purchases History" live view added on branch `feat/purchases-history`: unified `GET /api/admin/purchases` (merges sales_history + user_purchases_data), PurchasesView with summary cards / day-window chips / search / server filter / detail modal / mobile card list + SSE live refresh. 5 new tests; 369 passing; browser-verified locally.
 
+15. [**2026-10-03_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-03_PROGRESS.md)
+   - Option A (Vercel Fluid usage cut): SSE disabled in production builds (dev keeps push), version-poll 15s→30s, keys/overview probe TTLs 30s→120s, function memory 1766→1024 MB. Projected 225→~50-80 GB-Hrs/month. 381 tests passing.
+
