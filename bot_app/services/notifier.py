@@ -14,6 +14,13 @@ from bot_app.services.orders import load_key_mappings
 from bot_app.utils import extract_chat_id_from_key_name
 
 
+# Expired keys are not purged the instant they lapse: a customer who renews a
+# day or two late would otherwise lose their slot overnight. The nightly cron
+# keeps an expired key until it is more than this many days overdue, then
+# deletes it from the server.
+EXPIRY_GRACE_DAYS = 7
+
+
 def run_expiry_cron():
     """Scan all Outline servers; notify users/admins, delete overdue keys.
 
@@ -64,7 +71,11 @@ def run_expiry_cron():
                         if key_expire_date == today:
                             is_expired_today = True
                         elif today > key_expire_date:
-                            should_delete = True
+                            # Expired already. Keep a grace window so a late-renewing
+                            # customer isn't cut off the morning after expiry; only
+                            # purge once the key is more than EXPIRY_GRACE_DAYS overdue.
+                            if (today - key_expire_date).days > EXPIRY_GRACE_DAYS:
+                                should_delete = True
                     except:
                         pass
 
@@ -77,7 +88,7 @@ def run_expiry_cron():
                                 try:
                                     bot.send_message(
                                         aid, 
-                                        f"🗑️ <b>Customer Key Expired:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး ကျော်လွန်သွားပါသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
+                                        f"🗑️ <b>Customer Key Expired:</b>\n\nKey: <code>{full_name}</code> သည် သက်တမ်းကုန်ဆုံးပြီး {EXPIRY_GRACE_DAYS} ရက်ကျော် သက်တမ်းမတိုးသဖြင့် Server ပေါ်မှ အလိုအလျောက် ဖျက်ဆီးလိုက်ပါပြီခင်ဗျာ။", 
                                         parse_mode="HTML"
                                     )
                                 except:

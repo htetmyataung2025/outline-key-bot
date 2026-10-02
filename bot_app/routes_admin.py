@@ -253,6 +253,13 @@ def review_slip_endpoint(slip_id):
 # ---------------------------------------------------------------------------
 # 3. Outline Access Keys Management
 # ---------------------------------------------------------------------------
+def _is_manageable_key(entry):
+    """True for a real, actionable Outline key; False for synthesized history
+    rows (ids ``sale_*`` / ``ord_*``) that mirror sales/orders for search only."""
+    key_id = str(entry.get("key_id", ""))
+    return not (key_id.startswith("sale_") or key_id.startswith("ord_"))
+
+
 @admin_bp.route("/keys", methods=["GET"])
 def list_keys():
     global _last_live_sync
@@ -279,6 +286,13 @@ def list_keys():
 
     registry = load_persistent_keys()
     items = list(registry.values())
+
+    # Exclude synthesized history rows (sales/order mirrors keyed "sale_12" /
+    # "ord_#AB12CD"). They are kept in the registry for customer search/summary,
+    # but they are not real Outline access keys: they have no access URL, can't
+    # be extended/copied/deleted, and their stored "expire_date" is actually the
+    # purchase date — so in the key manager they only read as bogusly "expired".
+    items = [k for k in items if _is_manageable_key(k)]
 
     if server_id:
         items = [k for k in items if str(k.get("server")) == str(server_id)]

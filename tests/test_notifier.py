@@ -32,9 +32,9 @@ class FakeResp:
         return self._payload
 
 
-def _yesterday_myanmar():
+def _days_ago_myanmar(n):
     from bot_app.timeutil import myanmar_now
-    return myanmar_now() - timedelta(days=1)
+    return myanmar_now() - timedelta(days=n)
 
 
 def _fake_outline(monkeypatch, keys):
@@ -76,19 +76,45 @@ def test_cron_with_no_keys(client, mock_bot, monkeypatch):
     assert mock_bot.calls["send_message"] == []
 
 
-def test_cron_deletes_yesterday_expired_key(client, mock_bot, monkeypatch):
-    day = _yesterday_myanmar().strftime("%d.%m.%Y")
+def test_cron_keeps_recently_expired_key_within_grace(client, mock_bot, monkeypatch):
+    """A key only 1 day overdue is inside the 7-day grace window: it must NOT be
+    deleted, so a customer renewing a day or two late keeps their slot."""
+    day = _days_ago_myanmar(1).strftime("%d.%m.%Y")
+    keys = [{"id": "7", "name": f"Aung (555666777) {day}"}]
+    calls = _fake_outline(monkeypatch, keys)
+
+    resp = client.get("/cron-check", headers={"User-Agent": "vercel-cron/1.0"})
+    assert resp.status_code == 200
+    assert resp.get_json()["deleted"] == 0
+    assert calls["delete"] == []
+
+
+def test_cron_deletes_key_past_grace_window(client, mock_bot, monkeypatch):
+    """A key more than 7 days overdue is purged from every server."""
+    day = _days_ago_myanmar(8).strftime("%d.%m.%Y")
     keys = [{"id": "7", "name": f"Aung (555666777) {day}"}]
     calls = _fake_outline(monkeypatch, keys)
 
     resp = client.get("/cron-check", headers={"User-Agent": "vercel-cron/1.0"})
     assert resp.status_code == 200
     body = resp.get_json()
-    # 3 Outline servers are scanned; the expired key lives on each mock.
+    # 3 Outline servers are scanned; the overdue key lives on each mock.
     assert body["deleted"] == 3
     assert len(calls["delete"]) == 3
     assert all(u.endswith("/access-keys/7") for u in calls["delete"])
     # Admins are notified about every deletion.
     assert len(mock_bot.calls["send_message"]) == 3 * len(ADMIN_CHAT_IDS)
     assert bot is not None  # same bot instance used across app
+
+
+def test_cron_keeps_key_exactly_at_grace_boundary(client, mock_bot, monkeypatch):
+    """Exactly 7 days overdue is still within grace (delete only when > 7)."""
+    day = _days_ago_myanmar(7).strftime("%d.%m.%Y")
+    keys = [{"id": "7", "name": f"Aung (555666777) {day}"}]
+    calls = _fake_outline(monkeypatch, keys)
+
+    resp = client.get("/cron-check", headers={"User-Agent": "vercel-cron/1.0"})
+    assert resp.status_code == 200
+    assert resp.get_json()["deleted"] == 0
+    assert calls["delete"] == []
 

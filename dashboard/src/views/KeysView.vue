@@ -44,7 +44,7 @@ const totalKeys = ref(0)
 
 const searchQuery = ref('')
 const selectedServer = ref<string>('')
-const statusFilter = ref<'all' | 'expiring' | 'expired' | 'active'>('all')
+const statusFilter = ref<'all' | 'expiring' | 'expired' | 'active'>('expiring')
 const page = ref(1)
 const pageSize = ref(20)
 
@@ -55,10 +55,19 @@ const statusOptions = [
   { label: 'Active', value: 'active' },
 ]
 
-// Expiry dates arrive in mixed formats (DD.MM.YY, DD.MM.YYYY, DD/MM/YYYY).
+// Expiry dates arrive in mixed formats: the bot writes DD.MM.YY / DD.MM.YYYY,
+// while sales/order-history rows carry an ISO YYYY-MM-DD. Try ISO (4-digit year
+// first) before the day-first form, otherwise "2026-10-01" is misread as the
+// substring "26-10-01" (26 Oct 2001) and a valid key shows as years expired.
 function parseExpiry(value?: string): Date | null {
   if (!value) return null
-  const m = String(value).match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/)
+  const s = String(value).trim()
+  const iso = s.match(/(\d{4})[./-](\d{1,2})[./-](\d{1,2})/)
+  if (iso) {
+    const dt = new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10))
+    return isNaN(dt.getTime()) ? null : dt
+  }
+  const m = s.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/)
   if (!m) return null
   let year = parseInt(m[3], 10)
   if (year < 100) year += 2000

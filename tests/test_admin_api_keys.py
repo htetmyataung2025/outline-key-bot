@@ -43,6 +43,37 @@ def test_list_and_filter_keys(client, make_telegram_init_data):
     assert "alice" in resp_search.json["items"][0]["name"]
 
 
+def test_list_excludes_synthesized_history_rows(client, make_telegram_init_data):
+    """sale_*/ord_* rows mirror sales/orders for customer search; they are not
+    real Outline keys (no access URL, their 'expire_date' is the purchase date),
+    so the key manager must not list them."""
+    init_data = make_telegram_init_data(user_id=ADMIN_ID)
+    headers = {"X-Telegram-Init-Data": init_data}
+
+    import json
+
+    from bot_app.storage.kv import redis_set
+    from bot_app.storage.paths import PERSISTENT_KEYS_FILE
+
+    registry = {
+        "1_1": {"server": "1", "key_id": "1", "name": "real_key 20.10.2026",
+                "access_url": "ss://real", "expire_date": "20.10.2026"},
+        "1_sale_60": {"server": "1", "key_id": "sale_60", "name": "Basic Plan (555)",
+                      "access_url": "N/A", "expire_date": "2026-10-01"},
+        "1_ord_AB12": {"server": "1", "key_id": "ord_AB12", "name": "Starter Plan (777)",
+                       "access_url": "N/A", "expire_date": "2026-09-21"},
+    }
+    redis_set("persistent_keys_registry", registry)
+    with open(PERSISTENT_KEYS_FILE, "w") as f:
+        json.dump(registry, f)
+
+    resp = client.get("/api/admin/keys?sync=0", headers=headers)
+    assert resp.status_code == 200
+    ids = {k["key_id"] for k in resp.json["items"]}
+    assert ids == {"1"}
+    assert resp.json["total"] == 1
+
+
 def test_extend_key_expiry(client, make_telegram_init_data, monkeypatch):
     init_data = make_telegram_init_data(user_id=ADMIN_ID)
     headers = {"X-Telegram-Init-Data": init_data}
