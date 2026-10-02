@@ -297,7 +297,7 @@ defineExpose({ loadData: loadSlips })
     </NSpin>
 
     <!-- Reject Reason Modal -->
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="showRejectModal"
       preset="dialog"
       title="Reject Payment Receipt"
@@ -318,7 +318,7 @@ defineExpose({ loadData: loadSlips })
     </NModal>
 
     <!-- Image Lightbox Modal -->
-    <NModal v-model:show="showImageModal">
+    <NModal v-model:show="showImageModal" :block-scroll="false">
       <NCard
         style="width: 90vw; max-width: 600px; max-height: 90vh; overflow: auto;"
         title="Payment Receipt Lightbox"

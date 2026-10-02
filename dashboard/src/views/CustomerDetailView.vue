@@ -496,7 +496,7 @@ defineExpose({ loadData: loadDetail })
       </div>
     </NSpin>
 
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="showAdjustModal"
       preset="card"
       title="Adjust Customer Wallet Balance"
@@ -534,7 +534,7 @@ defineExpose({ loadData: loadDetail })
       </NForm>
     </NModal>
 
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="showPointsModal"
       preset="card"
       title="Adjust Customer Points"

@@ -609,7 +609,7 @@ defineExpose({
     </NSpin>
 
     <!-- Create Key Modal -->
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="showCreateModal"
       preset="card"
       title="Provision Outline Key"
@@ -649,7 +649,7 @@ defineExpose({
     </NModal>
 
     <!-- Confirm Extend / Delete -->
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="confirmOpen"
       preset="card"
       :bordered="false"
@@ -717,7 +717,7 @@ defineExpose({
     </NModal>
 
     <!-- Key Detail (circular usage gauge) -->
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="showDetailModal"
       preset="card"
       :bordered="false"

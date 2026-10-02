@@ -321,7 +321,7 @@ defineExpose({ loadData: loadRedeems })
     </NSpin>
 
     <!-- Delete confirmation -->
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="confirmOpen"
       preset="card"
       :title="deleteTargets.length === 1 ? 'Delete Redeem Code' : `Delete ${deleteTargets.length} Redeem Codes`"
@@ -348,7 +348,7 @@ defineExpose({ loadData: loadRedeems })
     </NModal>
 
     <!-- Batch Gen Modal -->
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="showBatchModal"
       preset="card"
       title="Batch Generate Redeem Codes"
@@ -384,7 +384,7 @@ defineExpose({ loadData: loadRedeems })
     </NModal>
 
     <!-- Result Modal -->
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="showResultModal"
       preset="card"
       title="Generated Voucher Codes"

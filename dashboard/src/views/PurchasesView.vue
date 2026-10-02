@@ -290,7 +290,7 @@ defineExpose({ loadData: loadPurchases })
     </NSpin>
 
     <!-- Purchase detail modal -->
-    <NModal v-model:show="showDetail">
+    <NModal v-model:show="showDetail" :block-scroll="false">
       <NCard
         style="width: 90vw; max-width: 520px; max-height: 85vh; overflow: auto;"
         title="Purchase Detail"

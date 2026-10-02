@@ -533,7 +533,7 @@ defineExpose({ loadData: loadCustomers })
     </div>
 
     <!-- Balance Adjustment Modal -->
-    <NModal
+    <NModal :block-scroll="false"
       v-model:show="showAdjustModal"
       preset="card"
       title="Adjust Customer Wallet Balance"
