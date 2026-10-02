@@ -4,7 +4,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import requests
 from dateutil.relativedelta import relativedelta
@@ -476,16 +476,42 @@ def get_user_ultimate_keys(chat_id, server_num="1"):
         pass
     return user_keys
 
+def _parse_expiry_from_name(key_name):
+    """Return the trailing ``dd.mm.yyyy`` (or ``dd.mm.yy``) expiry carried in a
+    key name as a ``datetime``, or ``None`` when the name has no readable date."""
+    m = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})$', (key_name or "").strip())
+    if not m:
+        return None
+    day, month, year_str = int(m.group(1)), int(m.group(2)), m.group(3)
+    year = int("20" + year_str) if len(year_str) == 2 else int(year_str)
+    try:
+        return datetime(year, month, day)
+    except ValueError:
+        return None
+
+
+def _carry_over_expiry(key_name, today, months_count=1, custom_days=None):
+    """Renewed expiry string, carrying over any validity the key hasn't used.
+
+    The new term is added on top of the key's current expiry rather than
+    today's date, so a customer who renews early keeps the days they already
+    paid for. A key that has already lapsed — or whose name carries no readable
+    date — starts fresh from today. Mirrors the carry-over rule applied by
+    ``routes_admin.extend_key_endpoint``.
+    """
+    base = _parse_expiry_from_name(key_name)
+    if base is None or base < today:
+        base = today
+    if custom_days:
+        return (base + timedelta(days=custom_days)).strftime("%d.%m.%Y")
+    return (base + relativedelta(months=months_count)).strftime("%d.%m.%Y")
+
+
 def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days=None, order_id=None):
     api_url = resolve_server_api_url(server_num)
     if not api_url:
         return None, None, None
     today = myanmar_now()
-    if custom_days:
-        new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
-    else:
-        new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
-        
     add_bytes = (500 * months_count) * 1000**3
     
     try:
@@ -506,6 +532,7 @@ def renew_specific_unlimited_key(server_num, key_id, months_count=1, custom_days
                 target_key_name = target_key.get("name", "")
                 used_bytes = bytes_transferred.get(str(key_id), 0)
                 new_fup_limit = used_bytes + add_bytes
+                new_expire_date = _carry_over_expiry(target_key_name, today, months_count, custom_days)
 
                 updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
                 if updated_name == target_key_name:
@@ -530,11 +557,6 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
     if not api_url:
         return None, None, None, False
     today = myanmar_now()
-    if custom_days:
-        new_expire_date = (today + timedelta(days=custom_days)).strftime("%d.%m.%Y")
-    else:
-        new_expire_date = (today + relativedelta(months=months_count)).strftime("%d.%m.%Y")
-        
     add_bytes = (500 * months_count) * 1000**3
     
     try:
@@ -562,6 +584,7 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
             if target_key_id:
                 used_bytes = bytes_transferred.get(str(target_key_id), 0)
                 new_fup_limit = used_bytes + add_bytes
+                new_expire_date = _carry_over_expiry(target_key_name, today, months_count, custom_days)
 
                 updated_name = re.sub(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})$', new_expire_date, target_key_name)
                 if updated_name == target_key_name:
