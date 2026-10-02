@@ -6,7 +6,9 @@ from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.helpers.callback_guard import is_callback_processed
 from bot_app.helpers.deeplink import get_key_delivery_markup
-from bot_app.services.outline import create_outline_key, resolve_server_api_url
+from bot_app.services.outline import (_parse_expiry_from_name, create_outline_key,
+                                      resolve_server_api_url)
+from bot_app.timeutil import myanmar_now
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("replace_"))
@@ -37,6 +39,17 @@ def handle_admin_replace_callback(call):
     target_chat_id = parts[4]
     rem_gb = float(parts[5])
     exp_date = parts[6]
+
+    # Guard against approving a replacement for an already-expired key: the new
+    # key is reissued with this same expiry, so it would arrive dead on arrival.
+    exp_dt = _parse_expiry_from_name(exp_date)
+    if exp_dt is not None and exp_dt.date() < myanmar_now().date():
+        bot.answer_callback_query(
+            call.id,
+            "⌛ ဤ Key သည် သက်တမ်းကုန်ဆုံးပြီး ဖြစ်၍ လဲလှယ်၍ မရပါ။ Customer အား Plan အသစ် ဝယ်ယူရန် အကြောင်းကြားပေးပါ။",
+            show_alert=True,
+        )
+        return
 
     api_url_old = resolve_server_api_url(old_server_num)
     api_url_old = api_url_old.rstrip('/') if api_url_old else ""

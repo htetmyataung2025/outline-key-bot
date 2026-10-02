@@ -26,8 +26,9 @@ from bot_app.services.orders import (
     save_user_purchase_record,
 )
 from bot_app.services.outline import (
-    fetch_key_from_server, get_configured_servers, get_customer_summary_stats,
-    get_server_display_name, get_servers_total_usage, search_users_by_query,
+    _parse_expiry_from_name, fetch_key_from_server, get_configured_servers,
+    get_customer_summary_stats, get_server_display_name, get_servers_total_usage,
+    search_users_by_query,
 )
 from bot_app.services.slips import record_audit_log, review_slip
 from bot_app.services.registry import save_persistent_key
@@ -639,6 +640,24 @@ def handle_all_messages(message):
             key_id = str(target_key.get("id"))
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             exp_date = date_match.group(0) if date_match else "30.09.2026"
+
+            # Block replacing an already-expired key: a replacement reissues the
+            # SAME remaining validity, so an expired key would come back still
+            # expired and unusable. Tell the customer to renew/buy instead.
+            if date_match:
+                exp_dt = _parse_expiry_from_name(exp_date)
+                if exp_dt is not None and exp_dt.date() < myanmar_now().date():
+                    bot.send_message(
+                        chat_id,
+                        "⌛ <b>လူကြီးမင်း၏ VPN Key သည် သက်တမ်းကုန်ဆုံးသွားပြီ ဖြစ်ပါသည်ခင်ဗျာ။</b>\n\n"
+                        f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {exp_date}\n\n"
+                        "♻️ Key လဲလှယ်ခြင်းသည် ကျန်ရှိသက်တမ်းအတိုင်းသာ ပြန်ထုတ်ပေးခြင်းဖြစ်သဖြင့် "
+                        "သက်တမ်းကုန်သွားသော Key အား လဲလှယ်၍ မရနိုင်ပါ။\n\n"
+                        "👉 ကျေးဇူးပြု၍ <b>Plan အသစ် ဝယ်ယူ</b> ဖြင့် သက်တမ်းသစ်ဖြင့် ဆက်လက်အသုံးပြုနိုင်ပါသည်ခင်ဗျာ။",
+                        parse_mode="HTML",
+                        reply_markup=get_back_inline_keyboard(),
+                    )
+                    return
 
             limit_bytes = target_key.get("dataLimit", {}).get("bytes", 0)
             usage_bytes = bytes_transferred.get(key_id, 0)
