@@ -2,6 +2,9 @@
 
 import json
 import os
+import re
+from datetime import timedelta
+
 from bot_app.timeutil import myanmar_now
 
 from bot_app.config import PLANS
@@ -314,3 +317,181 @@ def is_code_expired(info: dict) -> bool:
         return datetime.strptime(str(raw), "%d/%m/%Y %I:%M %p") < myanmar_now()
     except (ValueError, TypeError):
         return False
+
+
+# --- Admin purchase history (unified cross-store feed) ----------------------
+
+# Each wallet purchase is written to two stores: ``sales_history`` (revenue-grade,
+# numeric price) below, and ``user_purchases_data`` (display record with vpn_key /
+# expire_date) keyed by chat_id above. The admin view needs both shapes, so merge
+# them per order_id — same dedup rule as get_user_combined_purchase_records.
+
+_HISTORY_TS_FMT = "%d/%m/%Y (%I:%M %p)"
+_SALE_TS_FMT = "%Y-%m-%d %H:%M:%S"
+
+
+def _parse_purchase_ts(raw, fmt):
+    """Parse a stored timestamp; return a naive datetime or None."""
+    from datetime import datetime
+    try:
+        return datetime.strptime(str(raw or "").strip(), fmt)
+    except (ValueError, TypeError):
+        return None
+
+
+def _price_str_to_int(price_str):
+    """Best-effort "5,000 Ks" -> 5000 (0 for free/"0 Ks (Points)" records)."""
+    match = re.search(r"[\d,]+", str(price_str or ""))
+    if not match:
+        return 0
+    try:
+        return int(match.group(0).replace(",", ""))
+    except ValueError:
+        return 0
+
+
+def get_purchase_history(days=None, server=None, search=None, limit=500):
+    """Newest-first purchase feed merging both purchase stores.
+
+    ``days`` keeps records from the last N Myanmar-time days, ``server``
+    filters by server id (exact string, "VIP" included), ``search`` matches
+    chat_id / order_id / plan name / customer name. Points-redemption
+    records (kind "points", written only to user_purchases_data) are included
+    and excluded from revenue sums. Returns summary counters computed over the
+    server/search filter but before the days window, plus the (capped) items.
+    """
+    from bot_app.services.outline import get_server_display_name
+    from bot_app.services.profiles import load_all_profiles
+
+    history = load_all_user_history()
+    sales = load_sales_history()
+    profiles = load_all_profiles()
+
+    merged = {}   # order_id -> item (detail record wins)
+    extras = []   # records without a usable order_id, keyed by (chat_id, ts)
+
+    def _server_name(sid):
+        sid = str(sid or "")
+        return get_server_display_name(sid) if sid.isdigit() else (sid or "—")
+
+    def _finalize(item):
+        profile = profiles.get(str(item.get("chat_id", "")), {})
+        item["username"] = profile.get("username", "")
+        item["full_name"] = profile.get("full_name", "")
+        item["server_name"] = _server_name(item.get("server"))
+        dt = item.get("_dt")
+        item["ts"] = dt.strftime("%Y-%m-%dT%H:%M:%S") if dt else ""
+        item["time_str"] = dt.strftime("%d/%m/%Y %H:%M") if dt else (item.get("timestamp") or "")
+        del item["_dt"]
+        return item
+
+    # Detail store: one record per delivered purchase.
+    for uid, records in history.items():
+        for rec in records or []:
+            order_id = rec.get("order_id") or "N/A"
+            item = {
+                "order_id": order_id,
+                "chat_id": str(uid),
+                "timestamp": rec.get("timestamp", ""),
+                "_dt": _parse_purchase_ts(rec.get("timestamp"), _HISTORY_TS_FMT),
+                "plan_name": rec.get("plan_name", ""),
+                "months": rec.get("months", 1),
+                "disp_gb": rec.get("disp_gb", ""),
+                "price": _price_str_to_int(rec.get("price_str")),
+                "price_str": rec.get("price_str", ""),
+                "server": str(rec.get("server", "")),
+                "expire_date": rec.get("expire_date", ""),
+                "vpn_key": rec.get("vpn_key", ""),
+                "kind": "points" if "Points" in str(rec.get("price_str", "")) else "paid",
+                "source": "history",
+            }
+            if order_id != "N/A" and order_id not in merged:
+                merged[order_id] = item
+            else:
+                extras.append(item)
+
+    # Revenue store: fill chat_id/numeric price, add sales-only records.
+    for s in sales:
+        order_id = s.get("order_id") or "N/A"
+        dt = _parse_purchase_ts(s.get("timestamp"), _SALE_TS_FMT)
+        price = int(s.get("price", 0) or 0)
+        if order_id != "N/A" and order_id in merged:
+            item = merged[order_id]
+            item["chat_id"] = item["chat_id"] or str(s.get("chat_id", ""))
+            if item["kind"] != "points":
+                item["price"] = price
+                item["price_str"] = item["price_str"] or f"{price:,} Ks"
+            item["source"] = "both"
+            if item["_dt"] is None:
+                item["_dt"] = dt
+            continue
+        item = {
+            "order_id": order_id,
+            "chat_id": str(s.get("chat_id", "")),
+            "timestamp": s.get("timestamp", ""),
+            "_dt": dt,
+            "plan_name": s.get("plan_name", ""),
+            "months": s.get("months", 1),
+            "disp_gb": "",
+            "price": price,
+            "price_str": f"{price:,} Ks",
+            "server": str(s.get("server", "")),
+            "expire_date": "",
+            "vpn_key": "",
+            "kind": "paid",
+            "source": "sale",
+        }
+        if order_id != "N/A":
+            merged[order_id] = item
+        else:
+            extras.append(item)
+
+    items = [_finalize(i) for i in merged.values()]
+    extras = [_finalize(i) for i in extras]
+    # N/A-order duplicates can exist in both stores; drop extras whose
+    # (chat_id, ts) already appeared through a merged record.
+    seen_keys = {(i["chat_id"], i["ts"]) for i in items}
+    for item in extras:
+        key = (item["chat_id"], item["ts"])
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        items.append(item)
+
+    q = (search or "").strip().lower()
+    if server:
+        items = [i for i in items if str(i.get("server")) == str(server)]
+    if q:
+        def _match(i):
+            return (q in str(i.get("chat_id", "")).lower()
+                    or q in str(i.get("order_id", "")).lower()
+                    or q in str(i.get("plan_name", "")).lower()
+                    or q in str(i.get("username", "")).lower()
+                    or q in str(i.get("full_name", "")).lower())
+        items = [i for i in items if _match(i)]
+
+    def _paid(i):
+        return i.get("kind") != "points"
+
+    now = myanmar_now()
+    today_s = now.strftime("%Y-%m-%d")
+    month_s = now.strftime("%Y-%m")
+    paid_items = [i for i in items if _paid(i)]
+    # Counters key on the normalized ISO ts (both stores' raw formats differ).
+    def _on(item, prefix):
+        return str(item.get("ts", ""))[: len(prefix)] == prefix
+    summary = {
+        "today_revenue_ks": sum(i["price"] for i in paid_items if _on(i, today_s)),
+        "today_count": sum(1 for i in items if _on(i, today_s)),
+        "month_revenue_ks": sum(i["price"] for i in paid_items if _on(i, month_s)),
+        "month_count": sum(1 for i in items if _on(i, month_s)),
+    }
+
+    items.sort(key=lambda i: i.get("ts") or "", reverse=True)
+    if days:
+        cutoff = (now - timedelta(days=int(days))).strftime("%Y-%m-%dT%H:%M:%S")
+        items = [i for i in items if i.get("ts") and i["ts"] >= cutoff]
+
+    if limit:
+        items = items[: int(limit)]
+    return {"total": len(items), "summary": summary, "items": items}
