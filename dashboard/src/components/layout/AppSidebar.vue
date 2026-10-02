@@ -7,6 +7,7 @@ import { NBadge, NTooltip } from 'naive-ui'
 import {
   SpeedometerOutline,
   ReceiptOutline,
+  CartOutline,
   KeyOutline,
   GiftOutline,
   PeopleOutline,
@@ -26,6 +27,7 @@ const { isCollapsed, toggle: toggleSidebar } = useSidebar()
 const navItems = computed(() => [
   { path: '/overview', label: 'Overview', icon: SpeedometerOutline, hint: 'Dashboard & KPIs' },
   { path: '/slips', label: 'Slips Queue', icon: ReceiptOutline, badge: props.pendingSlipsCount, hint: 'Verify payment receipts' },
+  { path: '/purchases', label: 'Purchases', icon: CartOutline, hint: 'Live sales history' },
   { path: '/keys', label: 'Access Keys', icon: KeyOutline, hint: 'Manage & extend Outline keys' },
   { path: '/redeems', label: 'Redeem Codes', icon: GiftOutline, hint: 'Generate voucher codes' },
   { path: '/customers', label: 'Customers', icon: PeopleOutline, hint: 'Wallets & balances' },

@@ -195,6 +195,9 @@ export const deleteRedeemsBulk = (codes: string[]) =>
 export const fetchCustomers = () => api.get('/customers').then((r) => r.data)
 export const fetchCustomerDetail = (chatId: string) =>
   api.get(`/customers/${encodeURIComponent(chatId)}`).then((r) => r.data)
+// Unified purchase feed (merges sales_history + per-user purchase records).
+export const fetchPurchases = (params?: { days?: number; server?: string; q?: string; limit?: number }) =>
+  api.get('/purchases', { params }).then((r) => r.data)
 export const adjustBalance = (chatId: string, payload: { adjustment_type: 'TOPUP' | 'DEDUCT'; amount_ks: number; reason?: string }) =>
   api.post(`/customers/${chatId}/balance`, payload).then((r) => r.data)
 export const adjustPoints = (chatId: string, payload: { adjustment_type: 'GRANT' | 'DEDUCT'; amount: number; reason?: string }) =>

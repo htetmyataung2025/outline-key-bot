@@ -6,6 +6,7 @@ import { NBadge } from 'naive-ui'
 import {
   SpeedometerOutline,
   ReceiptOutline,
+  CartOutline,
   KeyOutline,
   GiftOutline,
   PeopleOutline,
@@ -22,6 +23,7 @@ const router = useRouter()
 const navItems = computed(() => [
   { path: '/overview', label: 'Overview', icon: SpeedometerOutline },
   { path: '/slips', label: 'Slips', icon: ReceiptOutline, badge: props.pendingSlipsCount },
+  { path: '/purchases', label: 'Sales', icon: CartOutline },
   { path: '/keys', label: 'Keys', icon: KeyOutline },
   { path: '/redeems', label: 'Redeem', icon: GiftOutline },
   { path: '/customers', label: 'Users', icon: PeopleOutline },

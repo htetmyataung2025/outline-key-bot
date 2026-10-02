@@ -24,6 +24,7 @@ from bot_app.storage import versioning
 from bot_app.storage.versioning import get_data_version
 from bot_app.services.billing import load_all_wallets, update_user_balance
 from bot_app.services.orders import (
+    get_purchase_history,
     is_code_expired,
     load_all_users,
     load_redeem_codes,
@@ -248,6 +249,23 @@ def review_slip_endpoint(slip_id):
         return jsonify(result), result.get("code", 400)
 
     return jsonify(result), 200
+
+
+# ---------------------------------------------------------------------------
+# 2b. Purchase History (unified live feed across both purchase stores)
+# ---------------------------------------------------------------------------
+@admin_bp.route("/purchases", methods=["GET"])
+def list_purchases():
+    """Merged purchase feed for the dashboard "Purchases" view.
+
+    Live refresh comes free: any purchase write bumps the shared data version,
+    so the dashboard's SSE channel re-fetches this endpoint automatically.
+    """
+    days = request.args.get("days", type=int)
+    server = (request.args.get("server") or "").strip() or None
+    search = (request.args.get("q") or "").strip().lower() or None
+    limit = request.args.get("limit", default=500, type=int)
+    return jsonify(get_purchase_history(days=days, server=server, search=search, limit=limit)), 200
 
 
 # ---------------------------------------------------------------------------

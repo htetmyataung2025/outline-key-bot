@@ -57,3 +57,6 @@ This directory contains the complete technical blueprints, database schemas, API
 13. [**2026-10-01_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-01_PROGRESS.md)
    - "Removed Server 3 still shows in bot" fixed: plan-purchase buttons + monthly revenue report now follow the Settings store (`get_server_display_name` helper), legacy removed-server revenue stays visible via history fallback. 9 regression tests added; 349 tests passing.
 
+14. [**2026-10-02_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-02_PROGRESS.md)
+   - Dashboard "Purchases History" live view added on branch `feat/purchases-history`: unified `GET /api/admin/purchases` (merges sales_history + user_purchases_data), PurchasesView with summary cards / day-window chips / search / server filter / detail modal / mobile card list + SSE live refresh. 5 new tests; 369 passing; browser-verified locally.
+
