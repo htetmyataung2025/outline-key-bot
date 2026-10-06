@@ -1,9 +1,9 @@
 """Entry gate: /start + force-join verify (single answer)."""
 
 import telebot
-from telebot.types import WebAppInfo
+from telebot.types import MenuButtonDefault, WebAppInfo
 
-from bot_app.config import DASHBOARD_URL, LANDING_URL, is_admin
+from bot_app.config import DASHBOARD_URL, is_admin
 from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.keyboards import get_main_menu_keyboard
@@ -31,17 +31,18 @@ def send_welcome(message):
 
     # Admins open the Control Center straight from the menu button (short
     # label keeps the pill compact on mobile); the dashboard then asks for
-    # Admin ID + password.
-    if is_admin(chat_id):
-        menu_text, menu_url = "🎛 Control", DASHBOARD_URL
-    else:
-        menu_text, menu_url = "Main Website", LANDING_URL
+    # Admin ID + password. Customers get Telegram's default menu button —
+    # the old "Main Website" landing page is gone, so the reset also unpins
+    # the dead pill for anyone who still has it from earlier /start calls.
     try:
-        bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
-            type="web_app",
-            text=menu_text,
-            web_app=WebAppInfo(url=menu_url))
-        )
+        if is_admin(chat_id):
+            bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
+                type="web_app",
+                text="🎛 Control",
+                web_app=WebAppInfo(url=DASHBOARD_URL))
+            )
+        else:
+            bot.set_chat_menu_button(chat_id, MenuButtonDefault())
     except:
         pass
         

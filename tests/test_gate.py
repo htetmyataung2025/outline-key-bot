@@ -94,15 +94,18 @@ def test_start_sets_dashboard_menu_button_for_admins(mock_bot, isolated_state):
     assert button.text == "🎛 Control"
 
 
-def test_start_sets_landing_menu_button_for_customers(mock_bot, isolated_state):
-    from bot_app.config import LANDING_URL
+def test_start_sets_default_menu_button_for_customers(mock_bot, isolated_state):
+    """The public landing page is gone — customers must get Telegram's
+    default menu button so the dead 'Main Website' pill is cleared."""
+    from telebot.types import MenuButtonDefault
+
     from bot_app.handlers import gate
 
     gate.send_welcome(_start_message(USER))
 
     _chat_id, button = _last_menu_button(mock_bot)
-    assert button.web_app.url == LANDING_URL
-    assert button.text == "Main Website"
+    assert isinstance(button, MenuButtonDefault)
+    assert button.type == "default"
 
 
 def test_admin_main_menu_has_no_web_app_row():

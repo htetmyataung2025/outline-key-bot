@@ -63,3 +63,6 @@ This directory contains the complete technical blueprints, database schemas, API
 15. [**2026-10-03_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-03_PROGRESS.md)
    - Option A (Vercel Fluid usage cut): SSE disabled in production builds (dev keeps push), version-poll 15s→30s, keys/overview probe TTLs 30s→120s, function memory 1766→1024 MB. Projected 225→~50-80 GB-Hrs/month. 381 tests passing.
 
+16. [**2026-10-06_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-06_PROGRESS.md)
+   - Dead "Main Website" menu button removed: `LANDING_URL` deleted from config, customers now reset to Telegram `MenuButtonDefault()` on `/start` (unpins the dead pill), admin `🎛 Control` button unchanged. New `test_start_sets_default_menu_button_for_customers`; 381 tests passing. Deploy pending (owner step).
+

@@ -24,11 +24,10 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "0000000000:AAADummyTokenForTe
 # Unset keeps the production default.
 REQUIRED_CHANNEL = os.environ.get("REQUIRED_CHANNEL", "@hefeature").strip() or None
 
-# Telegram Mini App entry points. Admins open the Control Center directly
-# from the menu button and sign in with their Admin ID + password; everyone
-# else keeps the public landing page.
+# Telegram Mini App entry point. Admins open the Control Center directly
+# from the menu button and sign in with their Admin ID + password. The old
+# public landing page is gone, so regular users get no web-app menu button.
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "https://outline-key-bot.vercel.app").rstrip("/")
-LANDING_URL = os.environ.get("LANDING_URL", "https://h-e.feature.hma.qzz.io").rstrip("/")
 
 OUTLINE_API_URL_1 = os.environ.get("OUTLINE_API_URL_1", "")
 OUTLINE_API_URL_2 = os.environ.get("OUTLINE_API_URL_2", "")
