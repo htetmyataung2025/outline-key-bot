@@ -66,3 +66,7 @@ This directory contains the complete technical blueprints, database schemas, API
 16. [**2026-10-06_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-06_PROGRESS.md)
    - Dead "Main Website" menu button removed: `LANDING_URL` deleted from config, customers now reset to Telegram `MenuButtonDefault()` on `/start` (unpins the dead pill), admin `🎛 Control` button unchanged. New `test_start_sets_default_menu_button_for_customers`; 381 tests passing. Deploy pending (owner step).
 
+17. [**2026-10-17_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-17_PROGRESS.md)
+   - Customer Telegram Mini App (TMA) Phase 1: Cryptographic HMAC-SHA256 user authentication (`@require_user_api`), `/api/user/*` Blueprint (`bootstrap`, `claim-daily`, `purchase`, `topup-slip`, `replace`, `history`, `leaderboard`), 13 new hermetic tests added. 394/394 tests passing (100% green, zero regressions).
+
+

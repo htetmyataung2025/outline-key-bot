@@ -157,9 +157,11 @@ def _diag_payload():
 
 
 from bot_app.routes_admin import admin_bp
+from bot_app.routes_user import user_bp
 
-# Register Admin REST API Blueprint
+# Register Admin and Customer REST API Blueprints
 app.register_blueprint(admin_bp)
+app.register_blueprint(user_bp)
 
 
 # ── One-tap key import landing page (/go/<token>) ───────────────────
