@@ -1,0 +1,2 @@
+export const iconNames = ["swipe", "tunnel", "home", "key", "bag", "history", "copy", "zap", "qr", "refresh", "wallet", "gift", "diamond", "plus", "arrow-right", "arrow-up-right", "clock", "globe", "trophy", "search", "upload", "flame", "medal", "crown", "check", "check-circle", "bell", "user", "close", "shield", "info", "more", "leaf", "hand", "sparkles", "shapes", "grid"] as const
+export type IconName = (typeof iconNames)[number]
