@@ -83,8 +83,23 @@ def redis_set(key, value):
     # Every shared-state mutation bumps the dashboard data-version so the
     # admin UI can live-refresh (see bot_app/storage/versioning.py). Runs
     # even when Redis is unconfigured (dev/tests) — the version then lives
-    # Guarded against recursion for metadata tables that update on every user request.
-    if key not in ("admin_data_version", "user_profiles", "all_users"):
+    # Exclude admin_data_version, high-frequency user tracking, and transient dialog states
+    _NO_BUMP_KEYS = {
+        "admin_data_version",
+        "user_profiles",
+        "all_users",
+        "admin_search_state",
+        "user_redeem_state",
+        "user_replacement_state",
+        "admin_broadcast_state",
+        "admin_manual_dispatch_state",
+        "user_topup_state",
+        "user_custom_topup",
+        "admin_deduct_state",
+        "admin_reject_state",
+        "user_renew_choice",
+    }
+    if key not in _NO_BUMP_KEYS:
         try:
             from bot_app.storage.versioning import bump_data_version
 

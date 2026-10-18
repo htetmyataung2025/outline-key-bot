@@ -7,6 +7,7 @@ Control Center a single place to read a customer's identity from.
 
 import json
 import os
+import time
 
 from bot_app.storage.kv import redis_get, redis_set
 from bot_app.storage.paths import USER_PROFILES_FILE
@@ -115,14 +116,25 @@ def resolve_user_profile(chat_id, fetch_telegram: bool = True) -> dict:
     return profile or {}
 
 
+_TOUCH_THROTTLE = {}
+
+
 def touch_user(from_user):
     """Capture/refresh a profile from a Telegram message.from_user / call.from_user.
     Silent on any error — profile capture must never break a bot interaction."""
     if not from_user:
         return
+    uid = str(getattr(from_user, "id", "") or "")
+    if not uid:
+        return
+    now = time.time()
+    last_touch = _TOUCH_THROTTLE.get(uid, 0.0)
+    if now - last_touch < 300.0:
+        return
+    _TOUCH_THROTTLE[uid] = now
     try:
         save_user_profile(
-            chat_id=getattr(from_user, "id", None),
+            chat_id=uid,
             username=getattr(from_user, "username", "") or "",
             first_name=getattr(from_user, "first_name", "") or "",
             last_name=getattr(from_user, "last_name", "") or "",
