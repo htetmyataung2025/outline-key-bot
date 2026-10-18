@@ -138,11 +138,21 @@ def get_bootstrap():
     full_name = f"{first_name} {last_name}".strip() or user_info.get("username") or "Member"
     initials = "".join(part[0] for part in full_name.split()[:2] if part).upper() or "M"
 
-    # Wallet & Balance
-    main_bal, bonus_bal, total_bal = get_user_balance_breakdown(uid)
+    # Fetch user data concurrently in parallel threads
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        fut_balance = executor.submit(get_user_balance_breakdown, uid)
+        fut_points = executor.submit(get_points, uid)
+        fut_records = executor.submit(get_user_combined_purchase_records, uid)
+        fut_servers = executor.submit(get_configured_servers)
+
+        main_bal, bonus_bal, total_bal = fut_balance.result()
+        points_rec = fut_points.result()
+        records = fut_records.result()
+        configured_servers = fut_servers.result()
 
     # Points & Check-in
-    points_rec = get_points(uid)
     cooldown = claim_cooldown_remaining(points_rec)
     cooldown_h = int(points_settings()["claim_cooldown_h"])
     points_val = int(points_rec.get("points", 0))
@@ -151,7 +161,6 @@ def get_bootstrap():
     claimed_today = (cooldown > 0)
 
     # Active & Expired Keys
-    records = get_user_combined_purchase_records(uid)
     formatted_keys = [_format_user_key(rec, idx=i) for i, rec in enumerate(reversed(records), 1) if rec.get("vpn_key") and rec.get("vpn_key") != "N/A"]
 
     # Available Plans
@@ -168,7 +177,7 @@ def get_bootstrap():
 
     # Available Servers
     servers_list = []
-    for srv in get_configured_servers():
+    for srv in configured_servers:
         sid = str(srv.get("id"))
         servers_list.append({
             "id": sid,

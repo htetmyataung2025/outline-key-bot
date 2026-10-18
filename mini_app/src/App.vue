@@ -41,7 +41,6 @@ function selectTab(tab: TabId) { if (tab === state.tab) screen.value?.scrollTo({
       <AppHeader
         :user="state.user"
         :loading="state.isManualRefreshing"
-        :syncing="state.isSyncing && !state.isManualRefreshing"
         :inert="state.dialog !== null"
         @refresh="refresh"
         @notifications="showToast('အသိပေးချက်အသစ် မရှိသေးပါ', 'bell')"

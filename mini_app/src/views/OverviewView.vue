@@ -115,8 +115,11 @@ onScopeDispose(() => {
     <!-- 1. Wallet Balance Card -->
     <WalletCard />
 
-    <!-- 2. Active Key Snapshot (Loading Skeleton / Real KeyStack / Empty State) -->
-    <template v-if="(state.isInitialLoading || state.loading) && state.keys.length === 0">
+    <!-- 2. Active Key Snapshot (Real KeyStack / Loading Skeleton / Empty State) -->
+    <template v-if="activeKeys.length > 0">
+      <KeyStack v-model="state.selectedKeyId" :keys="activeKeys" />
+    </template>
+    <template v-else-if="state.isInitialLoading && state.keys.length === 0">
       <section class="snapshot-section" aria-label="Loading key snapshot">
         <div class="section-title-row">
           <span class="section-title">Active key snapshot</span>
@@ -135,15 +138,8 @@ onScopeDispose(() => {
               <div class="skeleton-line" style="width: 40%;"></div>
             </div>
           </div>
-          <div class="skeleton-actions">
-            <div class="skeleton-btn"></div>
-            <div class="skeleton-btn"></div>
-          </div>
         </div>
       </section>
-    </template>
-    <template v-else-if="activeKeys.length > 0">
-      <KeyStack v-model="state.selectedKeyId" :keys="activeKeys" />
     </template>
     <template v-else>
       <section class="snapshot-section" aria-label="No active keys">

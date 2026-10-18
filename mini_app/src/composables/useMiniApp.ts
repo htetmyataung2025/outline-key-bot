@@ -198,9 +198,21 @@ export function createMiniApp() {
     state.keys = keys.map(key => ({ ...key, quota: Math.max(0, key.quota), used: clamp(key.used, 0, Math.max(0, key.quota)) }))
   }
 
+  let isBootstrapping = false
+  let lastBootstrapTime = 0
+
   /** Hydrate live state from Backend GET /api/user/bootstrap */
   async function bootstrap(silent = false): Promise<boolean> {
     if (!api.hasAuth()) return false
+    if (isBootstrapping) return false
+
+    const now = Date.now()
+    if (silent && now - lastBootstrapTime < 5000) {
+      return false
+    }
+
+    isBootstrapping = true
+    lastBootstrapTime = now
     state.isSyncing = true
     if (!silent) state.loading = true
     try {
@@ -258,6 +270,7 @@ export function createMiniApp() {
       state.isSyncing = false
       if (!silent) state.loading = false
       state.isInitialLoading = false
+      isBootstrapping = false
     }
   }
 
@@ -265,15 +278,27 @@ export function createMiniApp() {
   async function refresh(): Promise<boolean> {
     state.isManualRefreshing = true
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
+
+    // Stop icon rotation strictly after 700ms so it never gets stuck
+    const spinTimer = setTimeout(() => {
+      state.isManualRefreshing = false
+    }, 700)
+
     try {
-      const ok = await bootstrap(false)
-      await Promise.allSettled([fetchHistory(true), fetchLeaderboard(true)])
+      const ok = await bootstrap(true)
+      if (state.tab === 'history') {
+        fetchHistory(true)
+        fetchLeaderboard(true)
+      }
       if (ok) {
         window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
       }
       return ok
     } finally {
-      state.isManualRefreshing = false
+      setTimeout(() => {
+        clearTimeout(spinTimer)
+        state.isManualRefreshing = false
+      }, 500)
     }
   }
 
@@ -495,6 +520,7 @@ export function createMiniApp() {
 
   let eventSource: EventSource | null = null
   let pollInterval: ReturnType<typeof setInterval> | null = null
+  let sseDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let lastKnownVersion = 0
 
   async function connectLiveSync() {
@@ -511,7 +537,10 @@ export function createMiniApp() {
             const payload = JSON.parse(event.data)
             if (payload && typeof payload.version === 'number') {
               if (lastKnownVersion > 0 && payload.version > lastKnownVersion) {
-                bootstrap(true)
+                if (sseDebounceTimer) clearTimeout(sseDebounceTimer)
+                sseDebounceTimer = setTimeout(() => {
+                  bootstrap(true)
+                }, 2000)
               }
               lastKnownVersion = payload.version
             }
@@ -552,10 +581,6 @@ export function createMiniApp() {
     }
   }
 
-  function handleFocus() {
-    bootstrap(true)
-  }
-
   onMounted(() => {
     if (state.cooldownRemaining > 0) {
       startCountdown()
@@ -564,7 +589,6 @@ export function createMiniApp() {
     connectLiveSync()
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityChange)
-      window.addEventListener('focus', handleFocus)
     }
     if (state.tab === 'history') {
       fetchHistory()
@@ -575,12 +599,12 @@ export function createMiniApp() {
   onScopeDispose(() => {
     clearTimeout(toastTimer)
     if (countdownTimer) clearInterval(countdownTimer)
+    if (sseDebounceTimer) clearTimeout(sseDebounceTimer)
     if (state.receipt) URL.revokeObjectURL(state.receipt.url)
     if (eventSource) eventSource.close()
     if (pollInterval) clearInterval(pollInterval)
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('focus', handleFocus)
     }
   })
 

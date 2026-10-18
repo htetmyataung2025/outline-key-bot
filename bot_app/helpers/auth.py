@@ -229,19 +229,26 @@ def authenticate_user():
     g.current_user = user_obj
     g.user_id = user_id
 
-    # Touch user profile and record customer ID
-    try:
-        from bot_app.services.profiles import save_user_profile
-        from bot_app.services.orders import save_user_id
-        save_user_id(user_id)
-        save_user_profile(
-            chat_id=user_id,
-            username=user_obj.get("username", ""),
-            first_name=user_obj.get("first_name", ""),
-            last_name=user_obj.get("last_name", ""),
-        )
-    except Exception:
-        pass
+    # Throttle user profile touch in memory so we do NOT write to Redis/disk on every single request
+    global _PROFILE_TOUCH_CACHE
+    if "_PROFILE_TOUCH_CACHE" not in globals():
+        _PROFILE_TOUCH_CACHE = {}
+
+    last_touch = _PROFILE_TOUCH_CACHE.get(user_id, 0)
+    if time.time() - last_touch > 300:
+        _PROFILE_TOUCH_CACHE[user_id] = time.time()
+        try:
+            from bot_app.services.profiles import save_user_profile
+            from bot_app.services.orders import save_user_id
+            save_user_id(user_id)
+            save_user_profile(
+                chat_id=user_id,
+                username=user_obj.get("username", ""),
+                first_name=user_obj.get("first_name", ""),
+                last_name=user_obj.get("last_name", ""),
+            )
+        except Exception:
+            pass
 
     return None
 

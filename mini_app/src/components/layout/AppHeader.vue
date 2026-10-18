@@ -5,14 +5,12 @@ import type { Member } from '../../types'
 defineProps<{
   user: Member
   loading?: boolean
-  syncing?: boolean
 }>()
 const emit = defineEmits<{ notifications: []; profile: []; refresh: [] }>()
 </script>
 
 <template>
   <header class="app-topbar">
-    <div v-if="syncing" class="top-sync-progress" aria-hidden="true" />
     <div class="brand">
       <div id="header-avatar" class="brand-mark header-avatar" aria-hidden="true">{{ user.initials }}</div>
       <div class="header-account">
