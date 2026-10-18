@@ -1,6 +1,6 @@
 import { computed, inject, markRaw, onMounted, onScopeDispose, provide, reactive, watch } from 'vue'
 import type { InjectionKey } from 'vue'
-import { demoKeys, demoUser, plans as defaultPlans } from '../data/demo'
+import { plans as defaultPlans } from '../data/demo'
 import { clamp, formatNumber, memberFromUser } from '../utils/format'
 import { api } from '../services/api'
 import type {
@@ -38,21 +38,17 @@ export function createMiniApp() {
   }
 
   const state = reactive({
-    loading: false,
+    loading: api.hasAuth(),
     isSubmitting: false,
     tab: getSavedTab(),
     filter: 'all' as KeyFilter,
-    keys: demoKeys.map(key => ({ ...key })),
+    keys: [] as VpnKey[],
     plans: defaultPlans.map(p => ({ ...p })),
-    servers: [
-      { id: '1', name: 'Server 1 (SG-1)', location: 'Singapore', country: 'SG', flag: '🇸🇬' },
-      { id: '2', name: 'Server 2 (SG-2)', location: 'Singapore', country: 'SG', flag: '🇸🇬' },
-      { id: '3', name: 'Server 3 (VIP)', location: 'Singapore', country: 'SG', flag: '🇸🇬' },
-    ] as ServerOption[],
+    servers: [] as ServerOption[],
     selectedServerId: '1',
     paymentMethods: {
-      kbz: { name: 'KBZPay', account_name: 'Htet Myat Aung', phone: '09699970092', type: 'QR / Direct Transfer' },
-      wave: { name: 'WavePay', account_name: 'Htet Myat Aung', phone: '09699970092', type: 'QR / Direct Transfer' },
+      kbz: { name: 'KBZPay', account_name: 'Htet Myat Aung', phone: '09699970092', type: 'Direct Transfer / QR' },
+      wave: { name: 'WavePay', account_name: 'Htet Myat Aung', phone: '09699970092', type: 'Direct Transfer / QR' },
     } as Record<string, PaymentMethodInfo>,
     history: {
       purchases: [] as PurchaseRecord[],
@@ -62,18 +58,20 @@ export function createMiniApp() {
       period: '',
       rows: [] as LeaderboardRow[],
     },
-    selectedKeyId: 'k2' as string | null,
+    selectedKeyId: null as string | null,
     selectedPlan: 'Basic' as PlanName,
     selectedAmount: 2000 as TopUpAmount,
     customAmount: '',
     paymentMethod: 'kbz' as PaymentMethod,
-    walletBalance: 5000,
-    points: 120,
+    walletBalance: 0,
+    points: 0,
     claimedToday: false,
     streakDays: 0,
     cooldownHours: 4,
     cooldownRemaining: 0,
-    user: memberFromUser(demoUser) as Member,
+    user: (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.user)
+      ? memberFromUser(window.Telegram.WebApp.initDataUnsafe.user)
+      : { id: '', name: 'Member', initials: 'M' } as Member,
     receipt: null as Receipt | null,
     dialog: null as AppDialog | null,
     toast: { message: '', icon: 'check-circle', visible: false } as Toast,
@@ -163,9 +161,9 @@ export function createMiniApp() {
   }
 
   /** Hydrate live state from Backend GET /api/user/bootstrap */
-  async function bootstrap(): Promise<boolean> {
+  async function bootstrap(silent = false): Promise<boolean> {
     if (!api.hasAuth()) return false
-    state.loading = true
+    if (!silent) state.loading = true
     try {
       const data = await api.getBootstrap()
       if (data.user) {
@@ -216,8 +214,18 @@ export function createMiniApp() {
       console.warn('Bootstrap failed, retaining local state:', err)
       return false
     } finally {
-      state.loading = false
+      if (!silent) state.loading = false
     }
+  }
+
+  /** Explicit pull-to-refresh or refresh button click */
+  async function refresh(): Promise<boolean> {
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
+    const ok = await bootstrap(false)
+    if (ok) {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
+    }
+    return ok
   }
 
   /** Daily loyalty points reward claim */
@@ -406,8 +414,92 @@ export function createMiniApp() {
     }
   }
 
+  function openOutline(keyStr?: string) {
+    const rawKey = keyStr || (state.selectedKeyId ? state.keys.find(k => k.id === state.selectedKeyId)?.key : '') || (state.keys[0]?.key ?? '')
+    if (!rawKey) {
+      showToast('ချိတ်ဆက်ရန် Key မရှိသေးပါ', 'info')
+      return
+    }
+    const accessUrl = rawKey.startsWith('ss://') ? rawKey : `ss://${rawKey}`
+    copyKey(accessUrl)
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('medium')
+    try {
+      window.location.href = accessUrl
+    } catch {
+      // Fallback
+    }
+  }
+
+  let eventSource: EventSource | null = null
+  let pollInterval: ReturnType<typeof setInterval> | null = null
+  let lastKnownVersion = 0
+
+  async function connectLiveSync() {
+    if (!api.hasAuth() || typeof window === 'undefined') return
+
+    try {
+      const ticket = await api.getSseTicket()
+      if (ticket) {
+        if (eventSource) eventSource.close()
+        const url = api.getEventsUrl(ticket)
+        eventSource = new EventSource(url)
+        eventSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data)
+            if (payload && typeof payload.version === 'number') {
+              if (lastKnownVersion > 0 && payload.version > lastKnownVersion) {
+                bootstrap(true)
+              }
+              lastKnownVersion = payload.version
+            }
+          } catch {
+            // Ignore keep-alive comments
+          }
+        }
+        eventSource.onerror = () => {
+          eventSource?.close()
+          eventSource = null
+        }
+      }
+    } catch (e) {
+      console.warn('Live sync notice:', e)
+    }
+
+    if (!pollInterval) {
+      pollInterval = setInterval(async () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !state.loading && !state.isSubmitting) {
+          const v = await api.getVersion()
+          if (v > 0 && lastKnownVersion > 0 && v > lastKnownVersion) {
+            lastKnownVersion = v
+            bootstrap(true)
+          } else if (v > 0) {
+            lastKnownVersion = v
+          }
+        }
+      }, 15000)
+    }
+  }
+
+  function handleVisibilityChange() {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      bootstrap(true)
+      if (!eventSource) {
+        connectLiveSync()
+      }
+    }
+  }
+
+  function handleFocus() {
+    bootstrap(true)
+  }
+
   onMounted(() => {
     bootstrap()
+    connectLiveSync()
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      window.addEventListener('focus', handleFocus)
+    }
     if (state.tab === 'history') {
       fetchHistory()
       fetchLeaderboard()
@@ -418,6 +510,12 @@ export function createMiniApp() {
     clearTimeout(toastTimer)
     if (countdownTimer) clearInterval(countdownTimer)
     if (state.receipt) URL.revokeObjectURL(state.receipt.url)
+    if (eventSource) eventSource.close()
+    if (pollInterval) clearInterval(pollInterval)
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
   })
 
   return {
@@ -434,6 +532,7 @@ export function createMiniApp() {
     updateKeyUsage,
     setKeys,
     bootstrap,
+    refresh,
     claimReward,
     purchasePlan,
     submitTopUp,
@@ -443,6 +542,7 @@ export function createMiniApp() {
     selectReceipt,
     showPayment,
     copyKey,
+    openOutline,
     cooldownFormatted,
   }
 }

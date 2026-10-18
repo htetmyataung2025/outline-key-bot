@@ -2,7 +2,7 @@
 
 import io
 from bot_app.services.points import get_points
-from bot_app.services.slips import load_all_slips
+from bot_app.services.slips import load_all_slips, record_slip
 from bot_app.services.orders import save_user_purchase_record
 
 
@@ -194,19 +194,65 @@ def test_user_api_key_replace(client, make_telegram_init_data, isolated_state, m
 
 def test_user_api_history_and_leaderboard(client, make_telegram_init_data, isolated_state):
     user_id = 555666000
-    init_data = make_telegram_init_data(user_id=user_id)
+    init_data = make_telegram_init_data(user_id=user_id, username="test_customer")
 
-    # History endpoint
+    # 1. Initial Empty State
     resp_hist = client.get(
         "/api/user/history",
         headers={"X-Telegram-Init-Data": init_data}
     )
     assert resp_hist.status_code == 200
     hist_data = resp_hist.get_json()
-    assert "purchases" in hist_data
-    assert "slips" in hist_data
+    assert hist_data["purchases"] == []
+    assert hist_data["slips"] == []
 
-    # Leaderboard endpoint
+    # 2. Add real purchase record & slip
+    save_user_purchase_record(
+        chat_id=user_id,
+        order_id="#ORD-HIST01",
+        plan_name="VIP Plan",
+        disp_gb="150 GB",
+        months_count=1,
+        price_str="5,000 Ks",
+        server_num="1",
+        expire_date="20.12.2026",
+        vpn_key="ss://live-key-history"
+    )
+    record_slip(
+        slip_id="SLP-998877",
+        chat_id=user_id,
+        amount=5000,
+        username="TestCustomer",
+        method="WAVE"
+    )
+
+    resp_hist2 = client.get(
+        "/api/user/history",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp_hist2.status_code == 200
+    hist_data2 = resp_hist2.get_json()
+    assert len(hist_data2["purchases"]) == 1
+    p = hist_data2["purchases"][0]
+    assert p["order_id"] == "#ORD-HIST01"
+    assert p["plan_name"] == "VIP Plan"
+    assert p["disp_gb"] == "150 GB"
+    assert p["price"] == "5,000 Ks"
+    assert p["status"] == "Active"
+    assert "date" in p
+
+    assert len(hist_data2["slips"]) == 1
+    s = hist_data2["slips"][0]
+    assert s["slip_id"] == "SLP-998877"
+    assert s["amount"] == 5000
+    assert s["method"] == "WAVE"
+    assert s["status"] == "PENDING"
+    assert "submitted_at" in s
+
+    # 3. Leaderboard endpoint
+    from bot_app.services.points import credit_points
+    credit_points(user_id, 150, "test")
+
     resp_lb = client.get(
         "/api/user/leaderboard",
         headers={"X-Telegram-Init-Data": init_data}
@@ -214,3 +260,12 @@ def test_user_api_history_and_leaderboard(client, make_telegram_init_data, isola
     assert resp_lb.status_code == 200
     lb_data = resp_lb.get_json()
     assert "rows" in lb_data
+    assert len(lb_data["rows"]) >= 1
+    top_user = lb_data["rows"][0]
+    assert "rank" in top_user
+    assert "name" in top_user
+    assert "points" in top_user
+    assert "is_you" in top_user
+    assert top_user["points"] >= 150
+    assert top_user["is_you"] is True
+

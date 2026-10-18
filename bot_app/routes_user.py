@@ -1,19 +1,22 @@
-"""Customer REST API routes for Telegram Mini App."""
-
+import json
 import os
+import queue
 import random
 import re
 import string
 from datetime import timedelta
 from urllib.parse import unquote
 
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, jsonify, request, g, Response, stream_with_context
 from werkzeug.utils import secure_filename
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot_app.config import ADMIN_CHAT_IDS, PLANS, points_enabled, points_settings
 from bot_app.extensions import bot
 from bot_app.helpers.auth import authenticate_user, current_user_id, require_user_api
+from bot_app.helpers.sse import consume_ticket, issue_ticket
+from bot_app.storage import versioning
+from bot_app.storage.versioning import get_data_version
 from bot_app.services.billing import get_user_balance_breakdown, update_user_balance
 from bot_app.services.orders import (
     get_user_combined_purchase_records,
@@ -42,9 +45,18 @@ from bot_app.timeutil import myanmar_now
 
 user_bp = Blueprint("user_bp", __name__, url_prefix="/api/user")
 
+SSE_USER_STREAM_ENDPOINT = "user_bp.sse_user_events"
+
 # Protect all routes under /api/user/* with Telegram WebApp initData auth
 @user_bp.before_request
 def auth_user():
+    if request.endpoint == SSE_USER_STREAM_ENDPOINT:
+        user_ticket = consume_ticket(request.args.get("ticket", ""))
+        if not user_ticket:
+            return jsonify({"error": "Invalid or expired stream ticket"}), 401
+        g.current_user = user_ticket
+        g.user_id = str(user_ticket.get("id", ""))
+        return None
     return authenticate_user()
 
 
@@ -205,6 +217,40 @@ def get_bootstrap():
         "servers": servers_list,
         "payment_methods": payment_methods,
     })
+
+
+@user_bp.route("/events/ticket", methods=["POST"])
+def user_sse_ticket():
+    """Exchange authenticated Telegram initData session for an EventSource ticket."""
+    return jsonify({"ticket": issue_ticket(getattr(g, "current_user", {}))}), 200
+
+
+@user_bp.route("/events", methods=["GET"])
+def sse_user_events():
+    """Server-Sent Events stream for real-time customer data synchronization."""
+    def stream():
+        q = versioning.subscribe()
+        try:
+            yield f"data: {json.dumps({'version': get_data_version()})}\n\n"
+            while True:
+                try:
+                    version = q.get(timeout=20)
+                    yield f"data: {json.dumps({'version': version})}\n\n"
+                except queue.Empty:
+                    yield ": ping\n\n"
+        finally:
+            versioning.unsubscribe(q)
+
+    resp = Response(stream_with_context(stream()), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    return resp
+
+
+@user_bp.route("/version", methods=["GET"])
+def get_user_version():
+    """Lightweight data-version endpoint for cheap change detection."""
+    return jsonify({"version": get_data_version()}), 200
 
 
 @user_bp.route("/claim", methods=["POST"])
@@ -426,6 +472,8 @@ def upload_topup_slip():
             if not captured_file_id and getattr(sent, "photo", None):
                 captured_file_id = sent.photo[-1].file_id
 
+    method = (request.form.get("method") or (request.get_json(silent=True) or {}).get("method") or "kbz").strip().upper()
+
     slip_record = record_slip(
         slip_id=slip_id,
         chat_id=uid,
@@ -435,6 +483,7 @@ def upload_topup_slip():
         file_id=captured_file_id,
         admin_messages=admin_messages,
         admin_caption=admin_alert_text,
+        method=method,
     )
 
     return jsonify({
@@ -442,6 +491,7 @@ def upload_topup_slip():
         "slip_id": slip_id,
         "status": "PENDING",
         "amount": amount,
+        "method": method,
         "message": "ပြေစာ လက်ခံရရှိပြီးဖြစ်ပါသည်ခင်ဗျာ။ Admin မှ မကြာမီ စစ်ဆေးအတည်ပြုပေးပါမည်။",
     })
 
@@ -501,9 +551,30 @@ def get_history():
     all_slips = load_all_slips()
     user_slips = [s for s in all_slips.values() if str(s.get("chat_id")) == str(uid)]
 
+    formatted_purchases = []
+    for rec in reversed(records):
+        formatted_purchases.append({
+            "order_id": rec.get("order_id") or "N/A",
+            "plan_name": rec.get("plan_name") or "VPN Plan",
+            "disp_gb": rec.get("disp_gb") or "",
+            "price": rec.get("price_str") or f"{rec.get('price', 0):,} Ks",
+            "date": rec.get("timestamp") or rec.get("date") or "Recent",
+            "status": "Active" if rec.get("status") != "expired" else "Expired",
+        })
+
+    formatted_slips = []
+    for s in reversed(user_slips):
+        formatted_slips.append({
+            "slip_id": s.get("id") or s.get("slip_id") or "",
+            "amount": int(s.get("amount") or 0),
+            "method": str(s.get("method") or "KBZ").upper(),
+            "status": str(s.get("status") or "PENDING").upper(),
+            "submitted_at": s.get("created_at") or s.get("submitted_at") or "Recent",
+        })
+
     return jsonify({
-        "purchases": list(reversed(records)),
-        "slips": list(reversed(user_slips)),
+        "purchases": formatted_purchases,
+        "slips": formatted_slips,
     })
 
 
@@ -512,8 +583,27 @@ def get_leaderboard():
     """Retrieve customer points leaderboard."""
     uid = current_user_id()
     board = build_leaderboard(load_all_points(), load_all_profiles(), "7d", uid, myanmar_now())
+
+    formatted_rows = []
+    for r in board.get("rows", []):
+        formatted_rows.append({
+            "rank": r.get("rank"),
+            "name": r.get("name"),
+            "points": r.get("score", 0),
+            "is_you": bool(r.get("is_me")),
+        })
+
+    me_info = board.get("me")
+    formatted_me = None
+    if me_info:
+        formatted_me = {
+            "rank": me_info.get("rank"),
+            "name": me_info.get("name"),
+            "points": me_info.get("score", 0),
+        }
+
     return jsonify({
-        "rows": board.get("rows", []),
-        "me": board.get("me"),
+        "rows": formatted_rows,
+        "me": formatted_me,
         "mode": board.get("mode", "7d"),
     })

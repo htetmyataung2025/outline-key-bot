@@ -392,7 +392,7 @@ button:active:not(:disabled) { transform: scale(.96); }
 .modal-qr-note { @apply mb-4 text-center text-[8px] leading-[1.9]; color: #ffca78; }
 .modal-actions { @apply grid gap-2 mt-4; grid-template-columns: 1fr 1fr; }
 .modal-full-btn { @apply w-full mt-2;  }
-.demo-label { @apply inline-flex items-center gap-[5px] mb-[5px] rounded-[6px] text-[8px]; padding: 3px 7px; border: 1px solid #8548ff3d; color: #b69adf; background: #8548ff0a; }
+.badge-pill, .demo-label { @apply inline-flex items-center gap-[5px] mb-[5px] rounded-[6px] text-[8px]; padding: 3px 7px; border: 1px solid #8548ff3d; color: #b69adf; background: #8548ff0a; }
 .manual-key { @apply w-full p-3 rounded-[10px] text-[10px]; margin: 8px 0; border: 1px solid #8548ff4d; background: #101322; color: #e3d5ff; }
 @media (max-width: 480px) {
   .app-frame {
@@ -535,9 +535,32 @@ button:active:not(:disabled) { transform: scale(.96); }
 [data-usage-fill]::after { @apply absolute top-0 bottom-0 pointer-events-none; content: ''; left: -70%; width: 65%; border-radius: inherit; background: linear-gradient(90deg, transparent, #ffffff55, transparent); animation: usage-shimmer 2.8s linear infinite; }
 @keyframes usage-current { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
 @keyframes usage-shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(370%); } }
-.usage-presets { @apply grid gap-2; grid-template-columns: repeat(4, 1fr); margin: 18px 0; }
-.usage-preset { @apply min-h-[42px] rounded-[11px] text-[12px] font-bold; border: 1px solid #a47aff33; background: #8548ff0a; color: #c4cde2; }
-.usage-preset:hover, .usage-preset.active { background: #8548ff; border-color: #ad81ff; color: #fff; }
+/* Pull-to-Refresh & Live Sync Indicator */
+.pull-refresh-bar { display: flex; align-items: center; justify-content: center; overflow: hidden; transition: height 0.2s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s ease; margin-bottom: 6px; }
+.pull-refresh-inner { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: #94a3b8; background: rgba(255, 255, 255, 0.05); padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(8px); }
+.pull-refresh-icon { width: 14px; height: 14px; transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.pull-refresh-icon.is-ready { transform: rotate(180deg); color: #2aefbd; }
+.pull-refresh-icon.is-spinning, .icon-button.is-spinning svg, .is-spinning { animation: spin-refresh 0.8s linear infinite; }
+@keyframes spin-refresh { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Skeleton Loading Card */
+.skeleton-card { padding: 18px; background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 20px; position: relative; overflow: hidden; }
+.skeleton-card::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent); animation: skeleton-sweep 1.6s infinite; }
+@keyframes skeleton-sweep { 100% { transform: translateX(100%); } }
+.skeleton-header { display: flex; justify-content: space-between; margin-bottom: 16px; }
+.skeleton-pill { width: 85px; height: 20px; background: rgba(255, 255, 255, 0.06); border-radius: 999px; }
+.skeleton-body { display: flex; gap: 16px; align-items: center; margin-bottom: 18px; }
+.skeleton-gauge { width: 90px; height: 90px; border-radius: 50%; background: rgba(255, 255, 255, 0.05); flex-shrink: 0; }
+.skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.skeleton-line { height: 12px; background: rgba(255, 255, 255, 0.06); border-radius: 6px; }
+.skeleton-actions { display: flex; gap: 10px; }
+.skeleton-btn { flex: 1; height: 38px; background: rgba(255, 255, 255, 0.06); border-radius: 10px; }
+
+/* Empty State Card */
+.empty-state.card { padding: 24px 18px; text-align: center; background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(255, 255, 255, 0.1); border-radius: 20px; }
+.empty-icon { width: 44px; height: 44px; margin: 0 auto 12px; background: rgba(42, 239, 189, 0.1); color: #2aefbd; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.empty-title { font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 4px; }
+.empty-desc { font-size: 11px; color: #94a3b8; line-height: 1.5; margin: 0; }
 @media (max-width: 690px) {
   .snapshot-stage { @apply h-57;  }
   .snapshot-card { @apply p-[14px];  }

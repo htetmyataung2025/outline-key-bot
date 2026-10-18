@@ -1,23 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import DialogShell from './ui/DialogShell.vue'
-import DemoQr from './ui/DemoQr.vue'
 import SvgIcon from './ui/SvgIcon.vue'
 import PurchaseHistory from './rewards/PurchaseHistory.vue'
 import LeaderboardCard from './rewards/LeaderboardCard.vue'
 import ReceiptUpload from './shop/ReceiptUpload.vue'
 import { useMiniApp } from '../composables/useMiniApp'
-import { formatNumber, percentUsed } from '../utils/format'
+import { formatNumber } from '../utils/format'
 
 const {
   state,
   closeDialog,
   setTab,
-  updateKeyUsage,
   purchasePlan,
   submitTopUp,
   requestKeyReplace,
   copyKey,
+  openOutline,
 } = useMiniApp()
 
 const activeKey = computed(() => {
@@ -47,7 +46,7 @@ const title = computed(() => {
     case 'usage': return activeKey.value ? `${activeKey.value.plan} Plan · ${activeKey.value.location}` : 'Key details'
     case 'connect': return 'Outline နဲ့ ချိတ်ဆက်ရန်'
     case 'replace': return 'Key အသစ်လဲမလား?'
-    case 'key-qr': return 'Key QR Code'
+    case 'key-qr': return 'Outline တိုက်ရိုက်ချိတ်ဆက်ရန်'
     case 'purchase': return `${d.plan} Plan`
     case 'payment': return `${d.method === 'kbz' ? 'KBZPay' : 'WavePay'} · ${formatNumber(d.amount)} Ks`
     case 'manual-copy': return 'Outline Key'
@@ -57,25 +56,8 @@ const title = computed(() => {
   }
 })
 
-function setUsage(percent: number) {
-  const key = activeKey.value
-  if (key) {
-    closeDialog()
-    updateKeyUsage(key.id, (key.quota * percent) / 100)
-  }
-}
-
-function openOutline() {
-  const key = activeKey.value?.key
-  if (key) {
-    const accessUrl = key.startsWith('ss://') ? key : `ss://${key}`
-    copyKey(accessUrl)
-    try {
-      window.location.href = accessUrl
-    } catch {
-      // Fallback
-    }
-  }
+function handleOpenOutline(keyStr?: string) {
+  openOutline(keyStr)
   closeDialog()
 }
 
@@ -104,34 +86,48 @@ const currentPaymentInfo = computed(() => {
 
 <template>
   <DialogShell :open="state.dialog !== null" :title="title" @close="closeDialog">
-    <!-- 1. Key Usage Presets Modal -->
+    <!-- 1. Key Usage Details Modal -->
     <template v-if="state.dialog?.kind === 'usage' && activeKey">
-      <span class="demo-label">USAGE DETAILS</span>
-      <p>ရေမျက်နှာပြင်နဲ့ usage bar အသုံးပြုမှုအခြေအနေ။</p>
-      <div class="usage-presets">
-        <button
-          v-for="n in [0, 29, 65, 100]"
-          :key="n"
-          class="usage-preset"
-          :class="{ active: percentUsed(activeKey) === n }"
-          :data-usage-preset="n"
-          :aria-pressed="percentUsed(activeKey) === n"
-          @click="setUsage(n)"
-        >
-          {{ n }}%
+      <span class="badge-pill">{{ activeKey.plan }} Plan · {{ activeKey.location }}</span>
+      <p>အသုံးပြုခွင့် Data ပမာဏနှင့် သက်တမ်းကုန်ဆုံးမည့် အချက်အလက်များ။</p>
+      <div class="checkout-summary card" style="padding: 12px; margin-bottom: 12px; background: rgba(255,255,255,0.03); font-size: 13px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: #94a3b8;">ဆာဗာ:</span>
+          <b>{{ activeKey.server }} ({{ activeKey.location }})</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: #94a3b8;">စုစုပေါင်း Data:</span>
+          <b>{{ activeKey.quota }} GB</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: #94a3b8;">အသုံးပြုပြီး:</span>
+          <b style="color: #2aefbd;">{{ formatNumber(activeKey.used) }} GB</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: #94a3b8;">လက်ကျန် Data:</span>
+          <b>{{ formatNumber(Math.max(0, activeKey.quota - activeKey.used)) }} GB</b>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: #94a3b8;">သက်တမ်း:</span>
+          <b>{{ activeKey.expires }} ({{ activeKey.left }})</b>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 10px;">
+        <button class="soft-btn" style="flex: 1;" @click="copyKey(activeKey.key)">
+          <SvgIcon name="copy" />Key ကူးယူမည်
+        </button>
+        <button class="primary-btn" style="flex: 1;" @click="handleOpenOutline(activeKey.key)">
+          <SvgIcon name="zap" />Outline ဖွင့်မည်
         </button>
       </div>
-      <p class="small-hint">
-        <SvgIcon name="info" />လက်ရှိအသုံးပြုမှု · {{ formatNumber(activeKey.used) }} / {{ activeKey.quota }} GB
-      </p>
-      <button class="soft-btn modal-full-btn" @click="setTab('keys')">
+      <button class="soft-btn modal-full-btn" style="margin-top: 8px;" @click="closeDialog(); setTab('keys')">
         <SvgIcon name="key" />Key အားလုံးကြည့်ရန်<SvgIcon name="arrow-right" />
       </button>
     </template>
 
     <!-- 2. Outline Connect Modal -->
     <template v-else-if="state.dialog?.kind === 'connect'">
-      <span v-if="activeKey" class="demo-label">{{ activeKey.plan }} Plan · {{ activeKey.server }}</span>
+      <span v-if="activeKey" class="badge-pill">{{ activeKey.plan }} Plan · {{ activeKey.server }}</span>
       <p>VPN Key ကို Outline App ထဲသို့ တိုက်ရိုက် Import ပြုလုပ်ပြီး ချိတ်ဆက်နိုင်ပါသည်ခင်ဗျာ။</p>
       <div v-if="activeKey?.key" class="manual-key-box" style="margin-bottom: 12px;">
         <input class="manual-key" :value="activeKey.key" readonly @click="selectField" />
@@ -140,7 +136,7 @@ const currentPaymentInfo = computed(() => {
         <button class="soft-btn" @click="copyKey(activeKey?.key || '')">
           <SvgIcon name="copy" />Key ကူးယူမည်
         </button>
-        <button class="primary-btn" @click="openOutline">
+        <button class="primary-btn" @click="handleOpenOutline(activeKey?.key)">
           Outline ဖွင့်ရန်<SvgIcon name="arrow-up-right" />
         </button>
       </div>
@@ -148,7 +144,7 @@ const currentPaymentInfo = computed(() => {
 
     <!-- 3. Key Replace Confirmation Modal -->
     <template v-else-if="state.dialog?.kind === 'replace'">
-      <span class="demo-label">KEY REPLACEMENT</span>
+      <span class="badge-pill">KEY REPLACEMENT</span>
       <p>လက်ရှိ key အဆင်မပြေပါက ဆာဗာမှ key အသစ် ပြန်လည်လဲလှယ်ထုတ်ယူရန် တင်ပြတောင်းဆိုနိုင်ပါသည်ခင်ဗျာ။</p>
       <div class="modal-actions">
         <button class="soft-btn" :disabled="state.isSubmitting" @click="closeDialog">မလုပ်တော့ပါ</button>
@@ -158,11 +154,17 @@ const currentPaymentInfo = computed(() => {
       </div>
     </template>
 
-    <!-- 4. Key QR Code Modal -->
-    <template v-else-if="state.dialog?.kind === 'key-qr'">
-      <p>အခြားဖုန်း (သို့မဟုတ်) စက်တစ်လုံးမှ Outline App ဖြင့် Scan ဖတ်ပြီး အသုံးပြုနိုင်ပါသည်။</p>
-      <DemoQr />
-      <button class="soft-btn modal-full-btn" @click="closeDialog">ပိတ်ရန်</button>
+    <!-- 4. Direct Outline Connect Modal -->
+    <template v-else-if="state.dialog?.kind === 'key-qr' && activeKey">
+      <span class="badge-pill">{{ activeKey.plan }} Plan · {{ activeKey.server }}</span>
+      <p>Outline App ထဲသို့ တိုက်ရိုက် ရောက်ရှိသွားပြီး Key အလိုအလျောက် ထည့်သွင်းပေးမည် ဖြစ်ပါသည်။</p>
+      <div v-if="activeKey?.key" class="manual-key-box" style="margin-bottom: 12px;">
+        <input class="manual-key" :value="activeKey.key" readonly @click="selectField" />
+      </div>
+      <button class="primary-btn modal-full-btn" @click="handleOpenOutline(activeKey.key)">
+        <SvgIcon name="zap" />Outline ဖွင့်ပြီး ချိတ်ဆက်မည်
+      </button>
+      <button class="soft-btn modal-full-btn" style="margin-top: 8px;" @click="closeDialog">ပိတ်ရန်</button>
     </template>
 
     <!-- 5. 1-Click Plan Purchase Modal -->
@@ -224,7 +226,7 @@ const currentPaymentInfo = computed(() => {
 
       <!-- Offline / No Price Fallback -->
       <template v-else>
-        <span class="demo-label">WALLET · {{ formatNumber(state.walletBalance) }} Ks</span>
+        <span class="badge-pill">WALLET · {{ formatNumber(state.walletBalance) }} Ks</span>
         <p>ရွေးချယ်ထားသော Plan အတွက် ဈေးနှုန်း အချက်အလက် မရရှိနိုင်သေးသောကြောင့် ဝယ်ယူ၍မရသေးပါ။ ကျေးဇူးပြု၍ အခြား Plan တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ။</p>
         <button class="primary-btn modal-full-btn" @click="closeDialog">နားလည်ပါပြီ</button>
       </template>
@@ -238,12 +240,11 @@ const currentPaymentInfo = computed(() => {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
           <span style="font-size: 18px; font-weight: 800; color: #2aefbd;">{{ currentPaymentInfo.phone }}</span>
           <button class="soft-btn" style="padding: 4px 10px; font-size: 12px;" @click="copyKey(currentPaymentInfo.phone)">
-            <SvgIcon name="copy" />Copy
+            <SvgIcon name="copy" />Copy Number
           </button>
         </div>
       </div>
-      <DemoQr />
-      <p class="text-center" style="margin-top: 8px;">ငွေလွှဲပြီးပါက Screenshot ပြေစာကို အောက်တွင် တင်ပေးပါခင်ဗျာ။</p>
+      <p class="text-center" style="margin-top: 4px; font-size: 12px; color: #94a3b8;">အထက်ပါ ဖုန်းနံပါတ်သို့ တိုက်ရိုက် ငွေလွှဲပေးပါရန်။ ငွေလွှဲပြီးပါက Screenshot ပြေစာကို အောက်တွင် တင်ပေးပါခင်ဗျာ။</p>
       <ReceiptUpload />
       <div class="modal-actions" style="margin-top: 12px;">
         <button class="soft-btn" @click="closeDialog">နောက်မှ</button>

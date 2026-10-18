@@ -69,4 +69,8 @@ This directory contains the complete technical blueprints, database schemas, API
 17. [**2026-10-17_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-17_PROGRESS.md)
    - Customer Telegram Mini App (TMA) Phase 1: Cryptographic HMAC-SHA256 user authentication (`@require_user_api`), `/api/user/*` Blueprint (`bootstrap`, `claim-daily`, `purchase`, `topup-slip`, `replace`, `history`, `leaderboard`), 13 new hermetic tests added. 394/394 tests passing (100% green, zero regressions).
 
+18. [**2026-10-18_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-18_PROGRESS.md)
+   - Customer Telegram Mini App Hardcoded Data Elimination & Real Data Synchronization: Completely removed all mock/demo purchases, fake leaderboard users, and mock state defaults. Wired live backend formatting, honest Burmese empty states ("ဝယ်ယူမှုမှတ်တမ်း မရှိသေးပါ", "ဦးဆောင်သူစာရင်း မရှိသေးပါ"), and 1-click Outline App direct launching with automatic key import. 399/399 tests passing (100% green).
+
+
 

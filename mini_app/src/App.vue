@@ -16,7 +16,7 @@ import { useTelegram } from './composables/useTelegram'
 import { tabs } from './data/demo'
 import type { TabId } from './types'
 const app = provideMiniApp()
-const { state, setTab, showToast, openDialog } = app
+const { state, setTab, showToast, openDialog, refresh } = app
 useTelegram(app)
 const reduced = useReducedMotion()
 const screen = ref<HTMLElement | null>(null)
@@ -36,7 +36,14 @@ function selectTab(tab: TabId) { if (tab === state.tab) screen.value?.scrollTo({
   <IconSprite />
   <div class="tma-shell">
     <main class="app-frame" role="main">
-      <AppHeader :user="state.user" :inert="state.dialog !== null" @notifications="showToast('အသိပေးချက်အသစ် မရှိသေးပါ', 'bell')" @profile="openDialog({ kind: 'profile' })" />
+      <AppHeader
+        :user="state.user"
+        :loading="state.loading"
+        :inert="state.dialog !== null"
+        @refresh="refresh"
+        @notifications="showToast('အသိပေးချက်အသစ် မရှိသေးပါ', 'bell')"
+        @profile="openDialog({ kind: 'profile' })"
+      />
       <div id="screen-content" ref="screen" class="screen-content" role="region" :aria-label="screenLabel" tabindex="-1" :inert="state.dialog !== null">
         <Transition name="tab-fade" mode="out-in">
           <component :is="views[state.tab]" :key="state.tab" />

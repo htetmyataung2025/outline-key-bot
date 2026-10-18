@@ -20,7 +20,7 @@ const topRows = computed(() => {
   <section class="leaderboard card">
     <div class="list-head">
       <strong><SvgIcon name="medal" />Top customers</strong>
-      <button v-if="interactive" class="section-link" data-action="leaderboard" @click="openDialog({ kind: 'leaderboard' })">
+      <button v-if="interactive && hasLiveRows" class="section-link" data-action="leaderboard" @click="openDialog({ kind: 'leaderboard' })">
         Leaderboard<SvgIcon name="arrow-right" />
       </button>
     </div>
@@ -50,26 +50,21 @@ const topRows = computed(() => {
       </div>
     </template>
 
-    <!-- Fallback / Demo Rows -->
-    <template v-else>
-      <div class="leader-row">
-        <span class="rank gold">01</span>
-        <span class="leader-avatar gold">TH</span>
-        <span class="leader-name">Thiri H.<small>VIP Member</small></span>
-        <span class="leader-score">2,480 pts</span>
-      </div>
-      <div class="leader-row">
-        <span class="rank silver">02</span>
-        <span class="leader-avatar silver">MK</span>
-        <span class="leader-name">Min Khant<small>VIP Member</small></span>
-        <span class="leader-score">1,960 pts</span>
-      </div>
+    <!-- User has points but no other rankings yet -->
+    <template v-else-if="state.points > 0">
       <div class="leader-row you">
-        <span class="rank self">12</span>
+        <span class="rank self">01</span>
         <span class="leader-avatar violet">{{ state.user.initials }}</span>
-        <span class="leader-name">{{ state.user.name }}<small>Your rank · #12</small></span>
+        <span class="leader-name">{{ state.user.name }}<small>လက်ရှိရမှတ်</small></span>
         <span class="leader-score">{{ state.points }} pts</span>
       </div>
     </template>
+
+    <!-- Clean, Honest Empty State -->
+    <div v-else class="empty-state" style="padding: 24px 12px; text-align: center;">
+      <div class="empty-icon"><SvgIcon name="medal" /></div>
+      ဦးဆောင်သူစာရင်း မရှိသေးပါခင်ဗျာ။<br />
+      <small style="color: #8993ad;">နေ့စဉ် Points စုဆောင်းပြီး Leaderboard တွင် ပါဝင်နိုင်ပါသည်</small>
+    </div>
   </section>
 </template>

@@ -140,4 +140,29 @@ export const api = {
   }> {
     return request('/api/user/leaderboard', { method: 'GET' })
   },
+
+  /** Request short-lived ticket for SSE stream */
+  async getSseTicket(): Promise<string | null> {
+    try {
+      const res = await request<{ ticket: string }>('/api/user/events/ticket', { method: 'POST' })
+      return res.ticket || null
+    } catch {
+      return null
+    }
+  },
+
+  /** Build SSE EventSource URL with ticket */
+  getEventsUrl(ticket: string): string {
+    return `${BASE_URL}/api/user/events?ticket=${encodeURIComponent(ticket)}`
+  },
+
+  /** Lightweight data version check */
+  async getVersion(): Promise<number> {
+    try {
+      const res = await request<{ version: number }>('/api/user/version', { method: 'GET' })
+      return res.version || 0
+    } catch {
+      return 0
+    }
+  },
 }

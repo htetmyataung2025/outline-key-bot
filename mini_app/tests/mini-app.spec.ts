@@ -1,8 +1,13 @@
 import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { existsSync, readFileSync } from 'node:fs'
-import { demoKeys } from '../src/data/demo'
-import type { TabId } from '../src/types'
+import type { TabId, VpnKey } from '../src/types'
+
+const testKeys: VpnKey[] = [
+  { id: 'k1', server: 'Server 1', location: 'Singapore', country: 'SG', plan: 'VIP', quota: 150, used: 94.5, expires: '2026-11-05', left: '19 days left', status: 'expiring', connected: false, key: 'ss://test-1' },
+  { id: 'k2', server: 'Server 2', location: 'Tokyo', country: 'JP', plan: 'Basic', quota: 50, used: 14.5, expires: '2026-12-12', left: '56 days left', status: 'active', connected: true, key: 'ss://test-2' },
+  { id: 'k4', server: 'Server 4', location: 'Frankfurt', country: 'DE', plan: 'Starter', quota: 25, used: 22, expires: '2026-12-16', left: '60 days left', status: 'active', connected: false, key: 'ss://test-4' },
+]
 
 const errors = new WeakMap<Page, string[]>()
 const current = (page: Page) => page.locator('.snapshot-card[data-depth="0"]')
@@ -158,7 +163,7 @@ test('daily reward is once-only and reflected across views', async ({ page }) =>
 
 test('valid keys control 0–3 cards, dots and empty state; host names are escaped', async ({ page }) => {
   for (const count of [2, 1, 0, 3]) {
-    const valid = demoKeys.filter(key => key.status !== 'expired').slice(0, count)
+    const valid = testKeys.filter(key => key.status !== 'expired').slice(0, count)
     await page.evaluate(keys => window.TunnelUI?.setKeys(keys), valid)
     await expect(page.locator('.snapshot-card')).toHaveCount(count)
     await expect(page.locator('.stack-dot')).toHaveCount(count > 1 ? count : 0)
