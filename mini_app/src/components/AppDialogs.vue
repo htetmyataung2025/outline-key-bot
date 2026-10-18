@@ -33,6 +33,13 @@ const activePlan = computed(() => {
   return undefined
 })
 
+function selectServer(sid: string) {
+  if (state.selectedServerId !== sid) {
+    window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.()
+    state.selectedServerId = sid
+  }
+}
+
 const title = computed(() => {
   const d = state.dialog
   if (!d) return ''
@@ -187,7 +194,7 @@ const currentPaymentInfo = computed(() => {
               class="amount-chip"
               :class="{ active: state.selectedServerId === srv.id }"
               type="button"
-              @click="state.selectedServerId = srv.id"
+              @click="selectServer(srv.id)"
             >
               {{ srv.flag }} {{ srv.name }}
             </button>

@@ -15,14 +15,29 @@ from bot_app.timeutil import myanmar_now
 
 def load_all_profiles() -> dict:
     data = redis_get("user_profiles")
-    if data is not None and isinstance(data, dict):
-        return data
+    local_data = {}
     if os.path.exists(USER_PROFILES_FILE):
         try:
             with open(USER_PROFILES_FILE, "r") as f:
-                return json.load(f)
+                local_data = json.load(f)
         except Exception:
             pass
+
+    if data is not None and isinstance(data, dict):
+        if local_data:
+            merged = False
+            for k, v in local_data.items():
+                if k not in data or (not data[k].get("full_name") and v.get("full_name")):
+                    data[k] = {**v, **data.get(k, {})}
+                    merged = True
+            if merged:
+                save_all_profiles(data)
+        return data
+
+    if local_data:
+        save_all_profiles(local_data)
+        return local_data
+
     return {}
 
 
@@ -65,6 +80,39 @@ def save_user_profile(chat_id, username="", first_name="", last_name="", full_na
 
 def get_user_profile(chat_id) -> dict:
     return load_all_profiles().get(str(chat_id), {})
+
+
+def resolve_user_profile(chat_id, fetch_telegram: bool = True) -> dict:
+    """Fetch user profile. If missing or lacking display name/username, and
+    fetch_telegram is True, queries the Telegram Bot API (bot.get_chat) to resolve
+    and persist the user's real name and username on the fly."""
+    uid = str(chat_id or "").strip()
+    if not uid or uid == "None":
+        return {}
+
+    profile = get_user_profile(uid)
+    if profile and (profile.get("full_name") or profile.get("username")):
+        return profile
+
+    if fetch_telegram:
+        try:
+            from bot_app.extensions import bot
+            chat = bot.get_chat(uid)
+            if chat:
+                first_name = (getattr(chat, "first_name", "") or "").strip()
+                last_name = (getattr(chat, "last_name", "") or "").strip()
+                username = (getattr(chat, "username", "") or "").strip()
+                if first_name or username:
+                    return save_user_profile(
+                        chat_id=uid,
+                        username=username,
+                        first_name=first_name,
+                        last_name=last_name,
+                    )
+        except Exception:
+            pass
+
+    return profile or {}
 
 
 def touch_user(from_user):

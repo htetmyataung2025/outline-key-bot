@@ -22,11 +22,13 @@ from bot_app.services.outline import (
     create_outline_key, get_configured_servers, get_server_display_name,
     get_user_ultimate_keys, renew_or_create_unlimited_key, renew_specific_unlimited_key,
 )
+from bot_app.services.profiles import touch_user
 from bot_app.utils import is_user_subscribed
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("selectplan_"))
 def handle_select_plan(call):
+    touch_user(getattr(call, "from_user", None))
     bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     if not is_user_subscribed(chat_id):
@@ -110,6 +112,7 @@ def handle_select_plan(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("renew_choice_"))
 def handle_renew_choice(call):
+    touch_user(getattr(call, "from_user", None))
     bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     parts = call.data.split("_")
@@ -199,6 +202,7 @@ def handle_renew_choice(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buywallet_"))
 def handle_buy_with_wallet(call):
+    touch_user(getattr(call, "from_user", None))
     bot.answer_callback_query(call.id)
     lock_key = f"buy_wallet_{call.message.message_id}_{call.data}"
     if is_callback_processed(lock_key):

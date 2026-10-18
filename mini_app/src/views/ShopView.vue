@@ -7,7 +7,7 @@ import ReceiptUpload from '../components/shop/ReceiptUpload.vue'
 import { useMiniApp } from '../composables/useMiniApp'
 import { plans as defaultPlans } from '../data/demo'
 import { formatNumber } from '../utils/format'
-import type { TopUpAmount } from '../types'
+import type { PlanName, TopUpAmount } from '../types'
 
 const { state, amountLabel, openDialog, showPayment } = useMiniApp()
 const amounts: TopUpAmount[] = [1000, 2000, 5000, 'custom']
@@ -17,7 +17,17 @@ const activePlans = computed(() => {
   return state.plans && state.plans.length > 0 ? state.plans : defaultPlans
 })
 
+function choosePlan(planName: PlanName) {
+  if (state.selectedPlan !== planName) {
+    window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.()
+    state.selectedPlan = planName
+  }
+}
+
 async function chooseAmount(amount: TopUpAmount) {
+  if (state.selectedAmount !== amount) {
+    window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.()
+  }
   state.selectedAmount = amount
   if (amount === 'custom') {
     await nextTick()
@@ -50,7 +60,7 @@ async function pay() {
         :key="plan.name"
         :plan="plan"
         :selected="state.selectedPlan === plan.name"
-        @select="state.selectedPlan = $event"
+        @select="choosePlan($event)"
       />
     </div>
     <button class="primary-btn purchase-btn" data-action="purchase-plan" @click="openDialog({ kind: 'purchase', plan: state.selectedPlan })">

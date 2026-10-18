@@ -108,6 +108,39 @@ def test_start_sets_default_menu_button_for_customers(mock_bot, isolated_state):
     assert button.type == "default"
 
 
+def test_start_sets_miniapp_menu_button_for_customers_when_miniapp_url_configured(mock_bot, isolated_state, monkeypatch):
+    from telebot.types import MenuButtonWebApp
+    from bot_app.handlers import gate
+
+    monkeypatch.setenv("MINI_APP_URL", "https://outline.htetmyat.site/app/")
+    monkeypatch.setenv("MENU_BUTTON_TEXT", "Open App")
+
+    gate.send_welcome(_start_message(USER))
+
+    _chat_id, button = _last_menu_button(mock_bot)
+    assert isinstance(button, MenuButtonWebApp)
+    assert button.type == "web_app"
+    assert button.text == "Open App"
+    assert button.web_app.url == "https://outline.htetmyat.site/app/"
+
+
+def test_start_sets_miniapp_menu_button_for_admin_when_admin_mode_is_miniapp(mock_bot, isolated_state, monkeypatch):
+    from telebot.types import MenuButtonWebApp
+    from bot_app.handlers import gate
+
+    monkeypatch.setenv("MINI_APP_URL", "https://outline.htetmyat.site/app/")
+    monkeypatch.setenv("ADMIN_MENU_BUTTON", "miniapp")
+    monkeypatch.setenv("MENU_BUTTON_TEXT", "Open")
+
+    gate.send_welcome(_start_message(_admin_id()))
+
+    _chat_id, button = _last_menu_button(mock_bot)
+    assert isinstance(button, MenuButtonWebApp)
+    assert button.type == "web_app"
+    assert button.text == "Open"
+    assert button.web_app.url == "https://outline.htetmyat.site/app/"
+
+
 def test_admin_main_menu_has_no_web_app_row():
     """The Control Center lives in the chat menu button only (gate.py) — a
     web_app row in the reply keyboard duplicated it and, on mobile, made the

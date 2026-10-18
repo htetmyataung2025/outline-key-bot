@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import IconSprite from './components/ui/IconSprite.vue'
 import AppHeader from './components/layout/AppHeader.vue'
@@ -22,19 +22,15 @@ const reduced = useReducedMotion()
 const screen = ref<HTMLElement | null>(null)
 const views: Record<TabId, Component> = { overview: OverviewView, keys: KeysView, shop: ShopView, history: RewardsView }
 const screenLabel = computed(() => tabs.find(tab => tab.id === state.tab)?.title ?? 'Overview')
-let entryAnimation: Animation | undefined
 watch(() => state.tab, async () => {
   const fromNavigation = document.activeElement?.matches('.nav-item, .index-item')
   await nextTick()
   if (screen.value) {
     screen.value.scrollTop = 0
-    entryAnimation?.cancel()
-    if (!reduced.value) entryAnimation = screen.value.animate([{ opacity: .4, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 240, easing: 'ease' })
     if (!fromNavigation) screen.value.focus({ preventScroll: true })
   }
 })
 function selectTab(tab: TabId) { if (tab === state.tab) screen.value?.scrollTo({ top: 0, behavior: reduced.value ? 'auto' : 'smooth' }); else setTab(tab) }
-onScopeDispose(() => entryAnimation?.cancel())
 </script>
 <template>
   <IconSprite />
@@ -42,7 +38,9 @@ onScopeDispose(() => entryAnimation?.cancel())
     <main class="app-frame" role="main">
       <AppHeader :user="state.user" :inert="state.dialog !== null" @notifications="showToast('အသိပေးချက်အသစ် မရှိသေးပါ', 'bell')" @profile="openDialog({ kind: 'profile' })" />
       <div id="screen-content" ref="screen" class="screen-content" role="region" :aria-label="screenLabel" tabindex="-1" :inert="state.dialog !== null">
-        <component :is="views[state.tab]" :key="state.tab" />
+        <Transition name="tab-fade" mode="out-in">
+          <component :is="views[state.tab]" :key="state.tab" />
+        </Transition>
       </div>
       <BottomNavigation :active="state.tab" :inert="state.dialog !== null" @select="selectTab" />
       <ToastNotification :toast="state.toast" />

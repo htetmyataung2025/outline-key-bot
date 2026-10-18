@@ -774,12 +774,12 @@ def get_customer_detail(chat_id):
     redeems, audit) rendered in the right-hand tabs."""
     from bot_app.services.billing import get_user_balance_breakdown
     from bot_app.services.orders import get_user_combined_purchase_records, load_redeem_codes
-    from bot_app.services.profiles import backfill_profiles_from_history, get_user_profile
+    from bot_app.services.profiles import backfill_profiles_from_history, resolve_user_profile
     from bot_app.services.points import get_points
 
     uid = str(chat_id)
     backfill_profiles_from_history()
-    profile = get_user_profile(uid)
+    profile = resolve_user_profile(uid, fetch_telegram=True)
     points_rec = get_points(uid)
 
     main_bal, bonus_bal, total_bal = get_user_balance_breakdown(uid)

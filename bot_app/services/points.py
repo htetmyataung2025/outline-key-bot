@@ -42,14 +42,29 @@ def _default_record() -> dict:
 # ── Storage ─────────────────────────────────────────────────────────────────
 def load_all_points() -> dict:
     data = redis_get("points_data")
-    if data is not None:
-        return data
+    local_data = {}
     if os.path.exists(POINTS_FILE):
         try:
             with open(POINTS_FILE, "r") as f:
-                return json.load(f)
+                local_data = json.load(f)
         except Exception:
             pass
+
+    if data is not None and isinstance(data, dict):
+        if local_data:
+            merged = False
+            for k, v in local_data.items():
+                if k not in data or (v.get("points", 0) > data[k].get("points", 0)):
+                    data[k] = {**data.get(k, {}), **v}
+                    merged = True
+            if merged:
+                save_all_points(data)
+        return data
+
+    if local_data:
+        save_all_points(local_data)
+        return local_data
+
     return {}
 
 

@@ -24,6 +24,7 @@ from bot_app.services.points import (
     claim_cooldown_remaining, effective_streak, format_cooldown_remaining,
     get_points, redeem_starter, refund_starter, try_claim,
 )
+from bot_app.services.profiles import touch_user
 from bot_app.utils import is_user_subscribed
 
 _STARTER_VALID_DAYS = 30
@@ -123,12 +124,14 @@ def _refresh_panel(chat_id, message_id):
 
 @bot.callback_query_handler(func=lambda call: call.data == "points_view")
 def handle_points_view(call):
+    touch_user(getattr(call, "from_user", None))
     bot.answer_callback_query(call.id)
     _refresh_panel(call.message.chat.id, call.message.message_id)
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "points_claim")
 def handle_points_claim(call):
+    touch_user(getattr(call, "from_user", None))
     chat_id = call.message.chat.id
     if _reward_disabled():
         bot.answer_callback_query(call.id, _DISABLED_NOTICE, show_alert=True)
@@ -163,6 +166,7 @@ def handle_points_claim(call):
 @bot.callback_query_handler(func=lambda call: call.data == "points_redeem")
 def handle_points_redeem_confirm(call):
     """Show a confirmation step before spending points on a Starter Plan."""
+    touch_user(getattr(call, "from_user", None))
     bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
     if _reward_disabled():
@@ -195,6 +199,7 @@ def handle_points_redeem_confirm(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "points_redeem_do")
 def handle_points_redeem_do(call):
+    touch_user(getattr(call, "from_user", None))
     bot.answer_callback_query(call.id)
     chat_id = call.message.chat.id
 

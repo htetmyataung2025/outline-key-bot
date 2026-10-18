@@ -55,3 +55,13 @@ def test_backfill_from_slips_and_orders(isolated_state, monkeypatch):
     result = profiles.backfill_profiles_from_history()
     assert result["1001"]["full_name"] == "SlipName"
     assert result["1002"]["full_name"] == "OrderName"
+
+
+def test_resolve_user_profile_fetches_telegram_when_missing(isolated_state, mock_bot):
+    # User has no stored profile initially
+    res = profiles.resolve_user_profile(8885302834, fetch_telegram=True)
+    # mock_bot.get_chat returns first_name="Test", last_name="User"
+    assert res["chat_id"] == "8885302834"
+    assert res["full_name"] == "Test User"
+    assert "8885302834" in mock_bot.calls["get_chat"]
+

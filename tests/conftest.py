@@ -14,7 +14,7 @@ import os
 from types import SimpleNamespace
 
 # --- Must run BEFORE importing bot_app (config reads these at import time) ---
-for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY", "WEBHOOK_URL"):
+for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY", "WEBHOOK_URL", "MINI_APP_URL", "ADMIN_MENU_BUTTON", "MENU_BUTTON_TEXT"):
     os.environ.pop(_var, None)
 os.environ.setdefault("ADMIN_CHAT_IDS", "111000111,222000222")
 # Auth must verify with the SAME token the fixtures sign with; config's dummy
@@ -32,7 +32,7 @@ def registered_app():
     """Import the app package once: registers Telegram handlers + Flask routes."""
     import bot_app
 
-    for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY", "WEBHOOK_URL"):
+    for _var in ("KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_URL", "KV_TOKEN", "SUPABASE_URL", "SUPABASE_KEY", "WEBHOOK_URL", "MINI_APP_URL", "ADMIN_MENU_BUTTON", "MENU_BUTTON_TEXT"):
         os.environ.pop(_var, None)
 
     return bot_app
@@ -57,6 +57,9 @@ def disable_external_network(monkeypatch):
         "KV_TOKEN",
         "REDIS_URL",
         "WEBHOOK_URL",
+        "MINI_APP_URL",
+        "ADMIN_MENU_BUTTON",
+        "MENU_BUTTON_TEXT",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -178,6 +181,7 @@ class BotMock:
         return SimpleNamespace(
             chat=SimpleNamespace(id=chat_id),
             message_id=900000 + self._photo_seq,
+            photo=[SimpleNamespace(file_id=f"file_id_{self._photo_seq}")],
         )
 
     def _get_file(self, file_id):

@@ -46,6 +46,7 @@ export function useKeyStack(keys: Ref<readonly VpnKey[]>, selectedId: Ref<string
     if (outgoing) outgoing.style.zIndex = '5'
     resetTransforms()
     selectedId.value = target.id
+    window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.()
     await nextTick()
     const direction = index > previous ? -1 : 1
     for (const [id, card] of cardElements) {

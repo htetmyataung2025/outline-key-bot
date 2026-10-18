@@ -125,6 +125,37 @@ def test_user_api_topup_slip_upload(client, make_telegram_init_data, isolated_st
     assert slip["amount"] == 5000
     assert str(slip["chat_id"]) == str(user_id)
     assert slip["status"] == "PENDING"
+    assert len(slip["admin_messages"]) > 0
+    assert slip["file_id"] != ""
+
+    # Verify Telegram notification was sent with photo and inline approve/reject buttons
+    assert len(mock_bot.calls["send_photo"]) > 0
+    reply_markup = mock_bot.last_send_photo_kwargs.get("reply_markup")
+    assert reply_markup is not None
+    # Verify buttons contain approve_topup and reject_topup
+    button_callbacks = [b.callback_data for row in reply_markup.keyboard for b in row]
+    assert any(cb.startswith(f"approve_topup_{user_id}_5000_{data['slip_id']}") for cb in button_callbacks)
+    assert any(cb == f"reject_topup_{data['slip_id']}" for cb in button_callbacks)
+
+    # Test Telegram-side Approve: Admin taps the Approve inline button
+    from bot_app.handlers.topup import handle_approve_topup
+    from types import SimpleNamespace
+    admin_id = 111000111
+    call = SimpleNamespace(
+        id="cb-approve-test",
+        data=f"approve_topup_{user_id}_5000_{data['slip_id']}",
+        from_user=SimpleNamespace(id=admin_id, first_name="Admin"),
+        message=SimpleNamespace(
+            chat=SimpleNamespace(id=admin_id),
+            message_id=900001,
+            caption="Test Caption"
+        ),
+    )
+    handle_approve_topup(call)
+
+    # Assert slip is now APPROVED in storage
+    updated_slips = load_all_slips()
+    assert updated_slips[data["slip_id"]]["status"] == "APPROVED"
 
 
 def test_user_api_key_replace(client, make_telegram_init_data, isolated_state, mock_bot):

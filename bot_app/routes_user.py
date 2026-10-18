@@ -9,6 +9,7 @@ from urllib.parse import unquote
 
 from flask import Blueprint, jsonify, request, g
 from werkzeug.utils import secure_filename
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot_app.config import ADMIN_CHAT_IDS, PLANS, points_enabled, points_settings
 from bot_app.extensions import bot
@@ -366,10 +367,64 @@ def upload_topup_slip():
     # Image upload handling
     image_url = ""
     file = request.files.get("file") or request.files.get("receipt")
+    file_bytes = None
     if file and file.filename:
         filename = secure_filename(file.filename)
-        # Store in temp or memory
         image_url = f"upload_{filename}"
+        try:
+            file_bytes = file.read()
+        except Exception:
+            file_bytes = None
+
+    admin_alert_text = (
+        f"📥 <b>Mini App Top-Up Slip အသစ် ရောက်ရှိပါသည်!</b>\n\n"
+        f"🧾 <b>Top-Up ID:</b> <code>{slip_id}</code>\n"
+        f"👤 <b>Customer:</b> @{username} (<code>{uid}</code>)\n"
+        f"💵 <b>ပမာဏ:</b> <code>{amount:,} Ks</code>\n\n"
+        f"<i>စစ်ဆေးပြီးပါက အောက်ပါ Approve / Reject ခလုတ်များဖြင့် သတ်မှတ်ပေးပါခင်ဗျာ။</i>"
+    )
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(f"✅ Approve (+{amount:,} MMK)", callback_data=f"approve_topup_{uid}_{amount}_{slip_id}"))
+    markup.add(InlineKeyboardButton("❌ Reject", callback_data=f"reject_topup_{slip_id}"))
+
+    admin_messages = []
+    captured_file_id = ""
+
+    # Notify admins on Telegram with photo and inline approve/reject buttons
+    for aid in ADMIN_CHAT_IDS:
+        sent = None
+        try:
+            if file_bytes:
+                sent = bot.send_photo(
+                    aid,
+                    file_bytes,
+                    caption=admin_alert_text,
+                    parse_mode="HTML",
+                    reply_markup=markup,
+                )
+            else:
+                sent = bot.send_message(
+                    aid,
+                    admin_alert_text,
+                    parse_mode="HTML",
+                    reply_markup=markup,
+                )
+        except Exception:
+            try:
+                sent = bot.send_message(
+                    aid,
+                    admin_alert_text,
+                    parse_mode="HTML",
+                    reply_markup=markup,
+                )
+            except Exception:
+                pass
+
+        if sent is not None:
+            admin_messages.append({"chat_id": sent.chat.id, "message_id": sent.message_id})
+            if not captured_file_id and getattr(sent, "photo", None):
+                captured_file_id = sent.photo[-1].file_id
 
     slip_record = record_slip(
         slip_id=slip_id,
@@ -377,22 +432,10 @@ def upload_topup_slip():
         amount=amount,
         username=username,
         image_url=image_url,
+        file_id=captured_file_id,
+        admin_messages=admin_messages,
+        admin_caption=admin_alert_text,
     )
-
-    # Best-effort notify admins on Telegram
-    for aid in ADMIN_CHAT_IDS:
-        try:
-            bot.send_message(
-                aid,
-                f"📥 <b>Mini App Top-Up Slip အသစ် ရောက်ရှိပါသည်!</b>\n\n"
-                f"🧾 <b>Top-Up ID:</b> <code>{slip_id}</code>\n"
-                f"👤 <b>Customer:</b> @{username} (<code>{uid}</code>)\n"
-                f"💵 <b>ပမာဏ:</b> <code>{amount:,} Ks</code>\n\n"
-                f"🎛 Control Center Dashboard တွင် စစ်ဆေးအတည်ပြုပေးပါရန်။",
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
 
     return jsonify({
         "success": True,

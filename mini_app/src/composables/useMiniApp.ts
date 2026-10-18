@@ -25,10 +25,22 @@ import type { IconName } from '../types/icons'
 
 /** A store scoped to one mounted app, not a module-level singleton. */
 export function createMiniApp() {
+  const getSavedTab = (): TabId => {
+    try {
+      const stored = localStorage.getItem('tma_active_tab') as TabId | null
+      if (stored && ['overview', 'keys', 'shop', 'history'].includes(stored)) {
+        return stored
+      }
+    } catch {
+      // localStorage may fail in restricted sandboxes
+    }
+    return 'overview'
+  }
+
   const state = reactive({
     loading: false,
     isSubmitting: false,
-    tab: 'overview' as TabId,
+    tab: getSavedTab(),
     filter: 'all' as KeyFilter,
     keys: demoKeys.map(key => ({ ...key })),
     plans: defaultPlans.map(p => ({ ...p })),
@@ -110,17 +122,32 @@ export function createMiniApp() {
   }
 
   function setTab(tab: TabId) {
+    if (state.tab !== tab) {
+      window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.()
+    }
     state.dialog = null
     state.tab = tab
     state.filter = 'all'
+    try {
+      localStorage.setItem('tma_active_tab', tab)
+    } catch {
+      // ignore in restricted sandboxes
+    }
     if (tab === 'history') {
       fetchHistory()
       fetchLeaderboard()
     }
   }
 
-  function openDialog(dialog: AppDialog) { state.dialog = dialog }
-  function closeDialog() { state.dialog = null }
+  function openDialog(dialog: AppDialog) {
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
+    state.dialog = dialog
+  }
+
+  function closeDialog() {
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
+    state.dialog = null
+  }
   function setUser(user: TelegramUser) { state.user = memberFromUser(user) }
 
   function updateKeyUsage(id: string, usedGB: number): boolean {
@@ -204,9 +231,10 @@ export function createMiniApp() {
       state.claimedToday = true
       state.streakDays = (state.streakDays || 0) + 1
       state.cooldownRemaining = state.cooldownHours * 3600
-      state.points += 10
+      const awarded = Math.floor(Math.random() * 20) + 10
+      state.points += awarded
       startCountdown()
-      showToast(`Daily Claim · +10 Points ရရှိပါပြီ`)
+      showToast(`Daily Claim · +${awarded} Points ရရှိပါပြီ`)
       return
     }
 
@@ -266,6 +294,7 @@ export function createMiniApp() {
     if (!file.type.startsWith('image/')) { showToast('ပုံဖိုင်ကိုသာ ရွေးပေးပါ', 'info'); return }
     if (file.size > 10 * 1024 * 1024) { showToast('10 MB ထက်ငယ်သော ပုံကို ရွေးပေးပါ', 'info'); return }
     if (state.receipt) URL.revokeObjectURL(state.receipt.url)
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
     state.receipt = { name: file.name, file: markRaw(file), url: URL.createObjectURL(file) }
     showToast('Screenshot ကို ရွေးပြီးပါပြီ')
   }
@@ -379,6 +408,10 @@ export function createMiniApp() {
 
   onMounted(() => {
     bootstrap()
+    if (state.tab === 'history') {
+      fetchHistory()
+      fetchLeaderboard()
+    }
   })
 
   onScopeDispose(() => {

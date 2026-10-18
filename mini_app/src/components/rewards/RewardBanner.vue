@@ -15,10 +15,16 @@ const completedDays = computed(() => {
   return rem === 0 ? 7 : rem
 })
 
-const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+// 7-day streak cycle labels: Day 1 through Day 7
+const days = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7']
 
 const claimButtonText = computed(() => {
-  if (!state.claimedToday) return 'Claim လုပ်ရန် · +10 Pts'
+  if (!state.claimedToday) {
+    if (completedDays.value === 6) {
+      return 'Day 7 Jackpot Points ရယူမည် 🎁'
+    }
+    return 'Daily Points ရယူမည်'
+  }
   if (cooldownFormatted.value) {
     return `နောက် Claim ရန်: ${cooldownFormatted.value}`
   }
@@ -33,17 +39,17 @@ const claimButtonText = computed(() => {
       <span class="streak-pill"><SvgIcon name="flame" />{{ streak }} day streak</span>
     </div>
     <div class="reward-points">{{ state.points }} <small>PTS</small></div>
-    <p>{{ state.cooldownHours }} နာရီတစ်ကြိမ် ဝင်ရောက်ပြီး points စုဆောင်းပါ</p>
+    <p>{{ state.cooldownHours }} နာရီတစ်ကြိမ် ဝင်ရောက်ပြီး points စုဆောင်းပါ (၇ ရက်ပြည့်ပါက အပိုဆု ရရှိပါမည်)</p>
     <div class="checkin-days" aria-label="Daily check-in progress">
       <div
         v-for="(day, index) in days"
         :key="index"
         class="day-box"
-        :class="{ done: index < completedDays, today: index === completedDays && !state.claimedToday }"
+        :class="{ done: index < completedDays, today: index === completedDays && !state.claimedToday, jackpot: index === 6 }"
         :aria-label="`Day ${index + 1}${index < completedDays ? ', completed' : ''}`"
       >
         {{ day }}
-        <span><SvgIcon :name="index < completedDays ? 'check' : 'plus'" /></span>
+        <span><SvgIcon :name="index < completedDays ? 'check' : (index === 6 ? 'gift' : 'plus')" /></span>
       </div>
     </div>
     <button

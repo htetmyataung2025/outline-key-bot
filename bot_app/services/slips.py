@@ -155,7 +155,16 @@ def _sync_admin_messages(slip: dict, badge: str):
                 reply_markup=None,
             )
         except Exception:
-            pass
+            try:
+                bot.edit_message_text(
+                    chat_id=entry["chat_id"],
+                    message_id=entry["message_id"],
+                    text=f"{caption}\n\n{badge}" if caption else badge,
+                    parse_mode="HTML",
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
 
 
 def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", reason: str = "") -> dict:
