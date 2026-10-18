@@ -1,9 +1,14 @@
-"""Entry gate: /start + force-join verify (single answer)."""
-
+import os
 import telebot
 from telebot.types import MenuButtonDefault, WebAppInfo
 
-from bot_app.config import DASHBOARD_URL, is_admin
+from bot_app.config import (
+    ADMIN_MENU_BUTTON,
+    DASHBOARD_URL,
+    MINI_APP_URL,
+    MENU_BUTTON_TEXT,
+    is_admin,
+)
 from bot_app.extensions import bot
 from bot_app.handlers.common import send_force_join_message
 from bot_app.keyboards import get_main_menu_keyboard
@@ -35,15 +40,25 @@ def send_welcome(message):
     # the old "Main Website" landing page is gone, so the reset also unpins
     # the dead pill for anyone who still has it from earlier /start calls.
     try:
-        if is_admin(chat_id):
+        admin_mode = os.environ.get("ADMIN_MENU_BUTTON", "control").lower().strip()
+        miniapp_url = os.environ.get("MINI_APP_URL", "").strip()
+        btn_text = os.environ.get("MENU_BUTTON_TEXT", "Open App").strip() or "Open App"
+
+        if is_admin(chat_id) and admin_mode != "miniapp":
             bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
                 type="web_app",
                 text="🎛 Control",
                 web_app=WebAppInfo(url=DASHBOARD_URL))
             )
+        elif miniapp_url:
+            bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
+                type="web_app",
+                text=btn_text,
+                web_app=WebAppInfo(url=miniapp_url))
+            )
         else:
             bot.set_chat_menu_button(chat_id, MenuButtonDefault())
-    except:
+    except Exception:
         pass
         
     bot.reply_to(message, welcome_text(full_name), reply_markup=get_main_menu_keyboard(chat_id))

@@ -9,17 +9,39 @@ import json
 import os
 import urllib.parse
 
+import time
+
 from bot_app.helpers.http_session import get_session
+
+_KV_CACHE = {}
+_KV_CACHE_TTL = 20.0
+_KV_DISABLED_UNTIL = 0.0
+
+
+def _is_kv_available():
+    return time.time() >= _KV_DISABLED_UNTIL
+
+
+def _disable_kv_temporary(seconds=600):
+    global _KV_DISABLED_UNTIL
+    _KV_DISABLED_UNTIL = time.time() + seconds
+
+
+def clear_kv_cache(key=None):
+    if key:
+        _KV_CACHE.pop(key, None)
+    else:
+        _KV_CACHE.clear()
 
 
 def _kv_config():
-    url = os.environ.get("KV_REST_API_URL", "").rstrip("/")
-    token = os.environ.get("KV_REST_API_TOKEN", "")
+    url = (os.environ.get("KV_REST_API_URL") or os.environ.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
+    token = os.environ.get("KV_REST_API_TOKEN") or os.environ.get("UPSTASH_REDIS_REST_TOKEN") or ""
     # Vercel KV_* aliases (Upstash integration exposes KV_* names)
     if not url:
         url = os.environ.get("KV_URL", "").rstrip("/")
     if not token:
-        token = os.environ.get("KV_REST_API_TOKEN", "") or os.environ.get("KV_TOKEN", "")
+        token = os.environ.get("KV_TOKEN", "")
         if not token:
             raw = os.environ.get("KV_URL", "")
             if "://" in raw and "@" in raw:
@@ -28,9 +50,15 @@ def _kv_config():
 
 
 def redis_get(key):
+    if not _is_kv_available():
+        return None
     url, token = _kv_config()
     if not url or not token:
         return None
+    now = time.time()
+    cached = _KV_CACHE.get(key)
+    if cached and now < cached[1]:
+        return cached[0]
     try:
         encoded = urllib.parse.quote(json.dumps(key))
         res = get_session().get(
@@ -40,7 +68,12 @@ def redis_get(key):
         )
         if res.status_code == 200:
             val = res.json().get("result")
-            return json.loads(val) if val else None
+            parsed = json.loads(val) if val else None
+            _KV_CACHE[key] = (parsed, now + _KV_CACHE_TTL)
+            return parsed
+        if res.status_code in (403, 429):
+            _disable_kv_temporary(600)
+            return None
     except Exception:
         pass
     return None
@@ -50,9 +83,23 @@ def redis_set(key, value):
     # Every shared-state mutation bumps the dashboard data-version so the
     # admin UI can live-refresh (see bot_app/storage/versioning.py). Runs
     # even when Redis is unconfigured (dev/tests) — the version then lives
-    # in a local JSON file. Guarded against recursion for the version key
-    # itself, and never allowed to break the caller's write.
-    if key != "admin_data_version":
+    # Exclude admin_data_version, high-frequency user tracking, and transient dialog states
+    _NO_BUMP_KEYS = {
+        "admin_data_version",
+        "user_profiles",
+        "all_users",
+        "admin_search_state",
+        "user_redeem_state",
+        "user_replacement_state",
+        "admin_broadcast_state",
+        "admin_manual_dispatch_state",
+        "user_topup_state",
+        "user_custom_topup",
+        "admin_deduct_state",
+        "admin_reject_state",
+        "user_renew_choice",
+    }
+    if key not in _NO_BUMP_KEYS:
         try:
             from bot_app.storage.versioning import bump_data_version
 
@@ -60,6 +107,8 @@ def redis_set(key, value):
         except Exception:
             pass
 
+    if not _is_kv_available():
+        return False
     url, token = _kv_config()
     if not url or not token:
         return False
@@ -75,7 +124,13 @@ def redis_set(key, value):
             data=json.dumps(value),
             timeout=5,
         )
-        return res.status_code == 200
+        if res.status_code in (403, 429):
+            _disable_kv_temporary(600)
+            return False
+        ok = (res.status_code == 200)
+        if ok:
+            _KV_CACHE[key] = (value, time.time() + _KV_CACHE_TTL)
+        return ok
     except Exception:
         return False
 
@@ -92,6 +147,8 @@ def redis_increment_with_expiry(key, ttl_seconds):
     Returns the new count, or None when Redis is unconfigured/unreachable
     (the caller decides how to degrade).
     """
+    if not _is_kv_available():
+        return None
     url, token = _kv_config()
     if not url or not token:
         return None
@@ -99,6 +156,9 @@ def redis_increment_with_expiry(key, ttl_seconds):
     try:
         encoded_key = urllib.parse.quote(json.dumps(key), safe="")
         res = get_session().post(f"{url}/incr/{encoded_key}", headers=headers, timeout=5)
+        if res.status_code in (403, 429):
+            _disable_kv_temporary(600)
+            return None
         if res.status_code != 200:
             return None
         count = int(res.json().get("result") or 0)
@@ -112,6 +172,9 @@ def redis_increment_with_expiry(key, ttl_seconds):
 
 def redis_delete(key):
     """DEL ``key``. True on success, False when unconfigured/unreachable."""
+    _KV_CACHE.pop(key, None)
+    if not _is_kv_available():
+        return False
     url, token = _kv_config()
     if not url or not token:
         return False
@@ -122,6 +185,9 @@ def redis_delete(key):
             headers={"Authorization": f"Bearer {token}"},
             timeout=5,
         )
+        if res.status_code in (403, 429):
+            _disable_kv_temporary(600)
+            return False
         return res.status_code == 200
     except Exception:
         return False
@@ -140,6 +206,8 @@ def redis_set_nx(key, ttl_seconds, value="1"):
       * ``None``  — KV unconfigured/unreachable; caller treats as best-effort
         (single-process dev/tests are safe without a lock).
     """
+    if not _is_kv_available():
+        return None
     url, token = _kv_config()
     if not url or not token:
         return None

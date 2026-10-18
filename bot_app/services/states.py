@@ -50,10 +50,13 @@ def _save_states(redis_key, file_path, states):
 
 def set_admin_deduct_state(admin_id, state_dict=None):
     states = _load_states("admin_deduct_state", DEDUCT_STATE_FILE)
+    cid = str(admin_id)
+    if not state_dict and cid not in states:
+        return
     if state_dict:
-        states[str(admin_id)] = state_dict
+        states[cid] = state_dict
     else:
-        states.pop(str(admin_id), None)
+        states.pop(cid, None)
     _save_states("admin_deduct_state", DEDUCT_STATE_FILE, states)
 
 def get_admin_deduct_state(admin_id):
@@ -67,10 +70,13 @@ ADMIN_REJECT_STATE_FILE = os.path.join(os.path.dirname(DEDUCT_STATE_FILE), "admi
 
 def set_admin_reject_state(admin_id, state_dict=None):
     states = _load_states("admin_reject_state", ADMIN_REJECT_STATE_FILE)
+    cid = str(admin_id)
+    if not state_dict and cid not in states:
+        return
     if state_dict:
-        states[str(admin_id)] = state_dict
+        states[cid] = state_dict
     else:
-        states.pop(str(admin_id), None)
+        states.pop(cid, None)
     _save_states("admin_reject_state", ADMIN_REJECT_STATE_FILE, states)
 
 def get_admin_reject_state(admin_id):
@@ -79,10 +85,13 @@ def get_admin_reject_state(admin_id):
 
 def set_topup_state(chat_id, amount):
     states = _load_states("user_topup_state", TOPUP_STATE_FILE)
+    cid = str(chat_id)
+    if amount is None and cid not in states:
+        return
     if amount is not None:
-        states[str(chat_id)] = amount
+        states[cid] = amount
     else:
-        states.pop(str(chat_id), None)
+        states.pop(cid, None)
     _save_states("user_topup_state", TOPUP_STATE_FILE, states)
 
 def get_topup_state(chat_id):
@@ -91,7 +100,14 @@ def get_topup_state(chat_id):
 
 def set_custom_topup_state(chat_id, is_waiting=True):
     states = _load_states("user_custom_topup", CUSTOM_TOPUP_STATE_FILE)
-    states[str(chat_id)] = is_waiting
+    cid = str(chat_id)
+    old = states.get(cid, False)
+    if bool(old) == bool(is_waiting):
+        return
+    if is_waiting:
+        states[cid] = True
+    else:
+        states.pop(cid, None)
     _save_states("user_custom_topup", CUSTOM_TOPUP_STATE_FILE, states)
 
 def get_custom_topup_state(chat_id):
@@ -100,10 +116,13 @@ def get_custom_topup_state(chat_id):
 
 def set_renew_choice_state(chat_id, data_dict=None):
     states = _load_states("user_renew_choice", RENEW_CHOICE_STATE_FILE)
+    cid = str(chat_id)
+    if not data_dict and cid not in states:
+        return
     if data_dict:
-        states[str(chat_id)] = data_dict
+        states[cid] = data_dict
     else:
-        states.pop(str(chat_id), None)
+        states.pop(cid, None)
     _save_states("user_renew_choice", RENEW_CHOICE_STATE_FILE, states)
 
 def get_renew_choice_state(chat_id):
@@ -114,7 +133,14 @@ def get_renew_choice_state(chat_id):
 
 def set_broadcast_state(chat_id, is_waiting=True):
     states = _load_states("admin_broadcast_state", BROADCAST_STATE_FILE)
-    states[str(chat_id)] = is_waiting
+    cid = str(chat_id)
+    old = states.get(cid, False)
+    if bool(old) == bool(is_waiting):
+        return
+    if is_waiting:
+        states[cid] = True
+    else:
+        states.pop(cid, None)
     _save_states("admin_broadcast_state", BROADCAST_STATE_FILE, states)
 
 def get_broadcast_state(chat_id):
@@ -123,10 +149,13 @@ def get_broadcast_state(chat_id):
 
 def set_manual_dispatch_state(admin_id, order_info_dict=None):
     states = _load_states("admin_manual_dispatch_state", MANUAL_DISPATCH_STATE_FILE)
+    cid = str(admin_id)
+    if not order_info_dict and cid not in states:
+        return
     if order_info_dict:
-        states[str(admin_id)] = order_info_dict
+        states[cid] = order_info_dict
     else:
-        states.pop(str(admin_id), None)
+        states.pop(cid, None)
     _save_states("admin_manual_dispatch_state", MANUAL_DISPATCH_STATE_FILE, states)
 
 def get_manual_dispatch_state(admin_id):
@@ -135,7 +164,14 @@ def get_manual_dispatch_state(admin_id):
 
 def set_search_state(chat_id, is_searching=True):
     states = _load_states("admin_search_state", SEARCH_STATE_FILE)
-    states[str(chat_id)] = is_searching
+    cid = str(chat_id)
+    old = states.get(cid, False)
+    if bool(old) == bool(is_searching):
+        return
+    if is_searching:
+        states[cid] = True
+    else:
+        states.pop(cid, None)
     _save_states("admin_search_state", SEARCH_STATE_FILE, states)
 
 def get_search_state(chat_id):
@@ -144,7 +180,14 @@ def get_search_state(chat_id):
 
 def set_redeem_state(chat_id, is_waiting=True):
     states = _load_states("user_redeem_state", REDEEM_STATE_FILE)
-    states[str(chat_id)] = is_waiting
+    cid = str(chat_id)
+    old = states.get(cid, False)
+    if bool(old) == bool(is_waiting):
+        return
+    if is_waiting:
+        states[cid] = True
+    else:
+        states.pop(cid, None)
     _save_states("user_redeem_state", REDEEM_STATE_FILE, states)
 
 def get_redeem_state(chat_id):
@@ -153,7 +196,14 @@ def get_redeem_state(chat_id):
 
 def set_replacement_state(chat_id, is_waiting=True):
     states = _load_states("user_replacement_state", REPLACEMENT_STATE_FILE)
-    states[str(chat_id)] = is_waiting
+    cid = str(chat_id)
+    old = states.get(cid, False)
+    if bool(old) == bool(is_waiting):
+        return
+    if is_waiting:
+        states[cid] = True
+    else:
+        states.pop(cid, None)
     _save_states("user_replacement_state", REPLACEMENT_STATE_FILE, states)
 
 def get_replacement_state(chat_id):

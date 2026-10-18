@@ -77,8 +77,12 @@ def test_create_key_on_server_4_hits_server_4(settings_stub, monkeypatch, isolat
     def fake_put(url, **kw):
         return FakeResp({})
 
+    def fake_get(url, **kw):
+        return FakeResp({"accessKeys": []})
+
     monkeypatch.setattr(outline.requests, "post", fake_post)
     monkeypatch.setattr(outline.requests, "put", fake_put)
+    monkeypatch.setattr(outline.requests, "get", fake_get)
 
     key, name, exp = outline.create_outline_key(
         "4", "TestUser", plan_info={"bytes": 500}, target_chat_id="7654321",
@@ -103,6 +107,7 @@ def test_create_key_on_server_3_still_routes_to_server_3(settings_stub, monkeypa
 
     monkeypatch.setattr(outline.requests, "post", fake_post)
     monkeypatch.setattr(outline.requests, "put", lambda *a, **k: FakeResp({}))
+    monkeypatch.setattr(outline.requests, "get", lambda *a, **k: FakeResp({"accessKeys": []}))
 
     outline.create_outline_key("3", "TestUser", custom_days=7)
     assert posted[0].startswith("https://vip.example.com/api/access-keys"), posted
@@ -118,6 +123,7 @@ def test_create_key_on_unconfigured_server_no_op(settings_stub, monkeypatch, iso
 
     monkeypatch.setattr(outline.requests, "post", fake_post)
     monkeypatch.setattr(outline.requests, "put", lambda *a, **k: FakeResp({}))
+    monkeypatch.setattr(outline.requests, "get", lambda *a, **k: FakeResp({"accessKeys": []}))
 
     key, name, exp = outline.create_outline_key("999", "TestUser", custom_days=7)
     assert key is None

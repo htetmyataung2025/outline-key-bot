@@ -184,5 +184,19 @@ def test_diag_reports_config_status_for_the_owner(client, mock_bot, monkeypatch)
     assert "token" not in resp.get_data(as_text=True).lower()
 
 
+def test_mini_app_route_redirect_and_serves_html(client):
+    import os
+    resp = client.get("/app")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/app/")
+
+    dist_index = os.path.join(os.path.dirname(__file__), "..", "mini_app", "dist", "index.html")
+    resp_app = client.get("/app/")
+    if os.path.exists(dist_index):
+        assert resp_app.status_code == 200
+        assert "<title>TUNNEL · Vue Member Space</title>" in resp_app.get_data(as_text=True)
+
+
+
 
 

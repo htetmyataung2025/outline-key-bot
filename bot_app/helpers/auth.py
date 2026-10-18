@@ -185,3 +185,90 @@ def require_admin_api(f):
 
     return decorated_function
 
+
+def current_user_id() -> str:
+    """Actor ID for customer requests: the authenticated customer's Telegram ID."""
+    user = getattr(g, "current_user", None)
+    if isinstance(user, dict) and user.get("id") is not None:
+        return str(user["id"])
+    return getattr(g, "user_id", "unknown")
+
+
+def authenticate_user():
+    """Validates Telegram WebApp initData query string for customer requests.
+
+    Returns HTTP 401 response on failure, or None on success.
+    Binds g.current_user and g.user_id.
+    """
+    tma_init_data = request.headers.get("X-Telegram-Init-Data")
+    if not tma_init_data:
+        from bot_app.extensions import flask_app
+        if os.environ.get("DEV_MODE") == "1" and not flask_app.config.get("TESTING"):
+            from bot_app.config import ADMIN_CHAT_IDS
+            dev_id = str(os.environ.get("DEV_CUSTOMER_ID") or (ADMIN_CHAT_IDS[0] if ADMIN_CHAT_IDS else "8777968077"))
+            user_obj = {
+                "id": int(dev_id) if dev_id.isdigit() else dev_id,
+                "first_name": "Developer",
+                "last_name": "",
+                "username": "local_dev",
+            }
+            g.current_user = user_obj
+            g.user_id = dev_id
+            return None
+        return jsonify({"error": "Unauthorized: Missing Telegram authentication"}), 401
+
+    verified_data = verify_telegram_init_data(tma_init_data)
+    if not verified_data:
+        return jsonify({"error": "Invalid or tampered Telegram session"}), 401
+
+    user_obj = verified_data.get("user")
+    if not isinstance(user_obj, dict) or not user_obj.get("id"):
+        return jsonify({"error": "Unauthorized: Missing user identity"}), 401
+
+    user_id = str(user_obj["id"])
+    g.current_user = user_obj
+    g.user_id = user_id
+
+    # Throttle user profile touch in memory so we do NOT write to Redis/disk on every single request
+    global _PROFILE_TOUCH_CACHE
+    if "_PROFILE_TOUCH_CACHE" not in globals():
+        _PROFILE_TOUCH_CACHE = {}
+
+    last_touch = _PROFILE_TOUCH_CACHE.get(user_id, 0)
+    if time.time() - last_touch > 300:
+        _PROFILE_TOUCH_CACHE[user_id] = time.time()
+        try:
+            from bot_app.services.profiles import save_user_profile
+            from bot_app.services.orders import save_user_id
+            save_user_id(user_id)
+            save_user_profile(
+                chat_id=user_id,
+                username=user_obj.get("username", ""),
+                first_name=user_obj.get("first_name", ""),
+                last_name=user_obj.get("last_name", ""),
+            )
+        except Exception:
+            pass
+
+    return None
+
+
+def require_user_api(f):
+    """Flask decorator protecting Customer REST API endpoints (/api/user/*).
+
+    Requires:
+    - ``X-Telegram-Init-Data`` header with valid cryptographic HMAC-SHA256 signature.
+
+    Attaches authenticated customer profile to ``flask.g.current_user`` and ``flask.g.user_id``.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        res = authenticate_user()
+        if res is not None:
+            return res
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+

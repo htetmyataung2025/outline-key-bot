@@ -42,14 +42,29 @@ def _default_record() -> dict:
 # ── Storage ─────────────────────────────────────────────────────────────────
 def load_all_points() -> dict:
     data = redis_get("points_data")
-    if data is not None:
-        return data
+    local_data = {}
     if os.path.exists(POINTS_FILE):
         try:
             with open(POINTS_FILE, "r") as f:
-                return json.load(f)
+                local_data = json.load(f)
         except Exception:
             pass
+
+    if data is not None and isinstance(data, dict):
+        if local_data:
+            merged = False
+            for k, v in local_data.items():
+                if k not in data or (v.get("points", 0) > data[k].get("points", 0)):
+                    data[k] = {**data.get(k, {}), **v}
+                    merged = True
+            if merged:
+                save_all_points(data)
+        return data
+
+    if local_data:
+        save_all_points(local_data)
+        return local_data
+
     return {}
 
 
@@ -103,6 +118,17 @@ def claim_cooldown_remaining(rec: dict, now: datetime | None = None) -> int:
     cooldown_h = int(points_settings()["claim_cooldown_h"])
     remaining = cooldown_h * 3600 - (now - last_dt).total_seconds()
     return int(remaining) if remaining > 0 else 0
+
+
+def format_cooldown_remaining(seconds: int) -> str:
+    """Format remaining cooldown seconds as a friendly Burmese string."""
+    seconds = max(0, int(seconds))
+    h, m = seconds // 3600, (seconds % 3600) // 60
+    if h > 0:
+        return f"{h} နာရီ {m} မိနစ်"
+    if m > 0:
+        return f"{m} မိနစ်"
+    return f"{seconds} စက္ကန့်"
 
 
 def is_streak_reward_day(streak_days: int) -> bool:

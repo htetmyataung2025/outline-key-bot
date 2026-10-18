@@ -42,6 +42,7 @@ def record_slip(
     extracted_tx_id: str = "",
     admin_messages: list | None = None,
     admin_caption: str = "",
+    method: str = "KBZ",
 ) -> dict:
     slips = load_all_slips()
     now = myanmar_now()
@@ -53,6 +54,7 @@ def record_slip(
         "image_url": image_url,
         "file_id": file_id,
         "extracted_tx_id": extracted_tx_id,
+        "method": str(method or "KBZ").upper(),
         "status": "PENDING",  # PENDING, APPROVED, REJECTED
         "reviewed_by": None,
         "reviewed_at": None,
@@ -155,7 +157,16 @@ def _sync_admin_messages(slip: dict, badge: str):
                 reply_markup=None,
             )
         except Exception:
-            pass
+            try:
+                bot.edit_message_text(
+                    chat_id=entry["chat_id"],
+                    message_id=entry["message_id"],
+                    text=f"{caption}\n\n{badge}" if caption else badge,
+                    parse_mode="HTML",
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
 
 
 def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", reason: str = "") -> dict:
