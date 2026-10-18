@@ -4,7 +4,8 @@ import { resolve } from 'node:path'
 // Turn the actual production Vue bundle into an offline, single-file preview.
 // This is not the old HTML prototype; it runs the compiled Vue components.
 let html = await readFile('dist/index.html', 'utf8')
-const entry = html.match(/<script\b[^>]*src="([^"]+)"[^>]*><\/script>/)
+const entry = html.match(/<script\b[^>]*type="module"[^>]*src="([^"]+)"[^>]*><\/script>/) ||
+              html.match(/<script\b[^>]*src="((?!https?:\/\/)[^"]+)"[^>]*><\/script>/)
 if (!entry) throw new Error('Missing Vite JavaScript entry')
 const js = await readFile(resolve('dist', entry[1].replace(/^\.\//, '').replace(/^\//, '')), 'utf8')
 if (/\bimport\s*\(/.test(js)) throw new Error('Standalone export requires a single, statically imported entry bundle')

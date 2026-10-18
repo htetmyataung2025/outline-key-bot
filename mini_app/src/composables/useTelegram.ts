@@ -20,9 +20,16 @@ export function useTelegram(app: MiniApp) {
   watch([() => app.state.tab, () => app.activeKeys.value.length], syncSwipes, { flush: 'post' })
   onMounted(() => {
     mounted = true
-    // Display ONLY. A real backend MUST validate Telegram initData for auth.
-    const user = window.Telegram?.WebApp?.initDataUnsafe?.user
-    if (user) app.setUser(user)
+    const webApp = window.Telegram?.WebApp
+    if (webApp) {
+      webApp.ready?.()
+      webApp.expand?.()
+      webApp.setHeaderColor?.('#0d1020')
+      webApp.setBackgroundColor?.('#0d1020')
+      const user = webApp.initDataUnsafe?.user
+      if (user) app.setUser(user)
+    }
+    app.bootstrap()
     window.TunnelUI = { updateKeyUsage: app.updateKeyUsage, setUser: app.setUser, setKeys: app.setKeys }
     window.addEventListener('tunnel:usage', onUsage)
     syncSwipes()
