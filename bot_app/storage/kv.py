@@ -35,13 +35,13 @@ def clear_kv_cache(key=None):
 
 
 def _kv_config():
-    url = os.environ.get("KV_REST_API_URL", "").rstrip("/")
-    token = os.environ.get("KV_REST_API_TOKEN", "")
+    url = (os.environ.get("KV_REST_API_URL") or os.environ.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
+    token = os.environ.get("KV_REST_API_TOKEN") or os.environ.get("UPSTASH_REDIS_REST_TOKEN") or ""
     # Vercel KV_* aliases (Upstash integration exposes KV_* names)
     if not url:
         url = os.environ.get("KV_URL", "").rstrip("/")
     if not token:
-        token = os.environ.get("KV_REST_API_TOKEN", "") or os.environ.get("KV_TOKEN", "")
+        token = os.environ.get("KV_TOKEN", "")
         if not token:
             raw = os.environ.get("KV_URL", "")
             if "://" in raw and "@" in raw:
