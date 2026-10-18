@@ -10,6 +10,7 @@ import type {
   Member,
   PaymentMethod,
   PaymentMethodInfo,
+  Plan,
   PlanName,
   PurchaseRecord,
   Receipt,
@@ -22,6 +23,23 @@ import type {
   VpnKey,
 } from '../types'
 import type { IconName } from '../types/icons'
+
+function loadCache<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) as T : null
+  } catch {
+    return null
+  }
+}
+
+function saveCache(key: string, data: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data))
+  } catch {
+    // sandbox / storage quota ignore
+  }
+}
 
 /** A store scoped to one mounted app, not a module-level singleton. */
 export function createMiniApp() {
@@ -37,41 +55,61 @@ export function createMiniApp() {
     return 'overview'
   }
 
+  const cachedBootstrap = loadCache<any>('tma_cache_bootstrap_v1')
+  const cachedHistory = loadCache<{ purchases: PurchaseRecord[]; slips: SlipRecord[] }>('tma_cache_history_v1')
+  const cachedLeaderboard = loadCache<{ period: string; rows: LeaderboardRow[] }>('tma_cache_leaderboard_v1')
+  const hasAuth = api.hasAuth()
+  const hasCachedBootstrap = !!cachedBootstrap
+
   const state = reactive({
-    loading: api.hasAuth(),
+    loading: false,
+    isInitialLoading: hasAuth && !hasCachedBootstrap,
+    isManualRefreshing: false,
+    isSyncing: false,
+    isHistoryLoading: hasAuth && !cachedHistory,
+    isLeaderboardLoading: hasAuth && !cachedLeaderboard,
     isSubmitting: false,
     tab: getSavedTab(),
     filter: 'all' as KeyFilter,
-    keys: [] as VpnKey[],
-    plans: defaultPlans.map(p => ({ ...p })),
-    servers: [] as ServerOption[],
+    keys: (cachedBootstrap?.keys && Array.isArray(cachedBootstrap.keys)) ? (cachedBootstrap.keys as VpnKey[]) : [] as VpnKey[],
+    plans: ((cachedBootstrap?.plans && Array.isArray(cachedBootstrap.plans) && cachedBootstrap.plans.length > 0)
+      ? cachedBootstrap.plans.map((p: any) => ({
+          name: p.name,
+          code: p.code,
+          quota: typeof p.quota === 'string' ? parseFloat(p.quota) || 50 : p.quota,
+          description: p.description,
+          icon: (p.symbol === 'zap' ? 'zap' : (p.symbol === 'crown' ? 'crown' : 'leaf')) as IconName,
+          price: p.price,
+        }))
+      : defaultPlans.map(p => ({ ...p }))) as Plan[],
+    servers: (cachedBootstrap?.servers && Array.isArray(cachedBootstrap.servers)) ? (cachedBootstrap.servers as ServerOption[]) : [] as ServerOption[],
     selectedServerId: '1',
-    paymentMethods: {
+    paymentMethods: (cachedBootstrap?.payment_methods || {
       kbz: { name: 'KBZPay', account_name: 'Htet Myat Aung', phone: '09699970092', type: 'Direct Transfer / QR' },
       wave: { name: 'WavePay', account_name: 'Htet Myat Aung', phone: '09699970092', type: 'Direct Transfer / QR' },
-    } as Record<string, PaymentMethodInfo>,
-    history: {
+    }) as Record<string, PaymentMethodInfo>,
+    history: cachedHistory || {
       purchases: [] as PurchaseRecord[],
       slips: [] as SlipRecord[],
     },
-    leaderboard: {
+    leaderboard: cachedLeaderboard || {
       period: '',
       rows: [] as LeaderboardRow[],
     },
-    selectedKeyId: null as string | null,
+    selectedKeyId: (cachedBootstrap?.keys && cachedBootstrap.keys[0]?.id) ? cachedBootstrap.keys[0].id : null as string | null,
     selectedPlan: 'Basic' as PlanName,
     selectedAmount: 2000 as TopUpAmount,
     customAmount: '',
     paymentMethod: 'kbz' as PaymentMethod,
-    walletBalance: 0,
-    points: 0,
-    claimedToday: false,
-    streakDays: 0,
-    cooldownHours: 4,
-    cooldownRemaining: 0,
+    walletBalance: cachedBootstrap?.wallet?.balance ?? 0,
+    points: cachedBootstrap?.wallet?.points ?? 0,
+    claimedToday: Boolean(cachedBootstrap?.wallet?.claimed_today),
+    streakDays: cachedBootstrap?.wallet?.streak_days ?? (cachedBootstrap?.wallet?.claimed_today ? 1 : 0),
+    cooldownHours: cachedBootstrap?.wallet?.cooldown_hours || 4,
+    cooldownRemaining: cachedBootstrap?.wallet?.cooldown_remaining || 0,
     user: (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.user)
       ? memberFromUser(window.Telegram.WebApp.initDataUnsafe.user)
-      : { id: '', name: 'Member', initials: 'M' } as Member,
+      : (cachedBootstrap?.user ? { id: String(cachedBootstrap.user.id), name: cachedBootstrap.user.name, initials: cachedBootstrap.user.initials || 'M' } : { id: '', name: 'Member', initials: 'M' } as Member),
     receipt: null as Receipt | null,
     dialog: null as AppDialog | null,
     toast: { message: '', icon: 'check-circle', visible: false } as Toast,
@@ -163,6 +201,7 @@ export function createMiniApp() {
   /** Hydrate live state from Backend GET /api/user/bootstrap */
   async function bootstrap(silent = false): Promise<boolean> {
     if (!api.hasAuth()) return false
+    state.isSyncing = true
     if (!silent) state.loading = true
     try {
       const data = await api.getBootstrap()
@@ -209,23 +248,33 @@ export function createMiniApp() {
           price: p.price,
         }))
       }
+      saveCache('tma_cache_bootstrap_v1', data)
+      state.isInitialLoading = false
       return true
     } catch (err: any) {
       console.warn('Bootstrap failed, retaining local state:', err)
       return false
     } finally {
+      state.isSyncing = false
       if (!silent) state.loading = false
+      state.isInitialLoading = false
     }
   }
 
   /** Explicit pull-to-refresh or refresh button click */
   async function refresh(): Promise<boolean> {
+    state.isManualRefreshing = true
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
-    const ok = await bootstrap(false)
-    if (ok) {
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
+    try {
+      const ok = await bootstrap(false)
+      await Promise.allSettled([fetchHistory(true), fetchLeaderboard(true)])
+      if (ok) {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
+      }
+      return ok
+    } finally {
+      state.isManualRefreshing = false
     }
-    return ok
   }
 
   /** Daily loyalty points reward claim */
@@ -366,22 +415,36 @@ export function createMiniApp() {
   }
 
   /** Fetch live purchase & slip history */
-  async function fetchHistory() {
+  async function fetchHistory(force = false) {
     if (!api.hasAuth()) return
+    if (force || (!state.history.purchases.length && !state.history.slips.length)) {
+      state.isHistoryLoading = true
+    }
     try {
-      state.history = await api.getHistory()
+      const data = await api.getHistory()
+      state.history = data
+      saveCache('tma_cache_history_v1', data)
     } catch (err) {
       console.warn('Failed to fetch history:', err)
+    } finally {
+      state.isHistoryLoading = false
     }
   }
 
   /** Fetch live points leaderboard */
-  async function fetchLeaderboard() {
+  async function fetchLeaderboard(force = false) {
     if (!api.hasAuth()) return
+    if (force || !state.leaderboard.rows.length) {
+      state.isLeaderboardLoading = true
+    }
     try {
-      state.leaderboard = await api.getLeaderboard()
+      const data = await api.getLeaderboard()
+      state.leaderboard = data
+      saveCache('tma_cache_leaderboard_v1', data)
     } catch (err) {
       console.warn('Failed to fetch leaderboard:', err)
+    } finally {
+      state.isLeaderboardLoading = false
     }
   }
 
@@ -494,7 +557,10 @@ export function createMiniApp() {
   }
 
   onMounted(() => {
-    bootstrap()
+    if (state.cooldownRemaining > 0) {
+      startCountdown()
+    }
+    bootstrap(true)
     connectLiveSync()
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityChange)

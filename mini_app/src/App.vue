@@ -25,9 +25,11 @@ const screenLabel = computed(() => tabs.find(tab => tab.id === state.tab)?.title
 watch(() => state.tab, async () => {
   const fromNavigation = document.activeElement?.matches('.nav-item, .index-item')
   await nextTick()
-  if (screen.value) {
+  if (screen.value && screen.value.scrollTop > 0) {
     screen.value.scrollTop = 0
-    if (!fromNavigation) screen.value.focus({ preventScroll: true })
+  }
+  if (screen.value && !fromNavigation) {
+    screen.value.focus({ preventScroll: true })
   }
 })
 function selectTab(tab: TabId) { if (tab === state.tab) screen.value?.scrollTo({ top: 0, behavior: reduced.value ? 'auto' : 'smooth' }); else setTab(tab) }
@@ -38,7 +40,8 @@ function selectTab(tab: TabId) { if (tab === state.tab) screen.value?.scrollTo({
     <main class="app-frame" role="main">
       <AppHeader
         :user="state.user"
-        :loading="state.loading"
+        :loading="state.isManualRefreshing"
+        :syncing="state.isSyncing && !state.isManualRefreshing"
         :inert="state.dialog !== null"
         @refresh="refresh"
         @notifications="showToast('အသိပေးချက်အသစ် မရှိသေးပါ', 'bell')"
@@ -46,7 +49,9 @@ function selectTab(tab: TabId) { if (tab === state.tab) screen.value?.scrollTo({
       />
       <div id="screen-content" ref="screen" class="screen-content" role="region" :aria-label="screenLabel" tabindex="-1" :inert="state.dialog !== null">
         <Transition name="tab-fade" mode="out-in">
-          <component :is="views[state.tab]" :key="state.tab" />
+          <KeepAlive>
+            <component :is="views[state.tab]" :key="state.tab" />
+          </KeepAlive>
         </Transition>
       </div>
       <BottomNavigation :active="state.tab" :inert="state.dialog !== null" @select="selectTab" />

@@ -32,8 +32,23 @@ const displaySlips = computed(() => {
       </button>
     </div>
 
+    <!-- Skeleton Loading State -->
+    <template v-if="state.isHistoryLoading && !hasLiveRecords">
+      <div v-for="i in 3" :key="`skel-history-${i}`" class="history-row skeleton-row-wrap">
+        <span class="history-icon skeleton-shimmer" style="width: 36px; height: 36px; border-radius: 11px;"></span>
+        <span class="history-meta" style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+          <span class="skeleton-shimmer" style="width: 60%; height: 13px; border-radius: 4px;"></span>
+          <span class="skeleton-shimmer" style="width: 38%; height: 10px; border-radius: 4px;"></span>
+        </span>
+        <span class="history-amount" style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+          <span class="skeleton-shimmer" style="width: 52px; height: 13px; border-radius: 4px;"></span>
+          <span class="skeleton-shimmer" style="width: 32px; height: 10px; border-radius: 4px;"></span>
+        </span>
+      </div>
+    </template>
+
     <!-- Live Records Mode -->
-    <template v-if="hasLiveRecords">
+    <template v-else-if="hasLiveRecords">
       <div v-for="(slip, idx) in displaySlips" :key="`slip-${idx}`" class="history-row">
         <span class="history-icon" :class="{ amber: slip.status === 'PENDING', negative: slip.status === 'REJECTED' }">
           <SvgIcon :name="slip.status === 'APPROVED' ? 'check' : (slip.status === 'PENDING' ? 'clock' : 'info')" />

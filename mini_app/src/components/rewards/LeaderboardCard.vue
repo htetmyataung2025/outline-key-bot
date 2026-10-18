@@ -25,8 +25,21 @@ const topRows = computed(() => {
       </button>
     </div>
 
+    <!-- Skeleton Loading State -->
+    <template v-if="state.isLeaderboardLoading && !hasLiveRows">
+      <div v-for="i in 3" :key="`skel-ld-${i}`" class="leader-row skeleton-row-wrap">
+        <span class="rank skeleton-shimmer" style="width: 20px; height: 16px; border-radius: 4px;"></span>
+        <span class="leader-avatar skeleton-shimmer" style="width: 32px; height: 32px; border-radius: 10px;"></span>
+        <span class="leader-name" style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+          <span class="skeleton-shimmer" style="width: 50%; height: 13px; border-radius: 4px;"></span>
+          <span class="skeleton-shimmer" style="width: 30%; height: 9px; border-radius: 4px;"></span>
+        </span>
+        <span class="leader-score skeleton-shimmer" style="width: 48px; height: 14px; border-radius: 4px;"></span>
+      </div>
+    </template>
+
     <!-- Live Leaderboard Rows -->
-    <template v-if="hasLiveRows">
+    <template v-else-if="hasLiveRows">
       <div v-for="row in topRows" :key="row.rank" class="leader-row" :class="{ you: row.is_you }">
         <span class="rank" :class="{ gold: row.rank === 1, silver: row.rank === 2, bronze: row.rank === 3, self: row.is_you }">
           {{ row.rank < 10 ? `0${row.rank}` : row.rank }}

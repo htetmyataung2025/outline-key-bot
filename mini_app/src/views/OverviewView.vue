@@ -116,7 +116,7 @@ onScopeDispose(() => {
     <WalletCard />
 
     <!-- 2. Active Key Snapshot (Loading Skeleton / Real KeyStack / Empty State) -->
-    <template v-if="state.loading && state.keys.length === 0">
+    <template v-if="(state.isInitialLoading || state.loading) && state.keys.length === 0">
       <section class="snapshot-section" aria-label="Loading key snapshot">
         <div class="section-title-row">
           <span class="section-title">Active key snapshot</span>
