@@ -10,7 +10,7 @@ from urllib.parse import unquote
 from flask import Blueprint, jsonify, request, g
 from werkzeug.utils import secure_filename
 
-from bot_app.config import ADMIN_CHAT_IDS, PLANS, points_enabled
+from bot_app.config import ADMIN_CHAT_IDS, PLANS, points_enabled, points_settings
 from bot_app.extensions import bot
 from bot_app.helpers.auth import authenticate_user, current_user_id, require_user_api
 from bot_app.services.billing import get_user_balance_breakdown, update_user_balance
@@ -29,6 +29,7 @@ from bot_app.services.outline import (
 from bot_app.services.points import (
     claim_cooldown_remaining,
     effective_streak,
+    format_cooldown_remaining,
     get_points,
     try_claim,
 )
@@ -130,8 +131,10 @@ def get_bootstrap():
     # Points & Check-in
     points_rec = get_points(uid)
     cooldown = claim_cooldown_remaining(points_rec)
+    cooldown_h = int(points_settings()["claim_cooldown_h"])
     points_val = int(points_rec.get("points", 0))
     streak_val = effective_streak(points_rec)
+    can_claim = (cooldown == 0)
     claimed_today = (cooldown > 0)
 
     # Active & Expired Keys
@@ -191,8 +194,10 @@ def get_bootstrap():
             "bonus_balance": bonus_bal,
             "points": points_val,
             "claimed_today": claimed_today,
+            "can_claim": can_claim,
             "streak_days": streak_val,
             "cooldown_remaining": max(0, cooldown),
+            "cooldown_hours": cooldown_h,
         },
         "keys": formatted_keys,
         "plans": formatted_plans,
@@ -201,30 +206,52 @@ def get_bootstrap():
     })
 
 
+@user_bp.route("/claim", methods=["POST"])
 @user_bp.route("/claim-daily", methods=["POST"])
 def claim_daily():
-    """Daily Reward point claim."""
+    """Reward point claim with dynamic cooldown hours configured by Admin."""
     if not points_enabled():
         return jsonify({"success": False, "error": "Daily Reward system is disabled"}), 400
 
     uid = current_user_id()
     res = try_claim(uid)
+    cooldown_h = int(points_settings()["claim_cooldown_h"])
 
     if not res.get("ok"):
+        err_type = res.get("error", "cooldown")
+        next_in_s = res.get("next_in_s", 0)
+        if err_type == "cooldown":
+            time_str = format_cooldown_remaining(next_in_s)
+            msg = f"⏳ နောက် Claim ရရှိရန် {time_str} ကျန်ပါသေးသည်။"
+        else:
+            msg = "⏳ ခဏစောင့်ပြီး ထပ်ကြိုးစားပေးပါ။"
         return jsonify({
             "success": False,
-            "error": res.get("error", "cooldown"),
-            "next_in_s": res.get("next_in_s", 0),
-            "message": "ဒီနေ့အတွက် Claim ပြုလုပ်ပြီးပါပြီခင်ဗျာ။",
+            "error": err_type,
+            "next_in_s": next_in_s,
+            "cooldown_hours": cooldown_h,
+            "message": msg,
         }), 400
+
+    awarded = res.get("awarded", 10)
+    is_bonus = res.get("is_streak_bonus", False)
+    streak_days = res.get("streak_days", 1)
+    next_in_s = res.get("next_in_s", 0)
+
+    if is_bonus:
+        msg = f"🎉 +{awarded:,} Points ရရှိပါသည်! ({streak_days} ရက် ဆက်တိုက် Streak Bonus! 🔥)"
+    else:
+        msg = f"🎉 +{awarded:,} Points ရရှိပါသည်! ({cooldown_h} နာရီပြည့်ပါက ထပ်မံ Claim နိုင်ပါသည်)"
 
     return jsonify({
         "success": True,
-        "awarded": res.get("awarded", 10),
+        "awarded": awarded,
         "new_balance": res.get("new_balance", 0),
-        "streak_days": res.get("streak_days", 1),
-        "is_streak_bonus": res.get("is_streak_bonus", False),
-        "message": f"Daily Claim အောင်မြင်ပါသည်! +{res.get('awarded', 10)} Points ရရှိပါသည်။",
+        "streak_days": streak_days,
+        "is_streak_bonus": is_bonus,
+        "next_in_s": next_in_s,
+        "cooldown_hours": cooldown_h,
+        "message": msg,
     })
 
 

@@ -21,22 +21,13 @@ from bot_app.services.orders import save_key_mapping, save_user_purchase_record
 from bot_app.helpers.deeplink import get_key_delivery_markup
 from bot_app.services.outline import create_outline_key, get_server_display_name
 from bot_app.services.points import (
-    claim_cooldown_remaining, effective_streak, get_points, redeem_starter,
-    refund_starter, try_claim,
+    claim_cooldown_remaining, effective_streak, format_cooldown_remaining,
+    get_points, redeem_starter, refund_starter, try_claim,
 )
 from bot_app.utils import is_user_subscribed
 
 _STARTER_VALID_DAYS = 30
-
-
-def _fmt_remaining(seconds: int) -> str:
-    seconds = max(0, int(seconds))
-    h, m = seconds // 3600, (seconds % 3600) // 60
-    if h > 0:
-        return f"{h} နာရီ {m} မိနစ်"
-    if m > 0:
-        return f"{m} မိနစ်"
-    return f"{seconds} စက္ကန့်"
+_fmt_remaining = format_cooldown_remaining
 
 
 def _display_name(chat_id, fallback: str = "HMA Customer") -> str:

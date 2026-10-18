@@ -19,6 +19,8 @@ export function createMiniApp() {
     walletBalance: 5000,
     points: 120,
     claimedToday: false,
+    cooldownHours: 4,
+    cooldownRemaining: 0,
     user: memberFromUser(demoUser) as Member,
     receipt: null as Receipt | null,
     dialog: null as AppDialog | null,
@@ -51,10 +53,14 @@ export function createMiniApp() {
     state.keys = keys.map(key => ({ ...key, quota: Math.max(0, key.quota), used: clamp(key.used, 0, Math.max(0, key.quota)) }))
   }
   function claimReward() {
-    if (state.claimedToday) { showToast('ဒီနေ့အတွက် Claim လုပ်ပြီးပါပြီ', 'info'); return }
+    if (state.claimedToday) {
+      showToast(`⏳ နောက် Claim အထိ ${state.cooldownHours} နာရီ စောင့်ပေးပါ`, 'info')
+      return
+    }
     state.claimedToday = true
+    state.cooldownRemaining = state.cooldownHours * 3600
     state.points += 10
-    showToast('Demo Daily Claim · +10 Points ရရှိပါပြီ')
+    showToast(`Claim အောင်မြင်ပါသည် · +10 Points ရရှိပါပြီ (${state.cooldownHours} နာရီခြား Claim နိုင်ပါသည်)`)
   }
   function selectReceipt(file?: File) {
     if (!file) return

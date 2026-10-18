@@ -6,6 +6,10 @@ from bot_app.services.slips import load_all_slips
 from bot_app.services.orders import save_user_purchase_record
 
 
+from bot_app import config
+from bot_app.services import settings as settings_svc
+
+
 def test_user_api_daily_claim_success_and_cooldown(client, make_telegram_init_data, isolated_state):
     user_id = 555666777
     init_data = make_telegram_init_data(user_id=user_id)
@@ -20,16 +24,72 @@ def test_user_api_daily_claim_success_and_cooldown(client, make_telegram_init_da
     assert data1["success"] is True
     assert data1["awarded"] > 0
     assert data1["new_balance"] == data1["awarded"]
+    assert data1["cooldown_hours"] == 4
+    assert "Points ရရှိပါသည်" in data1["message"]
 
     # 2. Second claim immediately fails due to cooldown
     resp2 = client.post(
-        "/api/user/claim-daily",
+        "/api/user/claim",  # Test /claim alias
         headers={"X-Telegram-Init-Data": init_data}
     )
     assert resp2.status_code == 400
     data2 = resp2.get_json()
     assert data2["success"] is False
     assert data2["error"] == "cooldown"
+    assert data2["next_in_s"] > 0
+    assert data2["cooldown_hours"] == 4
+    assert "နောက် Claim ရရှိရန်" in data2["message"]
+    assert "နာရီ" in data2["message"] or "မိနစ်" in data2["message"]
+
+
+def test_user_api_claim_dynamic_admin_cooldown_adjustment(client, make_telegram_init_data, isolated_state):
+    """Admin increases or decreases claim_cooldown_h and it applies immediately."""
+    settings_svc.invalidate_settings_cache(reset_fallback=True)
+
+    # Admin sets cooldown to 2 hours
+    pts_block = config.default_points_settings()
+    pts_block["claim_cooldown_h"] = 2
+    settings_svc.save_system_settings({"points": pts_block}, updated_by="Admin")
+
+    user_id = 555666779
+    init_data = make_telegram_init_data(user_id=user_id)
+
+    # 1. Bootstrap shows 2 hours cooldown
+    resp_boot = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp_boot.status_code == 200
+    boot_data = resp_boot.get_json()
+    assert boot_data["wallet"]["cooldown_hours"] == 2
+    assert boot_data["wallet"]["can_claim"] is True
+
+    # 2. Claim succeeds with 2 hours next cooldown
+    resp_claim = client.post(
+        "/api/user/claim",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp_claim.status_code == 200
+    claim_data = resp_claim.get_json()
+    assert claim_data["cooldown_hours"] == 2
+    assert claim_data["next_in_s"] == 2 * 3600
+    assert "2 နာရီ" in claim_data["message"]
+
+    # 3. Admin increases cooldown to 6 hours
+    pts_block["claim_cooldown_h"] = 6
+    settings_svc.invalidate_settings_cache(reset_fallback=True)
+    settings_svc.save_system_settings({"points": pts_block}, updated_by="Admin")
+
+    # Immediate next check reflects 6 hours (remaining = 6h - elapsed)
+    resp_cooldown = client.post(
+        "/api/user/claim",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp_cooldown.status_code == 400
+    cooldown_data = resp_cooldown.get_json()
+    assert cooldown_data["cooldown_hours"] == 6
+    assert cooldown_data["next_in_s"] > 5 * 3600  # around ~6 hours remaining
+    assert "နောက် Claim ရရှိရန်" in cooldown_data["message"]
 
 
 def test_user_api_topup_slip_upload(client, make_telegram_init_data, isolated_state, mock_bot):

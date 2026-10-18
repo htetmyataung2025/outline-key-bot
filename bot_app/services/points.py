@@ -105,6 +105,17 @@ def claim_cooldown_remaining(rec: dict, now: datetime | None = None) -> int:
     return int(remaining) if remaining > 0 else 0
 
 
+def format_cooldown_remaining(seconds: int) -> str:
+    """Format remaining cooldown seconds as a friendly Burmese string."""
+    seconds = max(0, int(seconds))
+    h, m = seconds // 3600, (seconds % 3600) // 60
+    if h > 0:
+        return f"{h} နာရီ {m} မိနစ်"
+    if m > 0:
+        return f"{m} မိနစ်"
+    return f"{seconds} စက္ကန့်"
+
+
 def is_streak_reward_day(streak_days: int) -> bool:
     """True on every Nth consecutive claim-day (7, 14, 21…) — guaranteed band."""
     target = int(points_settings()["streak_target_days"])
