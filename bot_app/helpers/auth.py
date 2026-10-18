@@ -202,6 +202,19 @@ def authenticate_user():
     """
     tma_init_data = request.headers.get("X-Telegram-Init-Data")
     if not tma_init_data:
+        from bot_app.extensions import flask_app
+        if os.environ.get("DEV_MODE") == "1" and not flask_app.config.get("TESTING"):
+            from bot_app.config import ADMIN_CHAT_IDS
+            dev_id = str(os.environ.get("DEV_CUSTOMER_ID") or (ADMIN_CHAT_IDS[0] if ADMIN_CHAT_IDS else "8777968077"))
+            user_obj = {
+                "id": int(dev_id) if dev_id.isdigit() else dev_id,
+                "first_name": "Developer",
+                "last_name": "",
+                "username": "local_dev",
+            }
+            g.current_user = user_obj
+            g.user_id = dev_id
+            return None
         return jsonify({"error": "Unauthorized: Missing Telegram authentication"}), 401
 
     verified_data = verify_telegram_init_data(tma_init_data)

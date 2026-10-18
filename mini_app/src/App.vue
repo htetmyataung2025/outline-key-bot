@@ -2,7 +2,6 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import IconSprite from './components/ui/IconSprite.vue'
-import AppIntro from './components/layout/AppIntro.vue'
 import AppHeader from './components/layout/AppHeader.vue'
 import BottomNavigation from './components/layout/BottomNavigation.vue'
 import ToastNotification from './components/ui/ToastNotification.vue'
@@ -39,15 +38,15 @@ onScopeDispose(() => entryAnimation?.cancel())
 </script>
 <template>
   <IconSprite />
-  <main class="showcase">
-    <AppIntro :active="state.tab" :inert="state.dialog !== null" @select="selectTab" />
-    <section class="device-wrap" aria-label="Interactive Mini App preview"><div class="device-glow" aria-hidden="true" />
-      <div class="app-frame">
-        <AppHeader :user="state.user" :inert="state.dialog !== null" @notifications="showToast('အသိပေးချက်အသစ် မရှိသေးပါ', 'bell')" @profile="openDialog({ kind: 'profile' })" />
-        <div id="screen-content" ref="screen" class="screen-content" role="region" :aria-label="screenLabel" tabindex="-1" :inert="state.dialog !== null"><component :is="views[state.tab]" :key="state.tab" /></div>
-        <BottomNavigation :active="state.tab" :inert="state.dialog !== null" @select="selectTab" />
-        <ToastNotification :toast="state.toast" /><AppDialogs />
+  <div class="tma-shell">
+    <main class="app-frame" role="main">
+      <AppHeader :user="state.user" :inert="state.dialog !== null" @notifications="showToast('အသိပေးချက်အသစ် မရှိသေးပါ', 'bell')" @profile="openDialog({ kind: 'profile' })" />
+      <div id="screen-content" ref="screen" class="screen-content" role="region" :aria-label="screenLabel" tabindex="-1" :inert="state.dialog !== null">
+        <component :is="views[state.tab]" :key="state.tab" />
       </div>
-    </section>
-  </main>
+      <BottomNavigation :active="state.tab" :inert="state.dialog !== null" @select="selectTab" />
+      <ToastNotification :toast="state.toast" />
+      <AppDialogs />
+    </main>
+  </div>
 </template>

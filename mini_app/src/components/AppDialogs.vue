@@ -215,10 +215,10 @@ const currentPaymentInfo = computed(() => {
         </template>
       </template>
 
-      <!-- Offline / Demo Fallback -->
+      <!-- Offline / No Price Fallback -->
       <template v-else>
-        <span class="demo-label">UI PREVIEW · Wallet {{ formatNumber(state.walletBalance) }} Ks</span>
-        <p>Plan ဈေးနှုန်း မသတ်မှတ်ရသေးသောကြောင့် preview မှာ ဝယ်ယူ၍မရသေးပါ။ Live version တွင် ဈေးနှုန်းနဲ့ wallet balance ကိုပြပြီး အတည်ပြုနိုင်ပါမည်။</p>
+        <span class="demo-label">WALLET · {{ formatNumber(state.walletBalance) }} Ks</span>
+        <p>ရွေးချယ်ထားသော Plan အတွက် ဈေးနှုန်း အချက်အလက် မရရှိနိုင်သေးသောကြောင့် ဝယ်ယူ၍မရသေးပါ။ ကျေးဇူးပြု၍ အခြား Plan တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ။</p>
         <button class="primary-btn modal-full-btn" @click="closeDialog">နားလည်ပါပြီ</button>
       </template>
     </template>

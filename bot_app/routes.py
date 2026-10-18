@@ -21,7 +21,7 @@ import os
 import platform
 
 import telebot
-from flask import jsonify, render_template_string, request
+from flask import jsonify, redirect, render_template_string, request, send_from_directory
 
 from bot_app.config import (
     MY_PAYMENT_PHONES, OCR_API_KEY, REQUIRED_CHANNEL, TELEGRAM_TOKEN,
@@ -273,6 +273,22 @@ class VercelPathFixMiddleware:
 
 
 app.wsgi_app = VercelPathFixMiddleware(app.wsgi_app)
+MINI_APP_DIST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mini_app", "dist"))
+
+
+@app.route("/app")
+def mini_app_redirect():
+    return redirect("/app/", code=302)
+
+
+@app.route("/app/", defaults={"path": ""})
+@app.route("/app/<path:path>")
+def serve_mini_app(path=""):
+    if not os.path.exists(MINI_APP_DIST):
+        return "Mini App dist not found. Please build it with 'npm run build' in mini_app.", 404
+    if path and os.path.exists(os.path.join(MINI_APP_DIST, path)):
+        return send_from_directory(MINI_APP_DIST, path)
+    return send_from_directory(MINI_APP_DIST, "index.html")
 
 
 @app.route("/", defaults={"path": ""}, methods=["GET", "POST"])

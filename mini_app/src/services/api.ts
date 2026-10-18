@@ -51,9 +51,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  /** Check if running with real Telegram WebApp credentials */
+  /** Check if running with real Telegram WebApp credentials or in local dev mode */
   hasAuth(): boolean {
-    return Boolean(getTelegramInitData())
+    return Boolean(getTelegramInitData()) || Boolean(import.meta.env.DEV)
   },
 
   /** Consolidated user bootstrap */
