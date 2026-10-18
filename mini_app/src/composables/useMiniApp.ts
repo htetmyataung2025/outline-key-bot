@@ -58,12 +58,41 @@ export function createMiniApp() {
     walletBalance: 5000,
     points: 120,
     claimedToday: false,
+    streakDays: 0,
     cooldownHours: 4,
     cooldownRemaining: 0,
     user: memberFromUser(demoUser) as Member,
     receipt: null as Receipt | null,
     dialog: null as AppDialog | null,
     toast: { message: '', icon: 'check-circle', visible: false } as Toast,
+  })
+
+  let countdownTimer: ReturnType<typeof setInterval> | undefined
+
+  function startCountdown() {
+    if (countdownTimer) clearInterval(countdownTimer)
+    countdownTimer = setInterval(() => {
+      if (state.cooldownRemaining > 0) {
+        state.cooldownRemaining--
+        if (state.cooldownRemaining <= 0) {
+          state.claimedToday = false
+          state.cooldownRemaining = 0
+        }
+      }
+    }, 1000)
+  }
+
+  const cooldownFormatted = computed(() => {
+    const secs = state.cooldownRemaining
+    if (secs <= 0) return ''
+    const h = Math.floor(secs / 3600)
+    const m = Math.floor((secs % 3600) / 60)
+    const s = secs % 60
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    if (h > 0) {
+      return `${pad(h)}:${pad(m)}:${pad(s)}`
+    }
+    return `${pad(m)}:${pad(s)}`
   })
 
   const activeKeys = computed(() => state.keys.filter(key => key.status !== 'expired').sort((a, b) => Number(b.connected) - Number(a.connected)))
@@ -123,8 +152,12 @@ export function createMiniApp() {
         state.walletBalance = data.wallet.balance ?? 0
         state.points = data.wallet.points ?? 0
         state.claimedToday = Boolean(data.wallet.claimed_today)
+        state.streakDays = data.wallet.streak_days ?? (state.claimedToday ? 1 : 0)
         state.cooldownHours = data.wallet.cooldown_hours || 4
         state.cooldownRemaining = data.wallet.cooldown_remaining || 0
+        if (state.cooldownRemaining > 0) {
+          startCountdown()
+        }
       }
       if (Array.isArray(data.keys)) {
         state.keys = data.keys
@@ -162,16 +195,18 @@ export function createMiniApp() {
 
   /** Daily loyalty points reward claim */
   async function claimReward() {
+    if (state.claimedToday) {
+      // Cooldown active: do not fire duplicate requests or spam toasts
+      return
+    }
+
     if (!api.hasAuth()) {
-      // Offline / Demo fallback
-      if (state.claimedToday) {
-        showToast(`⏳ နောက် Claim အထိ ${state.cooldownHours} နာရီ စောင့်ပေးပါ`, 'info')
-        return
-      }
       state.claimedToday = true
+      state.streakDays = (state.streakDays || 0) + 1
       state.cooldownRemaining = state.cooldownHours * 3600
       state.points += 10
-      showToast(`Demo Daily Claim · +10 Points ရရှိပါပြီ`)
+      startCountdown()
+      showToast(`Daily Claim · +10 Points ရရှိပါပြီ`)
       return
     }
 
@@ -180,8 +215,10 @@ export function createMiniApp() {
       const res = await api.claimReward()
       state.claimedToday = true
       state.points = res.new_balance
+      state.streakDays = res.streak_days ?? ((state.streakDays || 0) + 1)
       state.cooldownRemaining = res.next_in_s
       state.cooldownHours = res.cooldown_hours
+      startCountdown()
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
       showToast(res.message || `+${res.awarded} Points ရရှိပါသည်!`)
     } catch (err: any) {
@@ -346,6 +383,7 @@ export function createMiniApp() {
 
   onScopeDispose(() => {
     clearTimeout(toastTimer)
+    if (countdownTimer) clearInterval(countdownTimer)
     if (state.receipt) URL.revokeObjectURL(state.receipt.url)
   })
 
@@ -372,6 +410,7 @@ export function createMiniApp() {
     selectReceipt,
     showPayment,
     copyKey,
+    cooldownFormatted,
   }
 }
 

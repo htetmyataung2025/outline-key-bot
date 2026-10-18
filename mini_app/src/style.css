@@ -134,6 +134,10 @@ button:active:not(:disabled) { transform: scale(.975); }
 .wallet-card .soft-btn { color: #fff; background: #ffffff10; border-color: #ffffff2b; }
 .wallet-card .soft-btn:hover { background: #ffffff20; }
 .wallet-card .soft-btn .icon { color: #e2ffb9; }
+.wallet-card .soft-btn.is-cooldown { opacity: .92; background: #ffffff14; border-color: #ffffff33; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.wallet-card .soft-btn.is-cooldown .icon { color: #ffca68; }
+.reward-banner .primary-btn.is-cooldown { opacity: .88; background: #1e2238; border-color: #3d436a; color: #d2d8f0; box-shadow: none; font-variant-numeric: tabular-nums; }
+.reward-banner .primary-btn.is-cooldown .icon { color: #ffca68; }
 .section-title-row { @apply flex justify-between items-center gap-2; margin: 17px 2px 10px; }
 .section-title { @apply inline-flex items-center gap-[6px] text-[11px] font-extrabold;  }
 .section-title .icon { @apply w-[14px] h-[14px]; color: var(--primary-soft); }

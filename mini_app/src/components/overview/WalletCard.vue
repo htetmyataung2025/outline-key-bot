@@ -2,7 +2,8 @@
 import SvgIcon from '../ui/SvgIcon.vue'
 import { useMiniApp } from '../../composables/useMiniApp'
 import { formatNumber } from '../../utils/format'
-const { state, setTab, claimReward } = useMiniApp()
+
+const { state, setTab, claimReward, cooldownFormatted } = useMiniApp()
 </script>
 <template>
   <section class="wallet-card" aria-label="Wallet balance">
@@ -10,6 +11,17 @@ const { state, setTab, claimReward } = useMiniApp()
     <div class="wallet-top"><span class="label-small">Wallet Balance</span><span class="wallet-icon"><SvgIcon name="wallet" /></span></div>
     <div class="wallet-amount">{{ formatNumber(state.walletBalance) }} <span>Ks</span></div>
     <div class="wallet-meta"><SvgIcon name="sparkles" />Points balance<span class="meta-separator" /><b>{{ state.points }} Pts</b></div>
-    <div class="wallet-actions"><button class="primary-btn" @click="setTab('shop')"><SvgIcon name="plus" />ငွေဖြည့်မည်</button><button class="soft-btn" data-action="claim" @click="claimReward"><SvgIcon :name="state.claimedToday ? 'check-circle' : 'gift'" />{{ state.claimedToday ? 'Claimed today' : 'Daily Claim' }}</button></div>
+    <div class="wallet-actions">
+      <button class="primary-btn" @click="setTab('shop')"><SvgIcon name="plus" />ငွေဖြည့်မည်</button>
+      <button
+        class="soft-btn"
+        data-action="claim"
+        :class="{ 'is-cooldown': state.claimedToday }"
+        @click="claimReward"
+      >
+        <SvgIcon :name="state.claimedToday ? 'clock' : 'gift'" />
+        {{ state.claimedToday ? (cooldownFormatted || 'Claimed') : 'Daily Claim' }}
+      </button>
+    </div>
   </section>
 </template>
