@@ -72,7 +72,10 @@ This directory contains the complete technical blueprints, database schemas, API
 18. [**2026-10-18_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-10-18_PROGRESS.md)
    - Customer Telegram Mini App Hardcoded Data Elimination & Real Data Synchronization: Completely removed all mock/demo purchases, fake leaderboard users, and mock state defaults. Wired live backend formatting, honest Burmese empty states ("ဝယ်ယူမှုမှတ်တမ်း မရှိသေးပါ", "ဦးဆောင်သူစာရင်း မရှိသေးပါ"), and 1-click Outline App direct launching with automatic key import. 399/399 tests passing (100% green).
 
-19. [**2026-11-03_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-03_PROGRESS.md)
+19. [**2026-11-02_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-02_PROGRESS.md)
+   - Upstash Redis Full Historical Smart Merge: Safely merged all pre-Oct 18 data from old Upstash into live new Upstash (`select-seasnail-127182.upstash.io`). Wallets (139,000 MMK across 34 real users), Loyalty Points (150,732 Pts across 153 real users), 238 sales records, 216 slips, 269 users, and 271 profiles completely unified with zero data loss. 407/407 tests passing.
+
+20. [**2026-11-03_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-03_PROGRESS.md)
    - Quality Assurance & Codebase Stabilization: Cleaned all Python lint (`pyflakes`) warnings in `bot_app`, `tests`, and `scripts`. Modernized Mini App Playwright test assertions (`mini_app/tests/mini-app.spec.ts`) to match live empty states and real-data APIs. Enhanced GitHub Actions CI with a parallel `frontend` job (Dashboard & Mini App typecheck/build). Synchronized `README.md` to reflect 401 tests and hybrid architecture. 401/401 backend tests passing (100% green).
 
 
