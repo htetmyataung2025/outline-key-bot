@@ -1,7 +1,6 @@
 """Full Migration Script: Clones 100% of keys and values from Old Upstash to New Upstash."""
 
 import json
-import os
 import sys
 import requests
 
@@ -53,9 +52,9 @@ def migrate():
         else:
             print(f"  ✗ Failed to write {clean_k}")
 
-    print(f"\n==========================================")
+    print("\n==========================================")
     print(f"MIGRATION COMPLETE: {success_count}/{len(keys)} keys copied to New Upstash!")
-    print(f"==========================================")
+    print("==========================================")
     return True
 
 if __name__ == "__main__":

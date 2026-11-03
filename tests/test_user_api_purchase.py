@@ -1,6 +1,5 @@
 """Tests for Customer TMA 1-Click Purchase endpoint (POST /api/user/purchase)."""
 
-import pytest
 from bot_app.services.billing import get_user_balance, update_user_balance
 from bot_app.services.orders import get_user_combined_purchase_records
 

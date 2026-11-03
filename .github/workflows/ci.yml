@@ -37,8 +37,34 @@ jobs:
         run: |
           python -c "import json; json.load(open('vercel.json')); print('vercel.json OK')"
 
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: |
+            dashboard/package-lock.json
+            mini_app/package-lock.json
+
+      - name: Build & type-check Dashboard
+        run: |
+          cd dashboard
+          npm ci
+          npm run build
+
+      - name: Build & type-check Mini App
+        run: |
+          cd mini_app
+          npm ci
+          npm run build
+
   deploy-preview:
-    needs: test
+    needs: [test, frontend]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:

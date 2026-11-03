@@ -1,36 +1,35 @@
-# Outline Key Bot 🤖🔑
+# Outline Key Bot & Control Center 🤖🔑
 
-H & E FEATURE PREMIUM VPN — Outline VPN Key ရောင်းခြင်းအတွက် Telegram Bot
-(Telegram bot for selling Outline VPN keys: wallet top-up, auto key delivery,
-redeem codes, expiry cron, admin reports).
+H & E FEATURE PREMIUM VPN — Outline VPN Key ရောင်းချခြင်း၊ စီမံခန့်ခွဲခြင်းနှင့် Customer Portal အတွက် Hybrid Platform (Telegram Bot + Vue 3 Admin Web Control Center + Telegram Mini App).
 
-> Architecture: Flask webhook + [pyTelegramBotAPI](https://github.com/eternnoar/pyTelegramBotAPI),
-> state များကို Upstash Redis (Vercel KV) တွင်သိမ်းပြီး မရှိပါက `/tmp/*.json`
-> fallback ဖြင့် အလုပ်လုပ်သည်။ Deploy target မှာ **Vercel** (serverless) ဖြစ်သည်။
+> Architecture: Flask webhook + [pyTelegramBotAPI](https://github.com/eternnoar/pyTelegramBotAPI) + Vue 3 Frontends (Desktop Web Dashboard & Telegram Mini App),
+> state များကို Upstash Redis (Vercel KV) တွင်သိမ်းပြီး မရှိပါက `/tmp/*.json` fallback ဖြင့် အလုပ်လုပ်သည်။ Deploy target မှာ **Vercel** (serverless) ဖြစ်သည်။
 
 ## ✨ Features
 
-**User side**
+**Customer Side (Bot & Telegram Mini App)**
 - Force-join channel gate (`/start` → Verify button)
+- Customer Telegram Mini App (TMA): Zero-click HMAC-SHA256 authentication, 1-Click Outline App launch with automatic key import
 - Plan ဝယ်ယူခြင်း (Starter → Ultimate, auto key delivery via Outline API)
 - Ultimate VIP plan အတွက် key renew / new key ရွေးချယ်မှု
 - Wallet system — ငွေဖြည့်ခြင်း (ပြေစာ photo + OCR → Admin approve)
+- Loyalty Points & Daily Reward — နေ့စဉ် claim ပြုလုပ်ပြီး Points စုဆောင်းနိုင်ခြင်း, Leaderboard အဆင့်ရပ်တည်မှု
 - Redeem code (single / shared mode, ရက်သက်တမ်းပါ bonus credit)
 - Data usage စစ်ဆေးခြင်း, ဝယ်ယူမှုမှတ်တမ်း, Key လဲလှယ်တောင်းဆိုခြင်း
 
-**Admin side**
-- `/deduct`, `/stats`, `/usage`, `/customers` commands
+**Admin Control Center (Web & Mobile TMA)**
+- Vue 3 + Naive UI Dark Theme Dashboard (`dashboard/`): Live Telemetry, Key management, Slip approval queue, Dynamic server settings
+- `/deduct`, `/stats`, `/usage`, `/customers` bot commands
 - Redeem code generator wizard (amount → mode → days → count)
 - Key view / delete, manual key dispatch (custom 5-device plans)
 - Key replacement approve/reject, broadcast (text + photo)
-- Monthly revenue report, per-server usage stats
+- Monthly revenue report, per-server usage stats, purchases history with live SSE refresh
 
-**Ops**
-- Nightly cron (`/cron-check`, 23:30 UTC): expiry/GB-full သတိပေးချက် +
-  သက်တမ်းကုန်သော key များ အလိုအလျောက် ဖျက်ခြင်း
+**Ops & Security**
+- Nightly cron (`/cron-check`, 23:30 UTC): expiry/GB-full သတိပေးချက် + သက်တမ်းကုန်သော key များ အလိုအလျောက် ဖျက်ခြင်း
 - `/myid` — ကိုယ့် Telegram Chat/User ID နှင့် admin status ကို ပြသည်
-  (force-join gate ဖြင့် ပိတ်ထားသူတွေလည်း ရနိုင်သည်) + admin ဆိုရင်
-  deployment က ဖတ်ထားတဲ့ admin ID list ကို ပြသည်
+- Cryptographic HMAC-SHA256 signature verification for Telegram Mini App API (`/api/user/*`)
+- Bearer token / Admin credentials authentication for Admin REST API (`/api/admin/*`)
 - `GET /diag?key=…` — secret-safe config self-check (README Troubleshooting တွင်)
 - Universal entry route (see "Vercel routing" note below)
 
@@ -40,6 +39,7 @@ redeem codes, expiry cron, admin reports).
 > ဒါကြောင့် `bot_app/routes.py` က path-agnostic ဖြစ်အောင် ရေးထားပါတယ်:
 > - **POST** (path ဘယ်ဟာဖြစ်ဖြစ်) → Telegram update (webhook)
 > - **GET + `User-Agent: vercel-cron/*`** → expiry cron run
+> - **REST APIs** (`/api/admin/*`, `/api/user/*`) → Blueprint-based handlers
 > - အခြား **GET** တိုင်း → `Bot is running perfectly!` (200)
 >
 > Cron ကို လက်ဖြင့် run လိုပါက:
@@ -51,26 +51,30 @@ redeem codes, expiry cron, admin reports).
 ## 📁 Project Structure
 
 ```
-index.py              # Entry shim + local runner (`python index.py`)
-api/index.py          # Vercel serverless entry (imports bot_app)
+index.py                 # Entry shim + local runner (`python index.py`)
+api/index.py             # Vercel serverless entry (imports bot_app)
 bot_app/
-├── __init__.py       # import လုပ်ရုံနဲ့ handlers + routes register ဖြစ်သည်
-├── config.py         # Env-first settings (secret များကို env မှသာ)
-├── extensions.py     # Flask app + TeleBot singleton
-├── routes.py         # /webhook, /health, /cron-check, POST /
-├── keyboards.py      # Reply + inline keyboard factories
-├── texts.py          # User-facing message builders
-├── utils.py          # Pure helpers + is_user_subscribed
-├── timeutil.py       # Myanmar time (UTC+6:30) helpers
-├── handlers/         # gate, shop, topup, wallet, redeem, keys,
-│                     # history, admin, menu (catch-all), common
-├── helpers/          # callback_guard (dedup), payment_text
-├── services/         # billing, orders, outline, notifier, ocr,
-│                     # reports, registry, states
-└── storage/          # kv.py (Upstash REST), paths.py (/tmp fallback)
-scripts/set_webhook.py  # Webhook check/set/reset manager
-tests/                  # pytest suite (network-free)
-.github/workflows/ci.yml
+├── __init__.py          # import လုပ်ရုံနဲ့ handlers + routes register ဖြစ်သည်
+├── config.py            # Env-first settings (secret များကို env မှသာ)
+├── extensions.py        # Flask app + TeleBot singleton
+├── routes.py            # /webhook, /health, /cron-check, POST /
+├── routes_admin.py      # /api/admin/* (Control Center REST API)
+├── routes_user.py       # /api/user/* (Telegram Mini App REST API)
+├── keyboards.py         # Reply + inline keyboard factories
+├── texts.py             # User-facing message builders
+├── utils.py             # Pure helpers + is_user_subscribed
+├── timeutil.py          # Myanmar time (UTC+6:30) helpers
+├── handlers/            # gate, shop, topup, wallet, redeem, keys,
+│                        # history, admin, menu (catch-all), common
+├── helpers/             # auth guards (HMAC / Admin), callback_guard, payment_text
+├── services/            # billing, orders, outline, notifier, ocr,
+│                        # points, reports, registry, states, settings
+└── storage/             # kv.py (Upstash REST), paths.py (/tmp fallback), versioning.py
+dashboard/               # Vue 3 + Naive UI Admin Control Center
+mini_app/                # Vue 3 + Tailwind CSS Customer Telegram Mini App
+scripts/                 # set_webhook, cleanup_test_data, restore_from_outline
+tests/                   # pytest suite (401 tests, network-free)
+.github/workflows/ci.yml # Automated CI (Lint, Backend Tests, Frontend Typecheck & Build)
 ```
 
 > ⚠️ Handler **import order = registration order** (`bot_app/handlers/__init__.py`).
@@ -79,7 +83,7 @@ tests/                  # pytest suite (network-free)
 
 ## 🚀 Local Development
 
-Python **3.12** (repo တွင် `.python-version` ပါဝင်သည်):
+### 1. Backend (Python 3.12)
 
 ```bash
 python -m venv .venv
@@ -98,6 +102,20 @@ python index.py --mode webhook --port 5000 --webhook-url https://<public-url>/we
 
 Options: `--mode polling|webhook` (default ကို `BOT_MODE` env ဖြင့်လည်း ထိန်းနိုင်),
 `--port` (default `PORT`, 5000), `--webhook-url`, `--remove-webhook`.
+
+### 2. Frontend (Dashboard & Mini App)
+
+```bash
+# Admin Control Center (Dashboard)
+cd dashboard
+npm install
+npm run dev               # http://localhost:5173
+
+# Customer Telegram Mini App
+cd ../mini_app
+npm install
+npm run dev               # http://localhost:3000
+```
 
 > 🛡️ **Production webhook ကို ကာကွယ်ချက်** — polling mode က Telegram webhook ကို
 > ဖျက်ရပါတယ် (မဖျက်ရင် `409 Conflict` တက်တယ်)။ ဒါကြောင့် **webhook အလုပ်လုပ်နေတဲ့
@@ -152,16 +170,24 @@ Local တွင် `KV_REST_API_URL/TOKEN` မထည့်ထားပါက sta
 > ℹ️ Webhook URL ကို bare domain (`https://app.vercel.app/`) အဖြစ်လည်း
 > ထားနိုင်သည် — `POST /` ကို webhook အဖြစ် လက်ခံထားသည်။
 
-## 🧪 Tests & Lint
+## 🧪 Tests & Quality Assurance
 
+### Backend Tests & Lint
 ```bash
-pytest -q          # 68 tests — network မသုံး (Telegram/Outline mocked)
-pyflakes index.py api/index.py bot_app/ tests/ scripts/
+pytest -q                                               # 401 tests — network မသုံး (100% passing)
+pyflakes index.py api/index.py bot_app/ tests/ scripts/ # zero warnings
 ```
 
-CI (`.github/workflows/ci.yml`) တွင် syntax check → pyflakes → pytest →
-vercel.json validation → (PR) preview deploy ပါသည်။ Tests များသည် secrets
-မလိုအပ်ဘဲ run ရသည် (tests/conftest.py မှ safe defaults ထည့်ပေးသည်)။
+### Frontend Type-Check & Builds
+```bash
+cd dashboard && npm run build                           # vue-tsc typecheck + vite build
+cd mini_app && npm run build                            # vue-tsc typecheck + standalone bundle
+```
+
+CI (`.github/workflows/ci.yml`) တွင် parallel pipelines ဖြင့် အလုပ်လုပ်ပါသည်:
+1. **Backend Job**: Syntax check → `pyflakes` linting → `pytest` (401 tests) → `vercel.json` validation
+2. **Frontend Job**: `dashboard/` (npm ci + build) → `mini_app/` (npm ci + build + standalone bundle)
+3. **Deploy Preview**: Backend နှင့် Frontend နှစ်ခုစလုံး Green ဖြစ်မှသာ Vercel Preview Deploy အလိုအလျောက် ဆက်လက် run ပါသည်။
 
 ## 🔐 Security Notes
 

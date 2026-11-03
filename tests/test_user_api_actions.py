@@ -1,7 +1,6 @@
 """Tests for Customer TMA Actions (daily claim, slip upload, key replace, history, leaderboard)."""
 
 import io
-from bot_app.services.points import get_points
 from bot_app.services.slips import load_all_slips, record_slip
 from bot_app.services.orders import save_user_purchase_record
 

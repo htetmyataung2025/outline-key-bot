@@ -1,10 +1,8 @@
 import json
-import os
 import queue
 import random
 import re
 import string
-from datetime import timedelta
 from urllib.parse import unquote
 
 from flask import Blueprint, jsonify, request, g, Response, stream_with_context
@@ -13,7 +11,7 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot_app.config import ADMIN_CHAT_IDS, PLANS, points_enabled, points_settings
 from bot_app.extensions import bot
-from bot_app.helpers.auth import authenticate_user, current_user_id, require_user_api
+from bot_app.helpers.auth import authenticate_user, current_user_id
 from bot_app.helpers.sse import consume_ticket, issue_ticket
 from bot_app.storage import versioning
 from bot_app.storage.versioning import get_data_version
@@ -363,7 +361,7 @@ def purchase_plan():
             is_giveaway=False,
             order_id=order_id,
         )
-    except Exception as e:
+    except Exception:
         vpn_key = None
 
     if not vpn_key:
@@ -483,7 +481,7 @@ def upload_topup_slip():
 
     method = (request.form.get("method") or (request.get_json(silent=True) or {}).get("method") or "kbz").strip().upper()
 
-    slip_record = record_slip(
+    record_slip(
         slip_id=slip_id,
         chat_id=uid,
         amount=amount,

@@ -1,8 +1,3 @@
-import json
-import pytest
-from bot_app.storage import versioning
-
-
 def test_user_events_ticket_flow(client, make_telegram_init_data, isolated_state):
     # 1. Missing header -> 401
     res = client.post("/api/user/events/ticket")

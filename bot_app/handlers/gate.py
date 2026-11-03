@@ -3,10 +3,7 @@ import telebot
 from telebot.types import MenuButtonDefault, WebAppInfo
 
 from bot_app.config import (
-    ADMIN_MENU_BUTTON,
     DASHBOARD_URL,
-    MINI_APP_URL,
-    MENU_BUTTON_TEXT,
     is_admin,
 )
 from bot_app.extensions import bot

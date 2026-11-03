@@ -3,7 +3,6 @@
 import os
 import re
 import sys
-import json
 import requests
 import urllib3
 urllib3.disable_warnings()
@@ -106,7 +105,7 @@ def run_restore():
 
     # Write to Upstash Redis
     all_users_list = sorted(list(all_users))
-    print(f"\n--- Restoring Data into Upstash Redis ---")
+    print("\n--- Restoring Data into Upstash Redis ---")
     print(f"Total Unique Customers: {len(all_users_list)}")
     print(f"Total Persistent Keys: {len(persistent_keys)}")
     print(f"Total User Profiles: {len(user_profiles)}")
