@@ -33,9 +33,15 @@ def test_user_api_bootstrap_new_user(client, make_telegram_init_data, isolated_s
     assert "wave" in data["payment_methods"]
 
 
-def test_user_api_bootstrap_existing_user_with_keys(client, make_telegram_init_data, isolated_state):
+def test_user_api_bootstrap_existing_user_with_keys(client, make_telegram_init_data, isolated_state, monkeypatch):
     user_id = 999333444
     init_data = make_telegram_init_data(user_id=user_id, username="active_user")
+
+    # Mock Outline usage metrics to ensure hermetic testing with zero network calls
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_usage_by_server",
+        lambda servers: {"1": {"k1": 14.5 * 1000**3}}
+    )
 
     # Seed balance
     update_user_balance(user_id, 7500)
@@ -61,6 +67,9 @@ def test_user_api_bootstrap_existing_user_with_keys(client, make_telegram_init_d
     data = resp.get_json()
 
     assert data["wallet"]["balance"] == 7500
+    assert "starter_cost" in data["wallet"]
+    assert "has_topped_up" in data["wallet"]
+    assert "can_redeem_points" in data["wallet"]
     assert len(data["keys"]) == 1
 
     key = data["keys"][0]
@@ -70,3 +79,77 @@ def test_user_api_bootstrap_existing_user_with_keys(client, make_telegram_init_d
     assert key["status"] in ("active", "expiring")
     assert key["connected"] is True
     assert key["key"].startswith("ss://")
+
+
+def test_user_api_bootstrap_keys_from_persistent_registry_and_usage(client, make_telegram_init_data, isolated_state, monkeypatch):
+    """Ensure existing customers whose keys were restored into persistent_keys_registry
+    (without an active order in sales_history) still see their keys and live usage in TMA."""
+    user_id = 777888111
+    init_data = make_telegram_init_data(user_id=user_id, username="old_outline_user")
+
+    from bot_app.services.registry import save_persistent_key
+    save_persistent_key(
+        server_num="1",
+        key_id="101",
+        name="Old User (777888111) 25.12.2026",
+        access_url="ss://cmVzdG9yZWRfa2V5QDEyNy4wLjAuMToxMDgw#OldKey",
+        limit_bytes=50 * 1000**3,
+        order_id="k_101",
+        chat_id=user_id,
+    )
+
+    # Mock Outline server metrics: 12.3 GB used
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_usage_by_server",
+        lambda servers: {"1": {"101": 12.3 * 1000**3}}
+    )
+
+    resp = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+
+    assert len(data["keys"]) == 1
+    key = data["keys"][0]
+    assert key["id"] == "k_101"
+    assert key["plan"] == "Basic"
+    assert key["quota"] == 50.0
+    assert key["used"] == 12.3
+    assert key["server"] == "Server 1"
+    assert key["key"].startswith("ss://")
+
+
+def test_user_api_local_sandbox_mode_offline(client, make_telegram_init_data, isolated_state, monkeypatch):
+    """Verify LOCAL_SANDBOX=1 works completely offline without remote DB or Outline servers."""
+    monkeypatch.setenv("LOCAL_SANDBOX", "1")
+    user_id = 777000999
+    init_data = make_telegram_init_data(user_id=user_id, username="sandbox_user")
+
+    update_user_balance(user_id, 10000)
+
+    # 1. Purchase a plan in LOCAL_SANDBOX mode without mocking Outline API
+    resp_buy = client.post(
+        "/api/user/purchase",
+        headers={"X-Telegram-Init-Data": init_data},
+        json={"plan_code": "basic", "server_id": "1"},
+    )
+    assert resp_buy.status_code == 200
+    buy_data = resp_buy.get_json()
+    assert buy_data["success"] is True
+    assert buy_data["vpn_key"].startswith("ss://")
+    assert buy_data["remaining_balance"] == 8000
+
+    # 2. Bootstrap in LOCAL_SANDBOX mode returns sandbox servers & newly minted key
+    resp_boot = client.get(
+        "/api/user/bootstrap?refresh=1",
+        headers={"X-Telegram-Init-Data": init_data},
+    )
+    assert resp_boot.status_code == 200
+    boot_data = resp_boot.get_json()
+    assert boot_data["wallet"]["balance"] == 8000
+    assert len(boot_data["servers"]) == 2
+    assert len(boot_data["keys"]) == 1
+    assert boot_data["keys"][0]["key"].startswith("ss://")
+

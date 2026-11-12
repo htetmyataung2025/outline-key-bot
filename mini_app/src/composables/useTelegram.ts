@@ -11,7 +11,7 @@ export function useTelegram(app: MiniApp) {
     const webApp = window.Telegram?.WebApp
     if (!webApp) return
     try {
-      if (app.state.tab === 'overview' && app.activeKeys.value.length > 1) {
+      if (app.state.tab === 'overview') {
         if (!swipesManaged && webApp.isVerticalSwipesEnabled !== false && webApp.disableVerticalSwipes) { webApp.disableVerticalSwipes(); swipesManaged = true }
       } else if (swipesManaged && webApp.enableVerticalSwipes) { webApp.enableVerticalSwipes(); swipesManaged = false }
     } catch { /* Older SDKs: the browser gestures still work normally. */ }
@@ -29,7 +29,6 @@ export function useTelegram(app: MiniApp) {
       const user = webApp.initDataUnsafe?.user
       if (user) app.setUser(user)
     }
-    app.bootstrap()
     window.TunnelUI = { updateKeyUsage: app.updateKeyUsage, setUser: app.setUser, setKeys: app.setKeys }
     window.addEventListener('tunnel:usage', onUsage)
     syncSwipes()

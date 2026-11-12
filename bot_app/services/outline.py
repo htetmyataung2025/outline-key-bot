@@ -1,5 +1,6 @@
 """Outline VPN server client: keys, usage, search, renew/create."""
 
+import os
 import re
 import threading
 import time
@@ -20,6 +21,10 @@ from bot_app.services.registry import (load_persistent_keys, save_persistent_key
 from bot_app.utils import bytes_to_gb, clean_ss_url, extract_chat_id_from_key_name
 
 
+def _is_local_sandbox() -> bool:
+    return os.environ.get("LOCAL_SANDBOX") == "1"
+
+
 def get_configured_servers():
     """Return the servers that are actually usable (with a non-empty API URL).
 
@@ -29,6 +34,11 @@ def get_configured_servers():
     provisioning, telemetry and the dashboard filters never see a phantom
     server that isn't configured anywhere.
     """
+    if _is_local_sandbox():
+        return [
+            {"id": "1", "name": "Server 1 (SG-1)", "api_url": "https://sandbox.local/s1"},
+            {"id": "2", "name": "Server 2 (SG-2)", "api_url": "https://sandbox.local/s2"},
+        ]
     from bot_app.services.settings import get_system_settings
     configured = get_system_settings().get("servers") or []
     return [srv for srv in configured if (srv.get("api_url") or "").strip()]
@@ -156,12 +166,12 @@ def refresh_registry_from_servers():
 # not in /access-keys, so the key list joins it on read. The map is fetched per
 # server and cached briefly: a dashboard reload within the window reuses it
 # instead of re-probing every server (the metrics call costs ~1 s each).
-USAGE_CACHE_TTL = 30.0
+USAGE_CACHE_TTL = 120.0
 _usage_cache = {}  # {server_id(str): {"ts": monotonic, "data": {key_id(str): bytes}}}
 _usage_cache_lock = threading.Lock()
 
 
-def fetch_transfer_metrics(api_url, timeout=6):
+def fetch_transfer_metrics(api_url, timeout=3):
     """Return one server's ``bytesTransferredByUserId`` map ``{key_id: bytes}``.
 
     Empty dict on any failure (unreachable server, non-200, malformed body) so
@@ -169,7 +179,7 @@ def fetch_transfer_metrics(api_url, timeout=6):
     figure is Outline's *lifetime* transfer for the key; it does not reset when
     a key is extended.
     """
-    if not api_url:
+    if not api_url or _is_local_sandbox():
         return {}
     try:
         resp = requests.get(f"{api_url}/metrics/transfer", verify=False, timeout=timeout)
@@ -189,6 +199,16 @@ def get_usage_by_server(server_ids=None, force=False):
     Unreachable servers resolve to ``{}`` and are simply omitted from usage
     display.
     """
+    if _is_local_sandbox():
+        result = {}
+        for k_data in load_persistent_keys().values():
+            sid = str(k_data.get("server", "1"))
+            kid = str(k_data.get("key_id", ""))
+            used_b = k_data.get("used_bytes", 0)
+            if kid and used_b:
+                result.setdefault(sid, {})[kid] = int(used_b)
+        return result
+
     configured = get_configured_servers()
     if server_ids is not None:
         wanted = {str(s) for s in server_ids}
@@ -423,7 +443,7 @@ def get_user_next_key_number(user_name, target_chat_id=None):
                 except:
                     pass
 
-    for api_url in iter_configured_server_urls():
+    for api_url in ([] if _is_local_sandbox() else iter_configured_server_urls()):
         try:
             res = requests.get(f"{api_url}/access-keys", verify=False, timeout=4)
             if res.status_code == 200:
@@ -558,6 +578,14 @@ def renew_or_create_unlimited_key(server_num, user_name, target_chat_id, months_
         return None, None, None, False
     today = myanmar_now()
     add_bytes = (500 * months_count) * 1000**3
+
+    if _is_local_sandbox():
+        vpn_key, key_name, expire_date = create_outline_key(
+            server_num, user_name, plan_info={"bytes": add_bytes},
+            target_chat_id=target_chat_id, months_count=months_count,
+            custom_days=custom_days, is_giveaway=False, order_id=order_id,
+        )
+        return vpn_key, key_name, expire_date, False
     
     try:
         keys_resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=8)
@@ -629,6 +657,19 @@ def create_outline_key(server_num, user_name, plan_info=None, custom_gb=None, ta
     if not api_url:
         print(f"Key Generation Error: Server {server_num} is not configured — no API URL resolved.")
         return None, None, None
+
+    if _is_local_sandbox():
+        key_id = str(int(time.time() * 1000) % 100000)
+        limit_bytes = None
+        if custom_gb:
+            limit_bytes = int(custom_gb * 1000**3)
+        elif plan_info:
+            limit_bytes = plan_info.get("bytes", 0) * months_count
+        if order_id:
+            map_key_to_order(key_name, order_id)
+        final_key = f"ss://Y2hhY2hhMjA6c2FuZGJveEtleUAxMjcuMC4wLjE6MTA4MA==#{key_name}"
+        save_persistent_key(server_num, key_id, key_name, final_key, limit_bytes, order_id, target_chat_id)
+        return final_key, key_name, expire_date
     
     try:
         res = requests.post(f"{api_url}/access-keys", verify=False, timeout=10)

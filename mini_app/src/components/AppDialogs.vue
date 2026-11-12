@@ -27,7 +27,12 @@ const activeKey = computed(() => {
 const activePlan = computed(() => {
   const dialog = state.dialog
   if (dialog && dialog.kind === 'purchase') {
-    return state.plans.find(p => p.name === dialog.plan)
+    const target = dialog.plan
+    return state.plans.find(p =>
+      p.name === target ||
+      (p.code && p.code.toLowerCase() === target.toLowerCase()) ||
+      p.name.toLowerCase().startsWith(target.toLowerCase())
+    )
   }
   return undefined
 })
@@ -174,7 +179,7 @@ const currentPaymentInfo = computed(() => {
         <div class="checkout-summary card" style="padding: 12px; margin-bottom: 14px; background: rgba(255,255,255,0.03);">
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
             <span>ရွေးချယ်ထားသော Plan:</span>
-            <b>{{ activePlan.name }} ({{ activePlan.quota }} GB)</b>
+            <b>{{ activePlan.name }} ({{ activePlan.quotaLabel || (activePlan.quota ? `${activePlan.quota} GB` : 'Unlimited') }})</b>
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
             <span>Plan ဈေးနှုန်း:</span>
@@ -186,8 +191,13 @@ const currentPaymentInfo = computed(() => {
           </div>
         </div>
 
-        <!-- Server Selector -->
-        <div style="margin-bottom: 14px;">
+        <!-- Manual Custom 5-Device Notice or Server Selector -->
+        <div v-if="activePlan.manual" class="card" style="padding: 12px; margin-bottom: 14px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); font-size: 13px;">
+          <p style="margin: 0; color: #93c5fd;">
+            💡 ဤ Plan သည် စိတ်ကြိုက်သုံး 5 Device Plan ဖြစ်သဖြင့် ဝယ်ယူပြီးပါက Admin မှ ခေတ္တအတွင်း Key အား ပြင်ဆင်၍ Telegram Chat တွင် ပို့ဆောင်ပေးပါမည်ခင်ဗျာ။
+          </p>
+        </div>
+        <div v-else style="margin-bottom: 14px;">
           <span class="form-label" style="display: block; margin-bottom: 6px;">ချိတ်ဆက်မည့် Server ရွေးရန်:</span>
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button
@@ -210,7 +220,7 @@ const currentPaymentInfo = computed(() => {
             :disabled="state.isSubmitting"
             @click="handleConfirmPurchase"
           >
-            <SvgIcon name="zap" />{{ state.isSubmitting ? 'ဝယ်ယူနေပါသည်...' : 'အတည်ပြုပြီး ဝယ်ယူမည်' }}
+            <SvgIcon name="zap" />{{ state.isSubmitting ? 'ဝယ်ယူနေပါသည်...' : (activePlan.manual ? 'အတည်ပြုပြီး မှာယူမည်' : 'အတည်ပြုပြီး ဝယ်ယူမည်') }}
           </button>
         </template>
         <!-- Insufficient balance -->

@@ -17,7 +17,7 @@ const topRows = computed(() => {
 </script>
 
 <template>
-  <section class="leaderboard card">
+  <section id="leaderboard-section" class="leaderboard leaderboard-card card">
     <div class="list-head">
       <strong><SvgIcon name="medal" />Top customers</strong>
       <button v-if="interactive && hasLiveRows" class="section-link" data-action="leaderboard" @click="openDialog({ kind: 'leaderboard' })">

@@ -107,6 +107,9 @@ export function createMiniApp() {
     streakDays: cachedBootstrap?.wallet?.streak_days ?? (cachedBootstrap?.wallet?.claimed_today ? 1 : 0),
     cooldownHours: cachedBootstrap?.wallet?.cooldown_hours || 4,
     cooldownRemaining: cachedBootstrap?.wallet?.cooldown_remaining || 0,
+    starterCost: cachedBootstrap?.wallet?.starter_cost ?? 5000,
+    hasToppedUp: Boolean(cachedBootstrap?.wallet?.has_topped_up),
+    canRedeemPoints: Boolean(cachedBootstrap?.wallet?.can_redeem_points),
     user: (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.user)
       ? memberFromUser(window.Telegram.WebApp.initDataUnsafe.user)
       : (cachedBootstrap?.user ? { id: String(cachedBootstrap.user.id), name: cachedBootstrap.user.name, initials: cachedBootstrap.user.initials || 'M' } : { id: '', name: 'Member', initials: 'M' } as Member),
@@ -175,6 +178,16 @@ export function createMiniApp() {
     }
   }
 
+  function navigateTo(tab: TabId, targetId?: string) {
+    setTab(tab)
+    if (targetId && typeof document !== 'undefined') {
+      setTimeout(() => {
+        const el = document.getElementById(targetId)
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 200)
+    }
+  }
+
   function openDialog(dialog: AppDialog) {
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
     state.dialog = dialog
@@ -202,12 +215,12 @@ export function createMiniApp() {
   let lastBootstrapTime = 0
 
   /** Hydrate live state from Backend GET /api/user/bootstrap */
-  async function bootstrap(silent = false): Promise<boolean> {
+  async function bootstrap(silent = false, force = false): Promise<boolean> {
     if (!api.hasAuth()) return false
     if (isBootstrapping) return false
 
     const now = Date.now()
-    if (silent && now - lastBootstrapTime < 5000) {
+    if (!force && silent && now - lastBootstrapTime < 5000) {
       return false
     }
 
@@ -216,7 +229,7 @@ export function createMiniApp() {
     state.isSyncing = true
     if (!silent) state.loading = true
     try {
-      const data = await api.getBootstrap()
+      const data = await api.getBootstrap(force)
       if (data.user) {
         state.user = {
           id: String(data.user.id),
@@ -231,6 +244,9 @@ export function createMiniApp() {
         state.streakDays = data.wallet.streak_days ?? (state.claimedToday ? 1 : 0)
         state.cooldownHours = data.wallet.cooldown_hours || 4
         state.cooldownRemaining = data.wallet.cooldown_remaining || 0
+        state.starterCost = data.wallet.starter_cost ?? 5000
+        state.hasToppedUp = Boolean(data.wallet.has_topped_up)
+        state.canRedeemPoints = Boolean(data.wallet.can_redeem_points)
         if (state.cooldownRemaining > 0) {
           startCountdown()
         }
@@ -251,14 +267,27 @@ export function createMiniApp() {
         state.paymentMethods = data.payment_methods
       }
       if (Array.isArray(data.plans) && data.plans.length > 0) {
-        state.plans = data.plans.map(p => ({
-          name: p.name,
-          code: p.code,
-          quota: typeof p.quota === 'string' ? parseFloat(p.quota) || 50 : p.quota,
-          description: p.description,
-          icon: (p.symbol === 'zap' ? 'zap' : (p.symbol === 'crown' ? 'crown' : 'leaf')) as IconName,
-          price: p.price,
-        }))
+        state.plans = data.plans.map(p => {
+          let quotaNum = 50
+          const quotaLabel = typeof p.quota === 'string' ? p.quota : `${p.quota} GB`
+          if (typeof p.quota === 'number') {
+            quotaNum = p.quota
+          } else if (typeof p.quota === 'string') {
+            const parsed = parseFloat(p.quota)
+            quotaNum = isNaN(parsed) ? 0 : parsed
+          }
+          return {
+            name: p.name,
+            code: p.code,
+            quota: quotaNum,
+            quotaLabel: quotaLabel,
+            manual: Boolean(p.manual),
+            months: p.months || 1,
+            description: p.description,
+            icon: (p.symbol === 'zap' ? 'zap' : (p.symbol === 'crown' ? 'crown' : 'leaf')) as IconName,
+            price: p.price,
+          }
+        })
       }
       saveCache('tma_cache_bootstrap_v1', data)
       state.isInitialLoading = false
@@ -276,29 +305,27 @@ export function createMiniApp() {
 
   /** Explicit pull-to-refresh or refresh button click */
   async function refresh(): Promise<boolean> {
+    if (state.isManualRefreshing) return false
     state.isManualRefreshing = true
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
-
-    // Stop icon rotation strictly after 700ms so it never gets stuck
-    const spinTimer = setTimeout(() => {
-      state.isManualRefreshing = false
-    }, 700)
+    const startedAt = Date.now()
 
     try {
-      const ok = await bootstrap(true)
+      const ok = await bootstrap(true, true)
       if (state.tab === 'history') {
-        fetchHistory(true)
-        fetchLeaderboard(true)
+        await Promise.all([fetchHistory(true), fetchLeaderboard(true)])
       }
       if (ok) {
         window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
+        showToast('အချက်အလက်များ အသစ်ရယူပြီးပါပြီ')
       }
       return ok
     } finally {
+      const elapsed = Date.now() - startedAt
+      const remainingSpin = Math.max(0, 350 - elapsed)
       setTimeout(() => {
-        clearTimeout(spinTimer)
         state.isManualRefreshing = false
-      }, 500)
+      }, remainingSpin)
     }
   }
 
@@ -352,7 +379,7 @@ export function createMiniApp() {
       const planCode = targetPlan?.code || planName.toLowerCase()
       const res = await api.purchasePlan(planCode, serverId)
 
-      state.walletBalance = res.remaining_balance
+      state.walletBalance = res.remaining_balance ?? res.new_balance ?? state.walletBalance
       if (res.key_details) {
         state.keys.unshift(res.key_details)
         state.selectedKeyId = res.key_details.id
@@ -363,9 +390,69 @@ export function createMiniApp() {
       if (res.key_details?.id) {
         openDialog({ kind: 'connect', keyId: res.key_details.id })
       }
+      fetchHistory(true)
     } catch (err: any) {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('error')
       showToast(err.message || 'ဝယ်ယူမှု မအောင်မြင်ပါ', 'info')
+    } finally {
+      state.isSubmitting = false
+    }
+  }
+
+  /** Redeem Starter plan with loyalty points */
+  async function redeemPoints() {
+    if (!api.hasAuth()) {
+      showToast('Demo preview တွင် Points ဖြင့် လဲယူ၍ မရသေးပါ', 'info')
+      return
+    }
+
+    state.isSubmitting = true
+    try {
+      const res = await api.redeemPoints()
+      state.points = res.new_points
+      if (res.key_details) {
+        state.keys.unshift(res.key_details)
+        state.selectedKeyId = res.key_details.id
+      }
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
+      showToast(res.message || 'Starter Plan လဲယူမှု အောင်မြင်ပါသည်!')
+      if (res.key_details?.id) {
+        openDialog({ kind: 'connect', keyId: res.key_details.id })
+      }
+      fetchHistory(true)
+    } catch (err: any) {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('error')
+      showToast(err.message || 'Points ဖြင့် လဲယူမှု မအောင်မြင်ပါ', 'info')
+    } finally {
+      state.isSubmitting = false
+    }
+  }
+
+  /** Redeem promo / gift wallet balance code */
+  async function redeemCode(code: string): Promise<boolean> {
+    const trimmed = (code || '').trim()
+    if (!trimmed) {
+      showToast('Redeem Code ထည့်သွင်းပေးပါ', 'info')
+      return false
+    }
+
+    if (!api.hasAuth()) {
+      showToast('Demo preview တွင် Redeem Code အသုံးပြု၍ မရသေးပါ', 'info')
+      return false
+    }
+
+    state.isSubmitting = true
+    try {
+      const res = await api.redeemCode(trimmed)
+      state.walletBalance = res.new_balance
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
+      showToast(res.message || `+${res.awarded_amount} MMK လက်ကျန်ငွေ ရရှိပါသည်!`)
+      bootstrap(true)
+      return true
+    } catch (err: any) {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('error')
+      showToast(err.message || 'Redeem Code အသုံးပြု၍ မရပါ', 'info')
+      return false
     } finally {
       state.isSubmitting = false
     }
@@ -574,9 +661,9 @@ export function createMiniApp() {
 
   function handleVisibilityChange() {
     if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-      bootstrap(true)
-      if (!eventSource) {
-        connectLiveSync()
+      // Only refresh on tab return if at least 30 seconds have elapsed since last sync
+      if (Date.now() - lastBootstrapTime >= 30_000) {
+        bootstrap(true)
       }
     }
   }
@@ -586,7 +673,9 @@ export function createMiniApp() {
       startCountdown()
     }
     bootstrap(true)
-    connectLiveSync()
+    if (import.meta.env.VITE_SSE_ENABLED === '1') {
+      connectLiveSync()
+    }
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityChange)
     }
@@ -616,6 +705,7 @@ export function createMiniApp() {
     amountLabel,
     showToast,
     setTab,
+    navigateTo,
     openDialog,
     closeDialog,
     setUser,
@@ -624,6 +714,8 @@ export function createMiniApp() {
     bootstrap,
     refresh,
     claimReward,
+    redeemPoints,
+    redeemCode,
     purchasePlan,
     submitTopUp,
     requestKeyReplace,

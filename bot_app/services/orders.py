@@ -54,9 +54,11 @@ def save_user_purchase_record(chat_id, order_id, plan_name, disp_gb, months_coun
 
 def get_user_combined_purchase_records(chat_id):
     from bot_app.services.registry import load_persistent_keys
+    from bot_app.utils import clean_ss_url, bytes_to_gb
     history_data = load_all_user_history()
     records = list(history_data.get(str(chat_id), []))
     known_orders = set(r.get("order_id") for r in records if r.get("order_id") and r.get("order_id") != "N/A")
+    known_keys = set(clean_ss_url(r.get("vpn_key", "")) for r in records if r.get("vpn_key") and r.get("vpn_key") != "N/A")
 
     sales = load_sales_history()
     user_sales = [s for s in sales if str(s.get("chat_id")) == str(chat_id)]
@@ -94,7 +96,67 @@ def get_user_combined_purchase_records(chat_id):
         records.append(legacy_rec)
         if s_ord != "N/A":
             known_orders.add(s_ord)
-            
+        if matched_key_link and matched_key_link != "N/A":
+            cleaned_m = clean_ss_url(matched_key_link)
+            if cleaned_m:
+                known_keys.add(cleaned_m)
+
+    # Merge any keys from persistent_registry owned by chat_id not already represented
+    for k_data in persistent_registry.values():
+        if str(k_data.get("chat_id")) != str(chat_id):
+            continue
+        access_url = (k_data.get("access_url") or "").strip()
+        if not access_url or access_url == "N/A":
+            continue
+        cleaned_url = clean_ss_url(access_url)
+        if cleaned_url and cleaned_url in known_keys:
+            continue
+        k_ord = k_data.get("order_id", "N/A")
+        if k_ord != "N/A" and k_ord in known_orders:
+            continue
+
+        limit_b = k_data.get("limit_bytes")
+        if limit_b:
+            gb_val = bytes_to_gb(limit_b)
+            disp_gb = f"{int(gb_val) if gb_val.is_integer() else gb_val} GB"
+        else:
+            disp_gb = "Unlimited"
+
+        plan_name = "Outline VPN"
+        if limit_b:
+            if gb_val <= 30:
+                plan_name = "Starter Plan"
+            elif gb_val <= 60:
+                plan_name = "Basic Plan"
+            elif gb_val <= 80:
+                plan_name = "Standard Plan"
+            elif gb_val <= 110:
+                plan_name = "Premium Plan"
+            elif gb_val <= 160:
+                plan_name = "VIP Plan"
+            elif gb_val <= 210:
+                plan_name = "Pro Plan"
+            elif gb_val <= 550:
+                plan_name = "Ultimate VIP Plan"
+
+        reg_rec = {
+            "timestamp": k_data.get("expire_date", "Recent"),
+            "order_id": k_ord if k_ord != "N/A" else f"k_{k_data.get('key_id', '')}",
+            "plan_name": plan_name,
+            "disp_gb": disp_gb,
+            "months": 1,
+            "price_str": "0 Ks",
+            "server": str(k_data.get("server", "1")),
+            "expire_date": k_data.get("expire_date", "မသိရှိပါ"),
+            "vpn_key": access_url,
+            "key_id": str(k_data.get("key_id", "")),
+        }
+        records.append(reg_rec)
+        if cleaned_url:
+            known_keys.add(cleaned_url)
+        if k_ord != "N/A":
+            known_orders.add(k_ord)
+
     return records
 
 # 🔍 OCR Space Helper Functions

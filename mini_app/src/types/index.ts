@@ -3,7 +3,7 @@ import type { IconName } from './icons'
 export type TabId = 'overview' | 'keys' | 'shop' | 'history'
 export type KeyStatus = 'active' | 'expiring' | 'expired'
 export type KeyFilter = 'all' | KeyStatus
-export type PlanName = 'Starter' | 'Basic' | 'VIP'
+export type PlanName = 'Starter' | 'Basic' | 'VIP' | string
 export type PaymentMethod = 'kbz' | 'wave'
 export type TopUpAmount = number | 'custom'
 export interface VpnKey {
@@ -20,7 +20,17 @@ export interface VpnKey {
   connected: boolean
   key: string
 }
-export interface Plan { name: PlanName; quota: number; description: string; icon: IconName; price: number | null; code?: string }
+export interface Plan {
+  name: PlanName
+  quota: number
+  description: string
+  icon: IconName
+  price: number | null
+  code?: string
+  quotaLabel?: string
+  manual?: boolean
+  months?: number
+}
 export interface TelegramUser { id: number | string; first_name?: string; last_name?: string; username?: string }
 export interface Member { name: string; id: string; initials: string }
 export interface Receipt { name: string; url: string; file: File }
@@ -82,6 +92,9 @@ export interface BootstrapData {
     streak_days: number
     cooldown_remaining: number
     cooldown_hours: number
+    starter_cost?: number
+    has_topped_up?: boolean
+    can_redeem_points?: boolean
   }
   keys: VpnKey[]
   plans: Array<{
@@ -91,6 +104,8 @@ export interface BootstrapData {
     price: number
     description: string
     symbol: string
+    manual?: boolean
+    months?: number
   }>
   servers: ServerOption[]
   payment_methods: Record<string, PaymentMethodInfo>

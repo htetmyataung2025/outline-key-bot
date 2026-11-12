@@ -18,9 +18,8 @@ const label = computed(() => ({ active: 'Active', expiring: 'Expiring', expired:
     <div v-if="entry.status === 'expired'" class="key-footnote"><span>ဤ key သက်တမ်းကုန်ဆုံးသွားပါပြီ</span><button class="section-link" @click="setTab('shop')">Plan အသစ်ဝယ်ရန်<SvgIcon name="arrow-right" /></button></div>
     <div v-else class="key-actions">
       <button class="key-action" data-action="copy" :aria-label="`Copy ${entry.server} key`" @click="copyKey(entry.key)"><SvgIcon name="copy" /><span>Copy Key</span></button>
-      <button class="key-action" data-action="connect" @click="openOutline(entry.key)"><SvgIcon name="zap" /><span>Connect</span></button>
-      <button class="key-action" data-action="outline" @click="openOutline(entry.key)"><SvgIcon name="arrow-up-right" /><span>Outline</span></button>
-      <button class="key-action" data-action="replace" @click="openDialog({ kind: 'replace', keyId: entry.id })"><SvgIcon name="refresh" /><span>Replace</span></button>
+      <button class="key-action" data-action="connect" @click="openOutline(entry.key)"><SvgIcon name="zap" /><span>Outline ချိတ်ရန်</span></button>
+      <button class="key-action" data-action="replace" @click="openDialog({ kind: 'replace', keyId: entry.id })"><SvgIcon name="refresh" /><span>Key လဲရန်</span></button>
     </div>
   </article>
 </template>

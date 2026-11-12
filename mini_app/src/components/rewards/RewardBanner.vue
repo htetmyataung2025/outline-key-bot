@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import SvgIcon from '../ui/SvgIcon.vue'
 import { useMiniApp } from '../../composables/useMiniApp'
 
-const { state, claimReward, cooldownFormatted } = useMiniApp()
+const { state, claimReward, redeemPoints, cooldownFormatted } = useMiniApp()
 
 // Real streak count from backend
 const streak = computed(() => Math.max(0, state.streakDays || (state.claimedToday ? 1 : 0)))
@@ -62,5 +62,31 @@ const claimButtonText = computed(() => {
       <SvgIcon :name="state.claimedToday ? 'clock' : 'gift'" />
       {{ claimButtonText }}
     </button>
+
+    <!-- Starter Plan Points Redemption -->
+    <div class="card" style="margin-top: 14px; padding: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-weight: 600; font-size: 13px; color: #f8fafc;">🎫 Starter Plan (25 GB / 30 ရက်)</span>
+        <span style="font-size: 12px; color: #2aefbd; font-weight: 600;">{{ state.points }} / {{ state.starterCost }} PTS</span>
+      </div>
+      <div style="width: 100%; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 999px; overflow: hidden; margin-bottom: 8px;">
+        <div
+          style="height: 100%; background: linear-gradient(90deg, #10b981, #2aefbd); border-radius: 999px; transition: width 0.3s;"
+          :style="{ width: `${Math.min(100, Math.round((state.points / (state.starterCost || 5000)) * 100))}%` }"
+        />
+      </div>
+      <p v-if="!state.hasToppedUp" style="font-size: 11px; color: #f87171; margin: 0 0 8px 0;">
+        🔒 Points ဖြင့် လဲယူရန် အနည်းဆုံး တစ်ကြိမ် ငွေဖြည့်ထားရန် လိုအပ်ပါသည်။
+      </p>
+      <button
+        class="soft-btn"
+        style="width: 100%; justify-content: center; font-size: 12px;"
+        :disabled="state.isSubmitting || state.points < state.starterCost || !state.hasToppedUp"
+        @click="redeemPoints"
+      >
+        <SvgIcon name="gift" />
+        {{ state.isSubmitting ? 'လဲယူနေပါသည်...' : 'Points ဖြင့် Starter Plan လဲယူမည်' }}
+      </button>
+    </div>
   </section>
 </template>

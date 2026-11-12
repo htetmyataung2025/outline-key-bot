@@ -75,5 +75,12 @@ This directory contains the complete technical blueprints, database schemas, API
 19. [**2026-11-03_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-03_PROGRESS.md)
    - Quality Assurance & Codebase Stabilization: Cleaned all Python lint (`pyflakes`) warnings in `bot_app`, `tests`, and `scripts`. Modernized Mini App Playwright test assertions (`mini_app/tests/mini-app.spec.ts`) to match live empty states and real-data APIs. Enhanced GitHub Actions CI with a parallel `frontend` job (Dashboard & Mini App typecheck/build). Synchronized `README.md` to reflect 401 tests and hybrid architecture. 401/401 backend tests passing (100% green).
 
+20. [**2026-11-11_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-11_PROGRESS.md)
+   - Customer Telegram Mini App Complete Audit & 7-Issue Resolution: Fixed 1-click purchase response contract (`remaining_balance`, `key_details`, manual 5-device plan workflow, bonus server-1 rule), real-time Outline usage (`used` GB) + `persistent_keys_registry` fallback, dynamic plan quota labels (`Unlimited Data`), actionable admin inline buttons on key replacement requests, Starter Plan points redemption (`POST /api/user/redeem-points`), promo/gift code redemption (`POST /api/user/redeem-code`), unified `/app/*` Vercel hosting in `vercel.json`, and Upstash token cleanup. 406/406 backend tests and 13/13 Playwright E2E tests passing.
+
+21. [**2026-11-12_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-12_PROGRESS.md)
+   - Customer Mini App Step 1–4 Stabilization: Added database-free Local Sandbox mode (`LOCAL_SANDBOX=1` & `scripts/run_local_sandbox.py`), fixed iOS/Telegram WebView input auto-zoom (`font-size: 16px`), pure Numpad (`inputmode="numeric" pattern="[0-9]*"`), and bottom-nav auto-hide on focus, replaced fake QR placeholder in `ShopView.vue` with live KBZPay/WavePay phone copy card, removed default SSE/polling overhead, fixed manual refresh throttling, added 1-click direct Top-Up slip submission, cleaned `KeyCard` to a 3-button layout, removed the fake header notification bell, and wired smooth section scrolling (`navigateTo`). 407/407 backend tests and 13/13 Playwright E2E tests passing.
+
+
 
 

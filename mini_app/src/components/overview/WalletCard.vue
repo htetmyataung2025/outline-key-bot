@@ -3,7 +3,7 @@ import SvgIcon from '../ui/SvgIcon.vue'
 import { useMiniApp } from '../../composables/useMiniApp'
 import { formatNumber } from '../../utils/format'
 
-const { state, setTab, claimReward, cooldownFormatted } = useMiniApp()
+const { state, navigateTo, claimReward, cooldownFormatted } = useMiniApp()
 </script>
 <template>
   <section class="wallet-card" aria-label="Wallet balance">
@@ -12,7 +12,7 @@ const { state, setTab, claimReward, cooldownFormatted } = useMiniApp()
     <div class="wallet-amount">{{ formatNumber(state.walletBalance) }} <span>Ks</span></div>
     <div class="wallet-meta"><SvgIcon name="sparkles" />Points balance<span class="meta-separator" /><b>{{ state.points }} Pts</b></div>
     <div class="wallet-actions">
-      <button class="primary-btn" @click="setTab('shop')"><SvgIcon name="plus" />ငွေဖြည့်မည်</button>
+      <button class="primary-btn" @click="navigateTo('shop', 'wallet-topup-card')"><SvgIcon name="plus" />ငွေဖြည့်မည်</button>
       <button
         class="soft-btn"
         data-action="claim"

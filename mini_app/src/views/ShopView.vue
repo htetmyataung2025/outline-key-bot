@@ -9,9 +9,28 @@ import { plans as defaultPlans } from '../data/demo'
 import { formatNumber } from '../utils/format'
 import type { PlanName, TopUpAmount } from '../types'
 
-const { state, amountLabel, openDialog, showPayment } = useMiniApp()
+const { state, amountLabel, openDialog, showPayment, submitTopUp, redeemCode, copyKey } = useMiniApp()
 const amounts: TopUpAmount[] = [1000, 2000, 5000, 'custom']
 const customInput = ref<HTMLInputElement | null>(null)
+const promoCodeInput = ref('')
+
+const currentPayment = computed(() => {
+  return state.paymentMethods[state.paymentMethod] || {
+    name: state.paymentMethod === 'kbz' ? 'KBZPay' : 'WavePay',
+    account_name: 'Htet Myat Aung',
+    phone: '09699970092',
+    type: 'Direct Transfer',
+  }
+})
+
+async function handleRedeemCode() {
+  const code = promoCodeInput.value.trim()
+  if (!code) return
+  const ok = await redeemCode(code)
+  if (ok) {
+    promoCodeInput.value = ''
+  }
+}
 
 const activePlans = computed(() => {
   return state.plans && state.plans.length > 0 ? state.plans : defaultPlans
@@ -36,7 +55,23 @@ async function chooseAmount(amount: TopUpAmount) {
 }
 
 function setCustomAmount(event: Event) {
-  state.customAmount = (event.target as HTMLInputElement).value
+  const input = event.target as HTMLInputElement
+  // Convert Myanmar digits (၀-၉) to ASCII (0-9) and strip non-digits
+  const normalized = input.value
+    .replace(/[၀-၉]/g, d => String(d.charCodeAt(0) - 0x1040))
+    .replace(/[^0-9]/g, '')
+  if (input.value !== normalized) {
+    input.value = normalized
+  }
+  state.customAmount = normalized
+}
+
+function onInputFocus(event: FocusEvent) {
+  const el = event.target as HTMLElement | null
+  if (!el) return
+  setTimeout(() => {
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, 150)
 }
 
 async function pay() {
@@ -71,7 +106,7 @@ async function pay() {
       <span>Plan ဈေးနှုန်းအတိုင်း သင့် Wallet မှ အလိုအလျောက် ဖြတ်တောက်ပြီး Key ထုတ်ပေးပါမည်။</span>
     </p>
 
-    <section class="topup-card card">
+    <section id="wallet-topup-card" class="topup-card card">
       <div class="section-title-row topup-heading">
         <span class="section-title"><SvgIcon name="wallet" />Wallet Top-Up</span>
         <span class="section-caption">KBZPay · WavePay</span>
@@ -95,14 +130,16 @@ async function pay() {
         id="custom-amount"
         ref="customInput"
         class="custom-amount"
-        type="number"
-        min="500"
-        max="10000000"
-        step="1"
+        type="text"
         inputmode="numeric"
+        pattern="[0-9]*"
+        autocomplete="off"
+        enterkeyhint="done"
+        maxlength="8"
         :value="state.customAmount"
         aria-label="Custom top-up amount in Ks"
         placeholder="ငွေပမာဏထည့်ပါ (Ks)"
+        @focus="onInputFocus"
         @input="setCustomAmount"
       />
 
@@ -116,7 +153,7 @@ async function pay() {
           @click="state.paymentMethod = 'kbz'"
         >
           <span class="method-logo" aria-hidden="true">K</span>
-          <span class="method-name">KBZPay<small>QR Payment</small></span>
+          <span class="method-name">KBZPay<small>{{ state.paymentMethods.kbz?.phone || '09699970092' }}</small></span>
           <SvgIcon v-if="state.paymentMethod === 'kbz'" name="check-circle" class="method-check" />
         </button>
         <button
@@ -127,30 +164,79 @@ async function pay() {
           @click="state.paymentMethod = 'wave'"
         >
           <span class="method-logo" aria-hidden="true">W</span>
-          <span class="method-name">WavePay<small>QR Payment</small></span>
+          <span class="method-name">WavePay<small>{{ state.paymentMethods.wave?.phone || '09699970092' }}</small></span>
           <SvgIcon v-if="state.paymentMethod === 'wave'" name="check-circle" class="method-check" />
         </button>
       </div>
 
       <div class="qr-preview">
-        <div class="qr-copy">
-          <strong>Payment QR ကို ကြည့်ရှုရန်</strong>
-          <span>ရွေးထားသော ပမာဏ: <b id="selected-amount-label">{{ amountLabel }} Ks</b><br />KBZPay သို့မဟုတ် WavePay သို့ တိုက်ရိုက်လွှဲနိုင်ပါသည်။</span>
+        <div class="qr-copy" style="flex: 1; min-width: 0;">
+          <strong>{{ currentPayment.name }} · {{ currentPayment.account_name }}</strong>
+          <span>
+            ဖုန်းနံပါတ်: <b style="color: #2aefbd;">{{ currentPayment.phone }}</b>
+            · ပမာဏ: <b id="selected-amount-label">{{ amountLabel }} Ks</b>
+          </span>
         </div>
-        <div class="qr-placeholder" aria-label="Illustrative QR icon">
-          <SvgIcon name="qr" />
-          <span>PAY</span>
-        </div>
+        <button
+          type="button"
+          class="soft-btn"
+          style="flex-shrink: 0; min-height: 36px; padding: 6px 10px; font-size: 11px; white-space: nowrap;"
+          @click="copyKey(currentPayment.phone)"
+        >
+          <SvgIcon name="copy" />Copy
+        </button>
       </div>
 
       <ReceiptUpload />
+      <button
+        v-if="state.receipt"
+        class="primary-btn topup-submit"
+        data-action="direct-submit-topup"
+        :disabled="state.isSubmitting"
+        @click="submitTopUp"
+      >
+        <SvgIcon name="upload" />{{ state.isSubmitting ? 'ပေးပို့နေပါသည်...' : 'ငွေလွှဲပြေစာ တိုက်ရိုက်ပေးပို့မည်' }}
+      </button>
       <button class="soft-btn topup-submit" data-action="show-payment" @click="pay">
-        <SvgIcon name="qr" />QR ကြည့်ရန် / ငွေလွှဲရန်<SvgIcon name="arrow-right" />
+        <SvgIcon :name="state.receipt ? 'info' : 'upload'" />{{ state.receipt ? 'ငွေလွှဲအချက်အလက် အသေးစိတ်ကြည့်ရန်' : 'ငွေလွှဲအချက်အလက်နှင့် ပြေစာပေးပို့ရန်' }}<SvgIcon name="arrow-right" />
       </button>
       <p class="small-hint">
         <SvgIcon name="shield" />
         <span>ငွေလွှဲပြေစာ Screenshot တင်ပြီးပါက စနစ်မှ အလိုအလျောက် စစ်ဆေးအတည်ပြုပေးပါမည်။</span>
       </p>
+    </section>
+
+    <!-- Redeem Promo / Gift Code Section -->
+    <section id="promo-redeem-card" class="card" style="margin-top: 14px; padding: 14px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px;">
+      <div class="section-title-row" style="margin-bottom: 8px;">
+        <span class="section-title" style="font-size: 14px;"><SvgIcon name="gift" />Redeem Code အသုံးပြုရန်</span>
+      </div>
+      <p style="font-size: 12px; color: #94a3b8; margin: 0 0 10px 0;">
+        Promo Code (သို့) လက်ဆောင်ကုဒ် ရှိပါက ဤနေရာတွင် ထည့်သွင်းပြီး Wallet လက်ကျန်ငွေ ရယူနိုင်ပါသည်။
+      </p>
+      <div style="display: flex; gap: 8px; min-width: 0;">
+        <input
+          v-model="promoCodeInput"
+          type="text"
+          class="custom-amount"
+          style="margin-top: 0; flex: 1; min-width: 0; text-transform: uppercase;"
+          placeholder="CODE ထည့်ပါ (ဥပမာ- GIFT1000)"
+          autocomplete="off"
+          autocapitalize="characters"
+          enterkeyhint="done"
+          :disabled="state.isSubmitting"
+          @focus="onInputFocus"
+          @keyup.enter="handleRedeemCode"
+        />
+        <button
+          class="primary-btn"
+          style="padding: 0 14px; white-space: nowrap; flex-shrink: 0;"
+          :disabled="state.isSubmitting || !promoCodeInput.trim()"
+          @click="handleRedeemCode"
+        >
+          <SvgIcon name="zap" />{{ state.isSubmitting ? 'စစ်ဆေးနေ...' : 'ရယူမည်' }}
+        </button>
+      </div>
     </section>
   </div>
 </template>

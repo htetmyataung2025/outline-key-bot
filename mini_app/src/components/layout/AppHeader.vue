@@ -6,7 +6,7 @@ defineProps<{
   user: Member
   loading?: boolean
 }>()
-const emit = defineEmits<{ notifications: []; profile: []; refresh: [] }>()
+const emit = defineEmits<{ profile: []; refresh: [] }>()
 </script>
 
 <template>
@@ -27,10 +27,6 @@ const emit = defineEmits<{ notifications: []; profile: []; refresh: [] }>()
         @click="emit('refresh')"
       >
         <SvgIcon name="refresh" />
-      </button>
-      <button class="icon-button" aria-label="Notifications" @click="emit('notifications')">
-        <SvgIcon name="bell" />
-        <span class="online-dot" aria-hidden="true" />
       </button>
       <button class="icon-button profile-button" aria-label="Profile" @click="emit('profile')">
         <SvgIcon name="user" />

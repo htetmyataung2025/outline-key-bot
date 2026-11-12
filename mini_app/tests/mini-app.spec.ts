@@ -34,8 +34,10 @@ test.afterEach(async ({ page }) => {
 })
 
 test('honest empty state renders when fresh; stacked cards appear when keys are present', async ({ page }) => {
-  // 1. Fresh state without keys renders honest empty state
+  // 1. Fresh state without keys renders honest empty state & clean 2-button header
   await expect(page.locator('#telegram-name')).toHaveText('Member')
+  await expect(page.locator('.top-actions .icon-button')).toHaveCount(2)
+  await expect(page.locator('[aria-label="Notifications"]')).toHaveCount(0)
   await expect(page.locator('.snapshot-section .empty-state')).toBeVisible()
   await expect(page.locator('.snapshot-section .empty-state')).toContainText('Active ဖြစ်နေသော Key မရှိသေးပါ')
 
@@ -145,6 +147,7 @@ test('all key filters and replace action dialog work in KeysView', async ({ page
   await injectTestKeys(page)
   await tab(page, 'keys')
   await expect(page.locator('.key-card')).toHaveCount(3)
+  await expect(page.locator('.key-card').first().locator('.key-action')).toHaveCount(3)
   for (const [filter, count] of [['active', 2], ['expiring', 1], ['all', 3]] as const) {
     await page.locator(`[data-filter="${filter}"]`).click()
     await expect(page.locator('.key-card')).toHaveCount(count)
@@ -156,10 +159,18 @@ test('all key filters and replace action dialog work in KeysView', async ({ page
 
 test('custom top-up, payment method and receipt survive tab switches; min amount guarded', async ({ page }) => {
   await tab(page, 'shop')
+  await expect(page.locator('#wallet-topup-card')).toBeVisible()
+  await expect(page.locator('[data-action="direct-submit-topup"]')).toHaveCount(0)
   await page.locator('.plan-card[data-plan="VIP"]').click()
   await expect(page.locator('.plan-card.selected')).toHaveAttribute('data-plan', 'VIP')
   await page.locator('[data-amount="custom"]').click()
-  await page.locator('#custom-amount').fill('3456')
+  const customFontSize = await page.locator('#custom-amount').evaluate(el => parseFloat(getComputedStyle(el).fontSize))
+  expect(customFontSize).toBeGreaterThanOrEqual(16)
+  await expect(page.locator('#custom-amount')).toHaveAttribute('inputmode', 'numeric')
+  await expect(page.locator('#custom-amount')).toHaveAttribute('pattern', '[0-9]*')
+  await expect(page.locator('.bottom-nav')).toBeHidden()
+  await page.locator('#custom-amount').fill('abc၃၄၅၆!')
+  await expect(page.locator('#custom-amount')).toHaveValue('3456')
   await page.locator('[data-method="wave"]').click()
   await page.locator('#receipt-file').setInputFiles({
     name: 'receipt.png',
@@ -167,6 +178,7 @@ test('custom top-up, payment method and receipt survive tab switches; min amount
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jK1sAAAAASUVORK5CYII=', 'base64'),
   })
   await expect(page.locator('.upload-text strong')).toHaveText('receipt.png')
+  await expect(page.locator('[data-action="direct-submit-topup"]')).toBeVisible()
   await page.locator('[data-action="show-payment"]').click()
   await expect(page.locator('#modal-title')).toHaveText('WavePay · 3,456 Ks')
   await page.keyboard.press('Escape')
