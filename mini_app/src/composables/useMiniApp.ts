@@ -490,9 +490,19 @@ export function createMiniApp() {
       const res = await api.uploadSlip(state.receipt.file, amount, state.paymentMethod)
       state.receipt = null
       closeDialog()
+      state.history.slips = [
+        {
+          slip_id: res.slip_id || 'NEW',
+          amount: res.amount ?? amount,
+          method: (res.method || state.paymentMethod).toUpperCase(),
+          status: (res.status || 'PENDING').toUpperCase(),
+          submitted_at: res.submitted_at || 'ယခုလေးတင်',
+        },
+        ...(state.history.slips || []),
+      ]
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')
       showToast(res.message || 'ငွေလွှဲပြေစာ ပေးပို့ပြီးပါပြီ။ မကြာမီ စစ်ဆေးအတည်ပြုပေးပါမည်။')
-      fetchHistory()
+      fetchHistory(true)
       return true
     } catch (err: any) {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('error')

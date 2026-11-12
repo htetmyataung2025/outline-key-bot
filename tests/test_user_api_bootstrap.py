@@ -153,3 +153,25 @@ def test_user_api_local_sandbox_mode_offline(client, make_telegram_init_data, is
     assert len(boot_data["keys"]) == 1
     assert boot_data["keys"][0]["key"].startswith("ss://")
 
+
+def test_user_api_bootstrap_dynamic_payment_phones(client, make_telegram_init_data, isolated_state):
+    """Verify Admin Settings payment_phones dynamically sync into Mini App bootstrap."""
+    from bot_app.services import settings as settings_svc
+
+    settings_svc.invalidate_settings_cache(reset_fallback=True)
+    settings_svc.save_system_settings(
+        {"payment_phones": ["09777111222", "09999333444"]},
+        updated_by="Admin",
+    )
+
+    init_data = make_telegram_init_data(user_id=888222333, username="phone_sync_user")
+    resp = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": init_data},
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["payment_methods"]["kbz"]["phone"] == "09777111222"
+    assert data["payment_methods"]["wave"]["phone"] == "09999333444"
+
+

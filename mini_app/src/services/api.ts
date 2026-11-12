@@ -142,6 +142,8 @@ export const api = {
     slip_id: string
     status: string
     amount: number
+    method?: string
+    submitted_at?: string
     message: string
   }> {
     const formData = new FormData()

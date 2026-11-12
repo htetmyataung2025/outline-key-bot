@@ -1,21 +1,26 @@
 """Payment instruction text (pure string builder)."""
 
+from bot_app.config import MY_PAYMENT_PHONES
+
 
 def get_payment_instruction_text(amt):
+    phones = [str(p).strip() for p in MY_PAYMENT_PHONES if str(p).strip()]
+    primary_phone = phones[0] if len(phones) >= 1 else "09699970092"
+    wave_phone = phones[1] if len(phones) >= 2 else primary_phone
     return (
         f"✅ <b>Wallet ထဲသို့ ငွေဖြည့်သွင်းရန်</b>\n"
         f"💵 ဖြည့်သွင်းမည့် ပမာဏ: <b>{amt:,} Ks</b>\n\n"
         f"━━━━━━━━━━━━━━━\n"
         f"💰 <b>ငွေလွှဲရမည့် အကောင့်အချက်အလက်များ:</b>\n\n"
-        f"📱 <b>KBZ Pay</b> - <code>09699970092</code>\n"
+        f"📱 <b>KBZ Pay</b> - <code>{primary_phone}</code>\n"
         f"👤 Htet Myat Aung\n\n"
-        f"📱 <b>Wave Pay</b> - <code>09699970092</code>\n"
+        f"📱 <b>Wave Pay</b> - <code>{wave_phone}</code>\n"
         f"👤 Htet Myat Aung\n\n"
-        f"📱 <b>AYA Pay</b> - <code>09699970092</code>\n"
+        f"📱 <b>AYA Pay</b> - <code>{primary_phone}</code>\n"
         f"👤 Htet Myat Aung\n\n"
-        f"📱 <b>Uab Pay</b> - <code>09699970092</code>\n"
+        f"📱 <b>Uab Pay</b> - <code>{primary_phone}</code>\n"
         f"👤 Htet Myat Aung\n\n"
-        f"📱 <b>CB Pay</b> - <code>09699970092</code>\n"
+        f"📱 <b>CB Pay</b> - <code>{primary_phone}</code>\n"
         f"👤 Htet Myat Aung\n\n"
         f"━━━━━━━━━━━━━━━\n\n"
         f"👉 အထက်ပါ အကောင့်တစ်ခုခုသို့ <b>{amt:,} Ks</b> တိတိကျကျ လွှဲပေးပါခင်ဗျာ။\n\n"

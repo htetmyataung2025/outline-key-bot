@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, request, g, Response, stream_with_context
 from werkzeug.utils import secure_filename
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot_app.config import ADMIN_CHAT_IDS, PLANS, points_enabled, points_settings
+from bot_app.config import ADMIN_CHAT_IDS, MY_PAYMENT_PHONES, PLANS, points_enabled, points_settings
 from bot_app.extensions import bot
 from bot_app.helpers.auth import authenticate_user, current_user_id
 from bot_app.helpers.sse import consume_ticket, issue_ticket
@@ -249,18 +249,22 @@ def get_bootstrap():
             "flag": "🇸🇬",
         })
 
-    # Payment Methods
+    # Payment Methods (dynamic from Admin Control Center Settings -> fallback to baseline)
+    configured_phones = [str(p).strip() for p in MY_PAYMENT_PHONES if str(p).strip()]
+    kbz_phone = configured_phones[0] if len(configured_phones) >= 1 else "09699970092"
+    wave_phone = configured_phones[1] if len(configured_phones) >= 2 else kbz_phone
+
     payment_methods = {
         "kbz": {
             "name": "KBZPay",
             "account_name": "Htet Myat Aung",
-            "phone": "09699970092",
+            "phone": kbz_phone,
             "type": "QR / Direct Transfer"
         },
         "wave": {
             "name": "WavePay",
             "account_name": "Htet Myat Aung",
-            "phone": "09699970092",
+            "phone": wave_phone,
             "type": "QR / Direct Transfer"
         }
     }
@@ -665,7 +669,7 @@ def upload_topup_slip():
 
     method = (request.form.get("method") or (request.get_json(silent=True) or {}).get("method") or "kbz").strip().upper()
 
-    record_slip(
+    slip_record = record_slip(
         slip_id=slip_id,
         chat_id=uid,
         amount=amount,
@@ -677,12 +681,26 @@ def upload_topup_slip():
         method=method,
     )
 
+    # Notify customer in Telegram chat so they have a receipt ID record even after closing Mini App
+    user_reply = (
+        f"💌 <b>ငွေလွှဲပြေစာအား လက်ခံရရှိပါသည်ခင်ဗျာ။ (Mini App)</b>\n\n"
+        f"🧾 <b>Top-Up ID:</b> <code>{slip_id}</code>\n"
+        f"💳 <b>နည်းလမ်း:</b> {method}\n"
+        f"💵 <b>ငွေပမာဏ:</b> {amount:,} MMK\n\n"
+        f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
+    )
+    try:
+        bot.send_message(uid, user_reply, parse_mode="HTML")
+    except Exception:
+        pass
+
     return jsonify({
         "success": True,
         "slip_id": slip_id,
         "status": "PENDING",
         "amount": amount,
         "method": method,
+        "submitted_at": slip_record.get("created_at", "Recent"),
         "message": "ပြေစာ လက်ခံရရှိပြီးဖြစ်ပါသည်ခင်ဗျာ။ Admin မှ မကြာမီ စစ်ဆေးအတည်ပြုပေးပါမည်။",
     })
 
@@ -765,6 +783,20 @@ def replace_key(key_id):
             )
         except Exception:
             pass
+
+    # Notify customer in Telegram chat
+    try:
+        bot.send_message(
+            uid,
+            f"♻️ <b>Key အသစ်လဲလှယ်ရန် တောင်းဆိုမှု ပို့ဆောင်ပြီးပါပြီခင်ဗျာ။ (Mini App)</b>\n\n"
+            f"🧾 <b>Order ID:</b> <code>{matched_rec.get('order_id')}</code>\n"
+            f"📡 <b>လက်ရှိ Server:</b> Server {server_num}\n"
+            f"⏰ <b>သက်တမ်းကုန်ရက်:</b> {exp_date}\n\n"
+            f"<i>Admin မှ စစ်ဆေးပြီး Key အသစ်အား မကြာမီ ပေးပို့ပေးပါမည်ခင်ဗျာ။ 🙏</i>",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
 
     return jsonify({
         "success": True,

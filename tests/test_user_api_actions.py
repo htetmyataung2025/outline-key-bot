@@ -136,6 +136,13 @@ def test_user_api_topup_slip_upload(client, make_telegram_init_data, isolated_st
     assert any(cb.startswith(f"approve_topup_{user_id}_5000_{data['slip_id']}") for cb in button_callbacks)
     assert any(cb == f"reject_topup_{data['slip_id']}" for cb in button_callbacks)
 
+    # Verify customer also received a Telegram receipt confirmation message
+    customer_receipt_msgs = [
+        msg for cid, msg in mock_bot.calls["send_message"]
+        if str(cid) == str(user_id) and data["slip_id"] in msg
+    ]
+    assert len(customer_receipt_msgs) == 1
+
     # Test Telegram-side Approve: Admin taps the Approve inline button
     from bot_app.handlers.topup import handle_approve_topup
     from types import SimpleNamespace
@@ -192,6 +199,13 @@ def test_user_api_key_replace(client, make_telegram_init_data, isolated_state, m
     # Assert admin received replacement request message with server options
     admin_calls = [msg for chat_id, msg in mock_bot.calls["send_message"] if "KEY REPLACEMENT REQUEST" in msg]
     assert len(admin_calls) >= 1
+
+    # Assert customer also received replacement confirmation in Telegram chat
+    customer_calls = [
+        msg for cid, msg in mock_bot.calls["send_message"]
+        if str(cid) == str(user_id) and "#ORD-REPL99" in msg
+    ]
+    assert len(customer_calls) == 1
 
 
 def test_user_api_redeem_points_success_and_failures(client, make_telegram_init_data, isolated_state, monkeypatch):
