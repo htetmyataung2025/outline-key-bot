@@ -72,6 +72,29 @@ def auth_user():
 
 
 
+_SERVER_REGION_RULES: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
+    (("tokyo", "jp", "japan"), "Tokyo", "JP", "🇯🇵"),
+    (("frankfurt", "germany", "de"), "Frankfurt", "DE", "🇩🇪"),
+    (("hong kong", "hk"), "Hong Kong", "HK", "🇭🇰"),
+    (("united states", "usa", "us"), "United States", "US", "🇺🇸"),
+    (("london", "uk", "gb"), "London", "GB", "🇬🇧"),
+    (("singapore", "sg"), "Singapore", "SG", "🇸🇬"),
+)
+
+
+def _resolve_server_meta(server_id: str) -> tuple[str, str, str, str]:
+    """Derive (display_name, location, country, flag) from configured server name."""
+    sid = str(server_id or "1").strip()
+    raw_name = get_server_display_name(sid)
+    display_name = sid if (sid.lower().startswith("server ") and raw_name == f"Server {sid}") else raw_name
+    lowered = display_name.lower()
+    tokens = set(re.findall(r"[a-z]+", lowered))
+    for keywords, location, country, flag in _SERVER_REGION_RULES:
+        if any((" " in kw and kw in lowered) or kw in tokens for kw in keywords):
+            return display_name, location, country, flag
+    return display_name, "Singapore", "SG", "🇸🇬"
+
+
 def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_to_key: dict = None) -> dict:
     vpn_key = rec.get("vpn_key", "")
     server_num = str(rec.get("server", "1"))
@@ -113,14 +136,8 @@ def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_
             canonical_plan = p
             break
 
-    location = "Singapore"
-    country = "SG"
-    if "tokyo" in server_num.lower() or server_num == "2":
-        location = "Tokyo"
-        country = "JP"
-    elif "frankfurt" in server_num.lower() or server_num == "4":
-        location = "Frankfurt"
-        country = "DE"
+    _srv_name, location, country, _flag = _resolve_server_meta(server_num)
+    server_label = server_num if server_num.lower().startswith("server ") else f"Server {server_num}"
 
     used_gb = 0.0
     if usage_by_server and vpn_key:
@@ -136,7 +153,7 @@ def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_
 
     return {
         "id": order_id if order_id and order_id != "N/A" else f"k_{idx}",
-        "server": f"Server {server_num}",
+        "server": server_label,
         "location": location,
         "country": country,
         "plan": canonical_plan,
@@ -241,12 +258,13 @@ def get_bootstrap():
     servers_list = []
     for srv in configured_servers:
         sid = str(srv.get("id"))
+        srv_name, srv_location, srv_country, srv_flag = _resolve_server_meta(sid)
         servers_list.append({
             "id": sid,
-            "name": get_server_display_name(sid),
-            "location": "Singapore",
-            "country": "SG",
-            "flag": "🇸🇬",
+            "name": srv_name,
+            "location": srv_location,
+            "country": srv_country,
+            "flag": srv_flag,
         })
 
     # Payment Methods (dynamic from Admin Control Center Settings -> fallback to baseline)

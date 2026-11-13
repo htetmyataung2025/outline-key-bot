@@ -550,7 +550,7 @@ button:active:not(:disabled) { transform: scale(.97); }
 .pull-refresh-inner { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: #94a3b8; background: rgba(255, 255, 255, 0.05); padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(8px); }
 .pull-refresh-icon { width: 14px; height: 14px; transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1); }
 .pull-refresh-icon.is-ready { transform: rotate(180deg); color: #2aefbd; }
-.pull-refresh-icon.is-spinning, .icon-button.is-spinning svg, .is-spinning { animation: spin-refresh 0.8s linear infinite; }
+.pull-refresh-icon.is-spinning, .icon-button.is-spinning svg { animation: spin-refresh 0.8s linear infinite; }
 @keyframes spin-refresh { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* Skeleton Loading Card & Shimmer */

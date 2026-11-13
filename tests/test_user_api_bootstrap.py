@@ -175,3 +175,73 @@ def test_user_api_bootstrap_dynamic_payment_phones(client, make_telegram_init_da
     assert data["payment_methods"]["wave"]["phone"] == "09999333444"
 
 
+def test_user_api_bootstrap_server_locations_follow_settings_not_hardcoded_ids(
+    client, make_telegram_init_data, isolated_state, monkeypatch
+):
+    """Server 2/4 must derive location/country from real Settings server names, not hardcoded IDs."""
+    from bot_app.services import settings as settings_svc
+
+    settings_svc.invalidate_settings_cache(reset_fallback=True)
+    settings_svc.save_system_settings(
+        {
+            "servers": [
+                {"id": 2, "name": "Server 2 (SG-2)", "api_url": "https://s2.example.com/key"},
+                {"id": 4, "name": "Server 4 (Tokyo)", "api_url": "https://s4.example.com/key"},
+            ]
+        },
+        updated_by="Admin",
+    )
+
+    monkeypatch.setattr("bot_app.routes_user.get_usage_by_server", lambda servers: {})
+
+    user_id = 888444555
+    save_user_purchase_record(
+        chat_id=user_id,
+        order_id="#ORD-SG2",
+        plan_name="Basic Plan",
+        disp_gb="50 GB",
+        months_count=1,
+        price_str="2,000 Ks",
+        server_num="2",
+        expire_date="25.12.2026",
+        vpn_key="ss://Y2hhY2hhMjA6c2cyQDEyNy4wLjAuMToxMDgw#SG2",
+    )
+    save_user_purchase_record(
+        chat_id=user_id,
+        order_id="#ORD-JP4",
+        plan_name="VIP Plan",
+        disp_gb="150 GB",
+        months_count=1,
+        price_str="5,000 Ks",
+        server_num="4",
+        expire_date="25.12.2026",
+        vpn_key="ss://Y2hhY2hhMjA6anA0QDEyNy4wLjAuMToxMDgw#JP4",
+    )
+
+    init_data = make_telegram_init_data(user_id=user_id, username="real_srv_user")
+    resp = client.get("/api/user/bootstrap", headers={"X-Telegram-Init-Data": init_data})
+    assert resp.status_code == 200
+    data = resp.get_json()
+
+    servers_by_id = {s["id"]: s for s in data["servers"]}
+    assert servers_by_id["2"]["name"] == "Server 2 (SG-2)"
+    assert servers_by_id["2"]["location"] == "Singapore"
+    assert servers_by_id["2"]["country"] == "SG"
+    assert servers_by_id["2"]["flag"] == "🇸🇬"
+
+    assert servers_by_id["4"]["name"] == "Server 4 (Tokyo)"
+    assert servers_by_id["4"]["location"] == "Tokyo"
+    assert servers_by_id["4"]["country"] == "JP"
+    assert servers_by_id["4"]["flag"] == "🇯🇵"
+
+    keys_by_id = {k["id"]: k for k in data["keys"]}
+    assert keys_by_id["#ORD-SG2"]["server"] == "Server 2"
+    assert keys_by_id["#ORD-SG2"]["location"] == "Singapore"
+    assert keys_by_id["#ORD-SG2"]["country"] == "SG"
+
+    assert keys_by_id["#ORD-JP4"]["server"] == "Server 4"
+    assert keys_by_id["#ORD-JP4"]["location"] == "Tokyo"
+    assert keys_by_id["#ORD-JP4"]["country"] == "JP"
+
+
+
