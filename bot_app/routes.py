@@ -157,12 +157,13 @@ def _diag_payload():
 
 
 from bot_app.routes_admin import admin_bp
+from bot_app.routes_app import app_bp
 from bot_app.routes_user import user_bp
 
 # Register Admin and Customer REST API Blueprints
 app.register_blueprint(admin_bp)
 app.register_blueprint(user_bp)
-
+app.register_blueprint(app_bp)
 
 # ── One-tap key import landing page (/go/<token>) ───────────────────
 # Telegram URL buttons reject custom schemes (ss://), so the bot hands out
