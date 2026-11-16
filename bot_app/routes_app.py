@@ -1,0 +1,418 @@
+"""Public API for the H&E VPN Android app (``/api/app/*``).
+
+Auth model — possession of the key IS the credential
+----------------------------------------------------
+The ``ss://`` access key itself is a bearer secret: only the customer who
+bought the key holds its password. ``POST /api/app/key-detail`` therefore
+needs **no Telegram login** — it looks the key up by the password inside
+the submitted access key and returns *only that one key's* plan data.
+No admin data, no other customers' keys and no credentials are ever
+returned, and the access URL / password is never echoed back.
+
+Data sources (live data is Upstash Redis KV, NOT Supabase — see
+``bot_app/storage/kv.py`` and ``bot_app/services/registry.py``):
+- ``persistent_keys_registry`` — one entry per Outline key:
+  ``{server, key_id, name, access_url (full ss://), limit_bytes,
+  expire_date ("DD.MM.YYYY", parsed from the key name), order_id,
+  chat_id}``. The Outline key name packs ``"<label> (<chat_id>)
+  DD.MM.YYYY"``.
+- Per-key *lifetime* usage comes live from the Outline server
+  ``/metrics/transfer`` endpoint via ``get_usage_by_server()``
+  (30 s cache); an unreachable server yields ``used_bytes: null``
+  rather than a fabricated 0.
+- Plans come from ``bot_app.config.PLANS`` (dynamic Settings store,
+  hardcoded defaults as fallback).
+
+Rate limiting: fixed-window per client IP (Redis INCR when configured,
+in-memory fallback otherwise), following ``bot_app/helpers/rate_limit.py``.
+"""
+
+import base64
+import binascii
+import hashlib
+import re
+import threading
+import time
+from datetime import datetime
+
+from flask import Blueprint, jsonify, request
+
+from bot_app.config import PLANS
+from bot_app.helpers.rate_limit import client_ip_from_headers
+from bot_app.services.outline import (
+    _parse_expiry_from_name,
+    get_server_display_name,
+    get_usage_by_server,
+)
+from bot_app.services.registry import clean_key_label, load_persistent_keys
+from bot_app.storage.kv import redis_increment_with_expiry
+from bot_app.timeutil import myanmar_now
+
+app_bp = Blueprint("app_bp", __name__, url_prefix="/api/app")
+
+# --- rate limiting (per client IP, fixed window) ---------------------------
+PLANS_RATE_LIMIT = 60      # requests / minute / IP
+KEY_DETAIL_RATE_LIMIT = 30  # requests / minute / IP
+_RATE_WINDOW_S = 60
+
+_memory_rl_lock = threading.Lock()
+_memory_rl: dict = {}
+
+
+def _rate_limited(bucket: str, limit: int) -> bool:
+    """True when the caller exceeded ``limit`` requests in the window."""
+    key = f"app_api_rl:{bucket}"
+    count = redis_increment_with_expiry(key, _RATE_WINDOW_S)
+    if count is None:
+        now = time.time()
+        with _memory_rl_lock:
+            hits, expires_at = _memory_rl.get(key, (0, 0.0))
+            if now >= expires_at:
+                hits, expires_at = 0, now + _RATE_WINDOW_S
+            hits += 1
+            _memory_rl[key] = (hits, expires_at)
+        count = hits
+    return count > limit
+
+
+def _client_bucket(endpoint: str) -> str:
+    ip = client_ip_from_headers(request.headers)
+    digest = hashlib.sha256(ip.encode("utf-8")).hexdigest()[:32]
+    return f"{endpoint}:{digest}"
+
+
+def _rate_limit_response():
+    return jsonify({
+        "error": "rate_limited",
+        "message": "Too many requests — please wait a minute and try again.",
+    }), 429
+
+
+# --- ss:// parsing ----------------------------------------------------------
+def _b64url_decode(raw: str):
+    """Base64url-decode with missing padding tolerated; None on failure."""
+    try:
+        padded = raw + "=" * (-len(raw) % 4)
+        return base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return None
+
+
+def parse_ss_key(access_key: str):
+    """Parse an Outline ``ss://`` access key.
+
+    Accepts every form the Outline client produces::
+
+        ss://<base64(method:password@host:port)>[#tag]
+        ss://<base64(method:password)>@host:port[#tag]
+        ss://method:password@host:port[#tag]
+
+    Returns ``{"method", "password", "host", "port", "tag"}`` or ``None``
+    when the key is not a recognisable ``ss://`` URL. The password is
+    returned only so the caller can match it against the registry — it is
+    never written to a response.
+    """
+    if not access_key or not isinstance(access_key, str):
+        return None
+    raw = access_key.strip()
+    if not raw.startswith("ss://"):
+        return None
+    rest = raw[len("ss://"):]
+    tag = ""
+    if "#" in rest:
+        rest, tag = rest.split("#", 1)
+    if "?" in rest:
+        rest = rest.split("?", 1)[0]
+    if not rest:
+        return None
+
+    userinfo = None
+    hostport = None
+    if "@" in rest:
+        userinfo, hostport = rest.rsplit("@", 1)
+    else:
+        decoded = _b64url_decode(rest)
+        if decoded is None or "@" not in decoded:
+            return None
+        userinfo, hostport = decoded.rsplit("@", 1)
+
+    if userinfo is None or hostport is None:
+        return None
+    if ":" in userinfo:
+        method, password = userinfo.split(":", 1)
+    else:
+        decoded = _b64url_decode(userinfo)
+        if decoded is None or ":" not in decoded:
+            return None
+        method, password = decoded.split(":", 1)
+    if not password:
+        return None
+
+    host = hostport.strip()
+    port = None
+    if host.startswith("[") and "]" in host:  # [ipv6]:port
+        host, _, tail = host[1:].partition("]")
+        tail = tail.lstrip(":")
+        port = int(tail) if tail.isdigit() else None
+    elif ":" in host:
+        host, _, tail = host.rpartition(":")
+        port = int(tail) if tail.isdigit() else None
+    host = host.strip().lower()
+    if not host:
+        return None
+    return {
+        "method": method or "",
+        "password": password,
+        "host": host,
+        "port": port,
+        "tag": tag,
+    }
+
+
+# --- registry lookup ---------------------------------------------------------
+def _entry_matches_password(entry: dict, password: str, host: str | None) -> bool:
+    """True when a registry entry is the key carrying ``password``.
+
+    Registry ``access_url`` values are full ``ss://`` URLs, so the same
+    parser is applied to them. Synthesised history rows (``access_url``
+    ``"N/A"``) never match.
+    """
+    parsed = parse_ss_key(str(entry.get("access_url") or ""))
+    if parsed is None:
+        return False
+    if parsed["password"] != password:
+        return False
+    if host and parsed["host"] and parsed["host"] != host:
+        return False
+    return True
+
+
+def _find_key_by_password(password: str, host: str | None):
+    for entry in load_persistent_keys().values():
+        if _entry_matches_password(entry, password, host):
+            return entry
+    return None
+
+
+def _find_key_by_owner_and_name(owner_uid: str, key_name: str):
+    """Fallback lookup: owner's keys, matched by display name.
+
+    Only used when the caller supplies ``telegram_id`` + ``key_name``
+    instead of an access key (e.g. a customer who lost the link but
+    remembers the plan name). Matching is on the cleaned label so the
+    packed ``(chat_id)`` / expiry suffix in the raw name is ignored.
+    """
+    wanted = (key_name or "").strip().lower()
+    if not wanted:
+        return None
+    for entry in load_persistent_keys().values():
+        if str(entry.get("chat_id") or "").strip() != str(owner_uid).strip():
+            continue
+        if clean_key_label(str(entry.get("name") or "")).lower() == wanted:
+            return entry
+    return None
+
+
+# --- plan detail assembly ------------------------------------------------------
+def _parse_registry_expiry(entry: dict):
+    """Expiry ``datetime`` from the registry's ``expire_date`` (DD.MM.YYYY),
+    falling back to the trailing date packed in the Outline key name."""
+    raw = str(entry.get("expire_date") or "").strip()
+    for fmt in ("%d.%m.%Y", "%d.%m.%y"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return _parse_expiry_from_name(str(entry.get("name") or ""))
+
+
+def build_key_detail(entry: dict, used_bytes):
+    """Shape one registry entry (+ live usage) into the public payload.
+
+    ``used_bytes`` may be ``None`` (Outline server unreachable) — the
+    response then says so instead of pretending 0 were used.
+    """
+    server = str(entry.get("server") or "1")
+    key_id = str(entry.get("key_id") or "")
+    raw_name = str(entry.get("name") or "")
+    key_name = clean_key_label(raw_name) or raw_name
+    owner_uid = str(entry.get("chat_id") or "").strip() or None
+
+    limit = entry.get("limit_bytes")
+    try:
+        limit = int(limit) if limit is not None else None
+    except (TypeError, ValueError):
+        limit = None
+    if limit is not None and limit <= 0:
+        limit = None  # 0 / negative = unlimited in the Outline model
+
+    used = None
+    if used_bytes is not None:
+        try:
+            used = max(0, int(used_bytes))
+        except (TypeError, ValueError):
+            used = None
+
+    if limit is not None and used is not None:
+        remaining = max(0, limit - used)
+        used_percent = round(used / limit * 100, 1) if limit > 0 else None
+    else:
+        remaining = None
+        used_percent = None
+
+    exp_dt = _parse_registry_expiry(entry)
+    now = myanmar_now()
+    if exp_dt is not None:
+        days_left = (exp_dt.date() - now.date()).days
+        if days_left < 0:
+            status = "expired"
+        elif days_left <= 5:
+            status = "expiring"
+        else:
+            status = "active"
+        expires_at = exp_dt.strftime("%Y-%m-%d")
+        expires_display = exp_dt.strftime("%d.%m.%Y")
+    else:
+        days_left = None
+        status = "active"
+        expires_at = None
+        expires_display = str(entry.get("expire_date") or "") or None
+
+    return {
+        "key_name": key_name,
+        "server_name": get_server_display_name(server),
+        "server_id": server,
+        "key_id": key_id,
+        "owner_uid": owner_uid,
+        "data_used_bytes": used,
+        "data_limit_bytes": limit,
+        "data_remaining_bytes": remaining,
+        "used_percent": used_percent,
+        "expires_at": expires_at,
+        "expires_display": expires_display,
+        "days_left": days_left,
+        "status": status,
+    }
+
+
+def _live_used_bytes(server: str, key_id: str):
+    """Live lifetime usage for one key from the Outline server.
+
+    Returns ``int`` bytes, or ``None`` when the server cannot be reached
+    (best-effort: a missing figure must never block the plan card).
+    """
+    try:
+        usage = get_usage_by_server({str(server)})
+        value = (usage or {}).get(str(server), {}).get(str(key_id))
+        return int(value) if value is not None else None
+    except Exception:
+        return None
+
+
+# --- endpoints ---------------------------------------------------------------
+@app_bp.route("/plans", methods=["GET"])
+def list_plans():
+    """Public plan catalogue for the VPN app's Plans screen.
+
+    No auth: plan names/prices are public shop information (the same data
+    the customer Mini App bootstrap already serves).
+    """
+    if _rate_limited(_client_bucket("plans"), PLANS_RATE_LIMIT):
+        return _rate_limit_response()
+
+    plans = []
+    for code, p in PLANS.items():
+        months = 1
+        try:
+            months = int(p.get("months", 1) or 1)
+        except (TypeError, ValueError):
+            months = 1
+        data_bytes = p.get("bytes", 0) or 0
+        try:
+            data_bytes = int(data_bytes)
+        except (TypeError, ValueError):
+            data_bytes = 0
+        plans.append({
+            "code": str(code),
+            "name": str(p.get("name", code)),
+            "data": str(p.get("data", "")),
+            "data_limit_gb": (round(data_bytes / 1000 ** 3, 1)
+                              if data_bytes > 0 else None),
+            "valid_days": months * 30,
+            "price_ks": int(p.get("price", 0) or 0),
+            "manual": bool(p.get("manual", False)),
+        })
+    plans.sort(key=lambda item: item["price_ks"])
+    return jsonify({"currency": "Ks", "plans": plans}), 200
+
+
+@app_bp.route("/key-detail", methods=["POST"])
+def key_detail():
+    """Plan details for one key, looked up by the access key itself.
+
+    Body (JSON)::
+
+        {"access_key": "ss://..."}                      # preferred
+        {"key_password": "<password>", "server_host": "<host>"}
+        {"telegram_id": "1695353992", "key_name": "Hein Htet Oo"}
+
+    ``telegram_id`` is optional: when supplied it MUST match the key's
+    recorded owner, otherwise the request is rejected (403) — a key
+    holder may not probe other customers' keys by guessing ids.
+    """
+    if _rate_limited(_client_bucket("key-detail"), KEY_DETAIL_RATE_LIMIT):
+        return _rate_limit_response()
+
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid_body",
+                        "message": "JSON body expected."}), 400
+
+    telegram_id = data.get("telegram_id")
+    if telegram_id is not None:
+        telegram_id = str(telegram_id).strip()
+
+    entry = None
+    access_key = (data.get("access_key") or "").strip()
+    key_password = (data.get("key_password") or "").strip()
+    server_host = (data.get("server_host") or "").strip().lower() or None
+
+    if access_key:
+        parsed = parse_ss_key(access_key)
+        if parsed is None:
+            return jsonify({
+                "error": "invalid_key",
+                "message": "That does not look like an Outline access key (ss://...).",
+            }), 400
+        entry = _find_key_by_password(parsed["password"], parsed["host"])
+    elif key_password:
+        entry = _find_key_by_password(key_password, server_host)
+
+    if entry is None and telegram_id and data.get("key_name"):
+        entry = _find_key_by_owner_and_name(telegram_id, str(data.get("key_name")))
+
+    if entry is None:
+        if not access_key and not key_password and not (
+                telegram_id and data.get("key_name")):
+            return jsonify({
+                "error": "invalid_body",
+                "message": "Send access_key, or key_password, or "
+                           "telegram_id + key_name.",
+            }), 400
+        return jsonify({
+            "error": "key_not_found",
+            "message": "No key matching that access key was found. "
+                       "Check the key or contact support.",
+        }), 404
+
+    if telegram_id:
+        owner = str(entry.get("chat_id") or "").strip()
+        if owner and owner != telegram_id:
+            return jsonify({
+                "error": "forbidden",
+                "message": "This key belongs to a different Telegram account.",
+            }), 403
+
+    used = _live_used_bytes(str(entry.get("server") or "1"),
+                            str(entry.get("key_id") or ""))
+    return jsonify(build_key_detail(entry, used)), 200
