@@ -1,4 +1,7 @@
 import os
+import re
+import time
+
 import telebot
 from telebot.types import MenuButtonDefault, WebAppInfo
 
@@ -7,6 +10,7 @@ from bot_app.config import (
     DASHBOARD_URL,
     MINI_APP_URL,
     MENU_BUTTON_TEXT,
+    PLANS,
     is_admin,
 )
 from bot_app.extensions import bot
@@ -25,6 +29,37 @@ def send_welcome(message):
     save_user_id(chat_id)
     touch_user(message.from_user)
     clear_all_states(chat_id)
+
+    # App account linking: https://t.me/<bot>?start=link_<code> from the
+    # H&E VPN app. Stores code -> this chat in Redis for 10 minutes; the
+    # app polls /api/app/auth/poll and exchanges it for an account token.
+    _parts = (message.text or "").split(maxsplit=1)
+    if len(_parts) == 2 and _parts[1].strip().startswith("link_"):
+        _code = _parts[1].strip()[len("link_"):].strip()
+        if re.fullmatch(r"[A-Za-z0-9\-_]{8,64}", _code or ""):
+            try:
+                from bot_app.storage.kv import redis_set
+                _u = message.from_user
+                _full = " ".join(
+                    x for x in [getattr(_u, "first_name", ""), getattr(_u, "last_name", "")]
+                    if x
+                ).strip()
+                redis_set(f"app_link:{_code}", {
+                    "chat_id": chat_id,
+                    "name": _full,
+                    "username": getattr(_u, "username", "") or "",
+                    "exp": int(time.time()) + 600,
+                })
+                bot.send_message(
+                    chat_id,
+                    "✅ <b>H&E VPN App နှင့် ချိတ်ဆက်ပြီးပါပြီ!</b>\n\n"
+                    "App ထဲမှာ လူကြီးမင်းရဲ့ Wallet လက်ကျန်ငွေ၊ Points နှင့် "
+                    "ဝယ်ယူမှု မှတ်တမ်းတွေကို ကြည့်နိုင်ပါပြီ။ App သို့ ပြန်သွားပါ။",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            return
 
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
@@ -62,6 +97,19 @@ def send_welcome(message):
         pass
         
     bot.reply_to(message, welcome_text(full_name), reply_markup=get_main_menu_keyboard(chat_id))
+
+    # Deep link from the H&E VPN app's Plans screen:
+    # https://t.me/<bot>?start=buy_<plan_code> opens that plan's purchase
+    # screen directly, under the welcome message.
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) == 2 and parts[1].strip().startswith("buy_"):
+        plan_code = parts[1].strip()[4:].strip().lower()
+        if plan_code in PLANS:
+            try:
+                from bot_app.handlers.shop import send_plan_purchase
+                send_plan_purchase(chat_id, plan_code)
+            except Exception:
+                pass
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "verify_subscription")
