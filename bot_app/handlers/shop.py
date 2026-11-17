@@ -110,6 +110,76 @@ def handle_select_plan(call):
             bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
 
+def send_plan_purchase(chat_id, plan_code):
+    """Send one plan's purchase screen as a NEW message.
+
+    Used by the /start deep link (``https://t.me/<bot>?start=buy_<code>``)
+    from the H&E VPN app's Plans screen. Mirrors handle_select_plan's
+    offer logic; kept separate so the callback flow is untouched.
+    """
+    plan = PLANS.get(plan_code)
+    if not plan:
+        return
+    amount = plan["price"]
+    balance = get_user_balance(chat_id)
+    is_admin = str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS]
+
+    _, bonus_bal, _ = get_user_balance_breakdown(chat_id)
+    has_redeem_credit = (bonus_bal > 0) and not is_admin
+
+    if plan_code == "ultimate" and not has_redeem_credit:
+        user_keys = get_user_ultimate_keys(chat_id, "1")
+        if len(user_keys) > 0:
+            markup = InlineKeyboardMarkup()
+            for idx, uk in enumerate(user_keys, 1):
+                markup.row(InlineKeyboardButton(f"♻️ Key #{idx} ({uk['name'][:25]}) သက်တမ်းတိုးမည်", callback_data=f"renew_choice_{plan_code}_1_{uk['id']}"))
+            markup.row(InlineKeyboardButton("➕ Key အသစ် ထပ်ဝယ်မည်", callback_data=f"renew_choice_{plan_code}_1_new"))
+            markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
+            markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+            choice_text = (
+                f"🌌 <b>Ultimate VIP Plan ဝယ်ယူခြင်း</b>\n\n"
+                f"💡 လူကြီးမင်းတွင် လက်ရှိ Active ဖြစ်နေသော Ultimate VIP Key <b>({len(user_keys)} ခု)</b> ရှိနေသည်ကို တွေ့ရှိရပါသည်။\n\n"
+                f"👇 အောက်ပါတို့မှ <b>သက်တမ်းတိုးမည့် Key အဟောင်း</b> ကို ရွေးချယ်ပါ (သို့မဟုတ်) <b>ကီးအသစ် အစအဆုံး ဝယ်ယူရန်</b> ရွေးချယ်ပေးပါခင်ဗျာ:"
+            )
+            bot.send_message(chat_id, choice_text, parse_mode="HTML", reply_markup=markup)
+            return
+
+    markup = InlineKeyboardMarkup()
+    if balance >= amount or is_admin:
+        if plan.get("manual"):
+            markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
+        elif plan_code == "ultimate" or has_redeem_credit:
+            srv1_tag = "Redeem Credit" if has_redeem_credit else "Main Server"
+            markup.row(InlineKeyboardButton(f"📡 {get_server_display_name('1')} 🇸🇬 ({srv1_tag}) ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
+        else:
+            for srv in get_configured_servers():
+                sid = str(srv.get("id"))
+                markup.row(InlineKeyboardButton(f"📡 {get_server_display_name(sid)} ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_{sid}"))
+    else:
+        shortfall = amount - balance
+        markup.row(InlineKeyboardButton(f"💰 ငွေ {shortfall:,} Ks ထပ်ဖြည့်ရန်", callback_data="btn_open_topup"))
+
+    markup.row(InlineKeyboardButton("🔙 Plan များသို့ ပြန်သွားရန်", callback_data="back_to_plans"))
+    markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
+
+    balance_disp = "♾️" if is_admin else f"{balance:,} MMK"
+    balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
+    server_notice = f"\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် {get_server_display_name('1')} မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
+
+    text = (
+        f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
+        f"📮 <b>Plan:</b> {plan['name']}\n\n"
+        f"🗃️ <b>Data:</b> {plan['data']} ( ၁လစာ )\n\n"
+        f"💵 <b>ကျသင့်ငွေ:</b> {amount:,} MMK\n\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"💳 <b>လူကြီးမင်း၏ လက်ကျန်ငွေ:</b> <b>{balance_disp}</b>\n"
+        f"အခြေအနေ: <b>{balance_status}</b>\n"
+        f"━━━━━━━━━━━━━━━\n{server_notice}\n"
+        f"👇 ဝယ်ယူလိုပါက အောက်ပါ ဆာဗာခလုတ်များမှ မိမိနှစ်သက်ရာကို ရွေးချယ်နှိပ်ပါခင်ဗျာ:"
+    )
+    bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("renew_choice_"))
 def handle_renew_choice(call):
     touch_user(getattr(call, "from_user", None))
