@@ -49,6 +49,8 @@ from bot_app.storage.kv import (
     redis_delete,
     redis_get,
     redis_increment_with_expiry,
+    redis_set,
+    redis_set_nx,
 )
 from bot_app.timeutil import myanmar_now
 
@@ -531,6 +533,7 @@ def app_account():
         "balance_bonus_ks": bonus_bal,
         "balance_total_ks": total_bal,
         "points": pts.get("points", 0),
+        "points_next_claim_in_s": claim_cooldown_remaining(pts),
         "points_streak_days": pts.get("streak_days", 0),
         "points_lifetime_earned": pts.get("lifetime_earned", 0),
     })
@@ -558,3 +561,383 @@ def app_purchases():
             "expire_date": r.get("expire_date"),
         })
     return jsonify({"purchases": out})
+
+
+# --- app commerce (Phase 2) --------------------------------------------------
+# Money-moving endpoints for the native app. Each one mirrors the exact
+# service calls the Telegram bot / Mini App already use, so wallet
+# semantics (bonus-credit day conversion, refund on key-creation failure,
+# purchase records, audit trails) stay identical across channels:
+# - POST /topup          -> same slip queue + admin Approve/Reject buttons
+#                           as POST /api/user/topup-slip.
+# - POST /buy            -> same purchase core as the buywallet_ callback
+#                           (incl. Ultimate renew-or-new choice); the new
+#                           key is returned so the app can save it at once.
+# - POST /points/claim   -> services.points.try_claim (atomic, locked).
+# - POST /keys/replace   -> same admin-review request as the Mini App.
+# - GET  /notifications  -> services.app_notify inbox (top-up verdicts are
+#                           pushed from services.slips.review_slip).
+import random as _random
+import string as _string
+
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from bot_app.config import ADMIN_CHAT_IDS
+from bot_app.extensions import bot as _bot
+from bot_app.helpers.deeplink import get_key_delivery_markup
+from bot_app.services.app_notify import (
+    list_app_notifications,
+    mark_app_notifications_read,
+    push_app_notification,
+)
+from bot_app.services.billing import get_user_balance, update_user_balance
+from bot_app.services.orders import (
+    save_key_mapping,
+    save_sale_transaction,
+    save_user_purchase_record,
+)
+from bot_app.services.outline import (
+    create_outline_key,
+    get_user_ultimate_keys,
+    renew_specific_unlimited_key,
+)
+from bot_app.services.points import claim_cooldown_remaining, try_claim
+from bot_app.services.slips import load_all_slips, record_slip
+from bot_app.timeutil import myanmar_now as _mm_now
+
+
+def _is_admin(chat_id) -> bool:
+    return str(chat_id) in [str(a) for a in ADMIN_CHAT_IDS]
+
+
+@app_bp.route("/topup", methods=["POST"])
+def app_topup():
+    """Submit a payment slip from the app into the admin review queue."""
+    if _rate_limited(_client_bucket("topup"), 10):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    try:
+        amount = int(re.sub(r"[^\d]", "", str(body.get("amount") or "0")) or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if amount < 500:
+        return jsonify({"success": False, "error": "Minimum top-up amount is 500 Ks"}), 400
+    method = str(body.get("method") or "KBZ").strip().upper()[:16] or "KBZ"
+
+    file_bytes = None
+    image_b64 = body.get("image_base64")
+    if isinstance(image_b64, str) and image_b64:
+        try:
+            file_bytes = base64.b64decode(image_b64, validate=True)
+        except (binascii.Error, ValueError):
+            return jsonify({"success": False, "error": "Invalid image data"}), 400
+        if len(file_bytes) > 3_500_000:
+            return jsonify({"success": False, "error": "Image too large (max ~3.5 MB)"}), 400
+
+    try:
+        profile = get_user_profile(chat_id) or {}
+    except Exception:
+        profile = {}
+    username = profile.get("username") or profile.get("full_name") or "AppUser"
+
+    slip_id = "".join(_random.choices(_string.ascii_uppercase + _string.digits, k=8))
+    admin_alert_text = (
+        f"📥 <b>H&E VPN App Top-Up Slip အသစ် ရောက်ရှိပါသည်!</b>\n\n"
+        f"🧾 <b>Top-Up ID:</b> <code>{slip_id}</code>\n"
+        f"👤 <b>Customer:</b> @{username} (<code>{chat_id}</code>)\n"
+        f"💵 <b>ပမာဏ:</b> <code>{amount:,} Ks</code>\n\n"
+        f"<i>စစ်ဆေးပြီးပါက အောက်ပါ Approve / Reject ခလုတ်များဖြင့် သတ်မှတ်ပေးပါခင်ဗျာ။</i>"
+    )
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(
+        f"✅ Approve (+{amount:,} MMK)",
+        callback_data=f"approve_topup_{chat_id}_{amount}_{slip_id}"))
+    markup.add(InlineKeyboardButton("❌ Reject", callback_data=f"reject_topup_{slip_id}"))
+
+    admin_messages = []
+    captured_file_id = ""
+    for aid in ADMIN_CHAT_IDS:
+        sent = None
+        try:
+            if file_bytes:
+                sent = _bot.send_photo(aid, file_bytes, caption=admin_alert_text,
+                                       parse_mode="HTML", reply_markup=markup)
+            else:
+                sent = _bot.send_message(aid, admin_alert_text,
+                                         parse_mode="HTML", reply_markup=markup)
+        except Exception:
+            try:
+                sent = _bot.send_message(aid, admin_alert_text,
+                                         parse_mode="HTML", reply_markup=markup)
+            except Exception:
+                pass
+        if sent is not None:
+            admin_messages.append({"chat_id": sent.chat.id, "message_id": sent.message_id})
+            if not captured_file_id and getattr(sent, "photo", None):
+                captured_file_id = sent.photo[-1].file_id
+
+    record_slip(
+        slip_id=slip_id,
+        chat_id=chat_id,
+        amount=amount,
+        username=username,
+        image_url="app_upload",
+        file_id=captured_file_id,
+        admin_messages=admin_messages,
+        admin_caption=admin_alert_text,
+        method=method,
+    )
+    return jsonify({
+        "success": True,
+        "slip_id": slip_id,
+        "status": "PENDING",
+        "amount": amount,
+        "method": method,
+        "message": "ပြေစာ လက်ခံရရှိပြီးဖြစ်ပါသည်ခင်ဗျာ။ Admin မှ မကြာမီ စစ်ဆေးအတည်ပြုပေးပါမည်။",
+    })
+
+
+@app_bp.route("/topups", methods=["GET"])
+def app_topups():
+    """The linked user's own top-up slips with review status."""
+    if _rate_limited(_client_bucket("topups"), 60):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    slips = load_all_slips()
+    mine = [s for s in slips.values() if str(s.get("chat_id")) == str(chat_id)]
+    mine.sort(key=lambda s: str(s.get("created_at") or ""), reverse=True)
+    out = [{
+        "slip_id": s.get("id"),
+        "amount": s.get("amount"),
+        "status": s.get("status"),
+        "method": s.get("method"),
+        "created_at": s.get("created_at"),
+        "reviewed_at": s.get("reviewed_at"),
+        "review_reason": s.get("review_reason"),
+    } for s in mine[:20]]
+    return jsonify({"topups": out})
+
+
+@app_bp.route("/buy", methods=["POST"])
+def app_buy():
+    """Buy a plan with the wallet; returns the new key for instant saving."""
+    if _rate_limited(_client_bucket("buy"), 30):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    plan_code = str(body.get("plan_code") or "").strip().lower()
+    server_num = str(body.get("server") or "1").strip()
+    renew_key_id = body.get("renew_key_id")
+    idem = str(body.get("idempotency_key") or "").strip()
+    if not idem or len(idem) > 64:
+        return jsonify({"error": "idempotency_key required"}), 400
+
+    plan = PLANS.get(plan_code)
+    if not plan:
+        return jsonify({"error": "unknown_plan"}), 404
+    if plan.get("manual"):
+        return jsonify({
+            "error": "manual_plan",
+            "message": "ဤ Plan ကို Admin မှတစ်ဆင့် သီးသန့် ဆောင်ရွက်ပေးပါသည်။ Customer Service သို့ ဆက်သွယ်ပါ။",
+        }), 400
+
+    # Idempotent replay: a retried request returns the original result.
+    prior = redis_get(f"app_buy:{chat_id}:{idem}")
+    if isinstance(prior, dict) and prior.get("status") == "ok":
+        return jsonify(prior)
+
+    lock = redis_set_nx(f"app_buy_lock:{chat_id}", 120)
+    if lock is False:
+        return jsonify({"error": "purchase_in_progress"}), 409
+    try:
+        is_admin = _is_admin(chat_id)
+        amount = int(plan["price"])
+        balance = get_user_balance(chat_id)
+        if not is_admin and balance < amount:
+            return jsonify({
+                "error": "insufficient_balance",
+                "balance": balance,
+                "required": amount,
+                "message": "လက်ကျန်ငွေ မလုံလောက်ပါ။ ငွေအရင်ဖြည့်ပေးပါ။",
+            }), 402
+
+        main_bal, bonus_bal, _total = get_user_balance_breakdown(chat_id)
+        if bonus_bal > 0 and not is_admin and server_num != "1":
+            return jsonify({
+                "error": "redeem_credit_server",
+                "message": "Redeem/Bonus လက်ကျန်ငွေ ပါရှိသဖြင့် Server 1 မှသာ ဝယ်ယူနိုင်ပါသည်။",
+            }), 400
+
+        # Ultimate owners choose: renew an existing key or mint a new one.
+        if plan_code == "ultimate" and renew_key_id is None:
+            try:
+                existing = get_user_ultimate_keys(chat_id, server_num)
+            except Exception:
+                existing = []
+            if existing:
+                return jsonify({
+                    "status": "choose",
+                    "keys": [{"id": str(k.get("id")), "name": str(k.get("name") or "")}
+                             for k in existing],
+                })
+
+        order_id = "#" + "".join(_random.choices(_string.ascii_uppercase + _string.digits, k=6))
+        new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
+        try:
+            profile = get_user_profile(chat_id) or {}
+        except Exception:
+            profile = {}
+        user_name = (profile.get("full_name") or "Customer").strip()
+        apply_days = None if is_admin else used_bonus_days
+
+        if renew_key_id and str(renew_key_id) != "new":
+            vpn_key, key_name, expire_date = renew_specific_unlimited_key(
+                server_num, str(renew_key_id), months_count=1,
+                custom_days=apply_days, order_id=order_id)
+        else:
+            vpn_key, key_name, expire_date = create_outline_key(
+                server_num, user_name, plan_info=plan, target_chat_id=chat_id,
+                months_count=1, custom_days=apply_days, is_giveaway=False,
+                order_id=order_id)
+
+        if not vpn_key:
+            update_user_balance(chat_id, amount)  # refund, as the bot does
+            return jsonify({
+                "error": "key_creation_failed",
+                "message": "ဆာဗာလိုင်းမရသဖြင့် မဆောင်ရွက်နိုင်ပါ။ ငွေအား ပြန်လည်ထည့်သွင်းပေးထားပါသည်။",
+            }), 502
+
+        save_sale_transaction(server_num, chat_id, plan_code, plan["name"], 1,
+                              amount, order_id=order_id)
+        save_user_purchase_record(
+            chat_id=chat_id, order_id=order_id, plan_name=plan["name"],
+            disp_gb=plan["data"], months_count=1, price_str=f"{amount:,} Ks",
+            server_num=server_num, expire_date=expire_date, vpn_key=vpn_key)
+        save_key_mapping(user_name.strip().lower(), chat_id)
+
+        result = {
+            "status": "ok",
+            "order_id": order_id,
+            "access_key": vpn_key,
+            "key_name": key_name,
+            "expire_date": expire_date,
+            "plan_name": plan["name"],
+            "plan_code": plan_code,
+            "server": server_num,
+            "new_balance": new_bal,
+        }
+        redis_set(f"app_buy:{chat_id}:{idem}", result)
+        push_app_notification(
+            chat_id, "purchase", "ဝယ်ယူမှု အောင်မြင်ပါပြီ 🎉",
+            f"{plan['name']} · {order_id} · Expire {expire_date}")
+        # Mirror the bot purchase: deliver the key in Telegram too.
+        try:
+            _bot.send_message(
+                chat_id,
+                f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
+                f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+                f"🛍️ <b>Plan:</b> {plan['name']} ({plan['data']})\n\n"
+                f"📡 <b>Server:</b> {get_server_display_name(server_num)}\n\n"
+                f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n<code>{vpn_key}</code>",
+                parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
+        except Exception:
+            pass
+        return jsonify(result)
+    finally:
+        if lock is True:
+            redis_delete(f"app_buy_lock:{chat_id}")
+
+
+@app_bp.route("/points/claim", methods=["POST"])
+def app_points_claim():
+    """Daily-points claim; identical rules to the bot's Claim button."""
+    if _rate_limited(_client_bucket("points_claim"), 30):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        from bot_app.config import points_enabled
+        if not points_enabled():
+            return jsonify({"ok": False, "error": "disabled"}), 400
+    except Exception:
+        pass
+    return jsonify(try_claim(chat_id))
+
+
+@app_bp.route("/keys/replace", methods=["POST"])
+def app_key_replace():
+    """Key replacement request to the admin queue (as in the Mini App)."""
+    if _rate_limited(_client_bucket("key_replace"), 10):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    order_id = str(body.get("order_id") or "").strip()
+    if not order_id:
+        return jsonify({"success": False, "error": "order_id required"}), 400
+
+    matched = None
+    for rec in get_user_combined_purchase_records(chat_id):
+        if str(rec.get("order_id") or "") == order_id:
+            matched = rec
+            break
+    if not matched:
+        return jsonify({"success": False, "error": "VPN key record not found"}), 404
+
+    exp_dt = _parse_expiry_from_name(str(matched.get("expire_date") or ""))
+    if exp_dt and exp_dt.date() < _mm_now().date():
+        return jsonify({
+            "success": False,
+            "error": "expired",
+            "message": "သက်တမ်းကုန်ဆုံးသွားသော Key အား လဲလှယ်၍ မရနိုင်ပါ။ Plan အသစ် ဝယ်ယူပေးပါရန်။",
+        }), 400
+
+    for aid in ADMIN_CHAT_IDS:
+        try:
+            _bot.send_message(
+                aid,
+                f"♻️ <b>H&E VPN App မှ Key အစားထိုး လဲလှယ်မှု တောင်းဆိုချက်:</b>\n\n"
+                f"👤 <b>Customer ID:</b> <code>{chat_id}</code>\n"
+                f"🧾 <b>Order ID:</b> <code>{matched.get('order_id')}</code>\n"
+                f"📡 <b>Server:</b> Server {matched.get('server')}\n"
+                f"⏰ <b>Expiry:</b> {matched.get('expire_date')}\n"
+                f"🔑 <b>Key:</b> <code>{matched.get('vpn_key')}</code>",
+                parse_mode="HTML")
+        except Exception:
+            pass
+    return jsonify({
+        "success": True,
+        "message": "Key အစားထိုး လဲလှယ်ရန် Admin ထံ တောင်းဆိုမှု ပို့ဆောင်ပြီးပါပြီခင်ဗျာ။",
+    })
+
+
+@app_bp.route("/notifications", methods=["GET"])
+def app_notifications():
+    if _rate_limited(_client_bucket("notifications"), 60):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    items, unread = list_app_notifications(chat_id)
+    return jsonify({"notifications": items, "unread": unread})
+
+
+@app_bp.route("/notifications/read", methods=["POST"])
+def app_notifications_read():
+    if _rate_limited(_client_bucket("notifications_read"), 60):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    mark_app_notifications_read(chat_id)
+    return jsonify({"success": True})
