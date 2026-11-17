@@ -551,7 +551,12 @@ def _starter_cost() -> int:
 
 @app_bp.route("/purchases", methods=["GET"])
 def app_purchases():
-    """Linked account's purchase history (newest first, keys NOT included)."""
+    """Linked account's purchase history (newest first).
+
+    Includes each purchase's own ``vpn_key``: the token proves the caller
+    is the account owner, and the app's History screen lets them copy the
+    key or re-add it to My Keys (e.g. after reinstalling the app).
+    """
     if _rate_limited(_client_bucket("purchases"), 60):
         return _rate_limit_response()
     chat_id = _bearer_chat_id()
@@ -569,6 +574,7 @@ def app_purchases():
             "price": r.get("price_str"),
             "server": r.get("server"),
             "expire_date": r.get("expire_date"),
+            "vpn_key": r.get("vpn_key"),
         })
     return jsonify({"purchases": out})
 
@@ -608,6 +614,7 @@ from bot_app.services.orders import (
 )
 from bot_app.services.outline import (
     create_outline_key,
+    get_configured_servers,
     get_user_ultimate_keys,
     renew_specific_unlimited_key,
 )
@@ -1019,17 +1026,64 @@ def app_key_replace():
             "message": "သက်တမ်းကုန်ဆုံးသွားသော Key အား လဲလှယ်၍ မရနိုင်ပါ။ Plan အသစ် ဝယ်ယူပေးပါရန်။",
         }), 400
 
+    # Build the SAME actionable admin message the bot's own replacement
+    # flow sends (handlers/menu.py): one button per target server, whose
+    # callback (handlers/keys.py) deletes the old key and mints the
+    # replacement with the same remaining data + expiry. A plain text
+    # message left the admin with no way to complete the request.
+    alert_text = (
+        f"♻️ <b>KEY REPLACEMENT REQUEST</b> (H&E VPN App)\n\n"
+        f"👤 <b>Customer ID:</b> <code>{chat_id}</code>\n"
+        f"🧾 <b>Order ID:</b> <code>{matched.get('order_id')}</code>\n"
+        f"📡 <b>Server:</b> Server {matched.get('server')}\n"
+        f"⏰ <b>Expiry:</b> {matched.get('expire_date')}\n"
+        f"🔑 <b>Key:</b> <code>{matched.get('vpn_key')}</code>"
+    )
+    markup = None
+    entry = None
+    parsed_key = parse_ss_key(str(matched.get("vpn_key") or ""))
+    if parsed_key:
+        entry = _find_key_by_password(parsed_key["password"], parsed_key["host"])
+    if entry is not None:
+        try:
+            old_server_num = str(entry.get("server") or matched.get("server") or "1")
+            key_id = str(entry.get("key_id") or "")
+            exp_dt = _parse_registry_expiry(entry)
+            exp_str = exp_dt.strftime("%d.%m.%Y") if exp_dt else str(matched.get("expire_date") or "")
+            limit = entry.get("limit_bytes")
+            total_gb = (int(limit) / 1_000_000_000) if limit else 500
+            used = _live_used_bytes(old_server_num, key_id)
+            used_gb = (used / 1_000_000_000) if used is not None else 0
+            rem_gb = max(0, round(total_gb - used_gb, 2))
+            try:
+                profile = get_user_profile(chat_id) or {}
+            except Exception:
+                profile = {}
+            buyer = profile.get("full_name") or "Customer"
+            alert_text = (
+                f"♻️ <b>KEY REPLACEMENT REQUEST</b> (H&E VPN App)\n\n"
+                f"👤 ဝယ်ယူသူ: {buyer}\n"
+                f"🆔 Chat ID: <code>{chat_id}</code>\n"
+                f"📡 Server: Server {old_server_num}\n"
+                f"🔑 Key အဟောင်း: {entry.get('name') or ''}\n"
+                f"🧰 ကျန်ရှိ Data: <b>{rem_gb} GB</b> / {total_gb} GB\n"
+                f"⏰ သက်တမ်းကုန်ရက်: <b>{exp_str}</b>"
+            )
+            markup = InlineKeyboardMarkup()
+            for srv in get_configured_servers():
+                sid = str(srv.get("id"))
+                markup.add(InlineKeyboardButton(
+                    f"📡 {get_server_display_name(sid)} သို့",
+                    callback_data=f"replace_srv{sid}_{old_server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_str}"))
+            markup.row(InlineKeyboardButton(
+                "❌ Reject", callback_data=f"replace_reject_{chat_id}_{key_id}"))
+        except Exception:
+            markup = None
+
     for aid in ADMIN_CHAT_IDS:
         try:
-            _bot.send_message(
-                aid,
-                f"♻️ <b>H&E VPN App မှ Key အစားထိုး လဲလှယ်မှု တောင်းဆိုချက်:</b>\n\n"
-                f"👤 <b>Customer ID:</b> <code>{chat_id}</code>\n"
-                f"🧾 <b>Order ID:</b> <code>{matched.get('order_id')}</code>\n"
-                f"📡 <b>Server:</b> Server {matched.get('server')}\n"
-                f"⏰ <b>Expiry:</b> {matched.get('expire_date')}\n"
-                f"🔑 <b>Key:</b> <code>{matched.get('vpn_key')}</code>",
-                parse_mode="HTML")
+            _bot.send_message(aid, alert_text, parse_mode="HTML",
+                              reply_markup=markup)
         except Exception:
             pass
     return jsonify({
