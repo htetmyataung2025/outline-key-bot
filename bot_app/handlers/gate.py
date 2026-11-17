@@ -33,7 +33,8 @@ def send_welcome(message):
     # App account linking: https://t.me/<bot>?start=link_<code> from the
     # H&E VPN app. Stores code -> this chat in Redis for 10 minutes; the
     # app polls /api/app/auth/poll and exchanges it for an account token.
-    _parts = (message.text or "").split(maxsplit=1)
+    _text = getattr(message, "text", "") or ""
+    _parts = _text.split(maxsplit=1) if isinstance(_text, str) else []
     if len(_parts) == 2 and _parts[1].strip().startswith("link_"):
         _code = _parts[1].strip()[len("link_"):].strip()
         if re.fullmatch(r"[A-Za-z0-9\-_]{8,64}", _code or ""):
@@ -101,7 +102,8 @@ def send_welcome(message):
     # Deep link from the H&E VPN app's Plans screen:
     # https://t.me/<bot>?start=buy_<plan_code> opens that plan's purchase
     # screen directly, under the welcome message.
-    parts = (message.text or "").split(maxsplit=1)
+    _btext = getattr(message, "text", "") or ""
+    parts = _btext.split(maxsplit=1) if isinstance(_btext, str) else []
     if len(parts) == 2 and parts[1].strip().startswith("buy_"):
         plan_code = parts[1].strip()[4:].strip().lower()
         if plan_code in PLANS:
