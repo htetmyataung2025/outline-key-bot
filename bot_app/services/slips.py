@@ -246,6 +246,18 @@ def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", rea
                      "points_granted": pts_granted},
         )
 
+        # App inbox: mirror the Telegram DM into the H&E VPN app's
+        # notification list (best-effort, never blocks the credit).
+        try:
+            from bot_app.services.app_notify import push_app_notification
+            push_app_notification(
+                chat_id, "topup_approved",
+                "ငွေဖြည့်သွင်းမှု အောင်မြင်ပါပြီ 🎉",
+                f"+{amount:,} MMK · လက်ကျန် {new_balance:,} MMK",
+            )
+        except Exception:
+            pass
+
         return {"success": True, "action": "APPROVED", "new_balance": new_balance, "slip": slip}
 
     elif action_upper == "REJECT":
@@ -278,6 +290,16 @@ def review_slip(slip_id: str, action: str, reviewed_by: str | int = "Admin", rea
             target_id=slip_id,
             details={"chat_id": chat_id, "reason": reason},
         )
+
+        try:
+            from bot_app.services.app_notify import push_app_notification
+            push_app_notification(
+                chat_id, "topup_rejected",
+                "ငွေလွှဲပြေစာ ပယ်ချခံရပါသည် ⚠️",
+                reason or "ပြေစာအချက်အလက် မကိုက်ညီပါ",
+            )
+        except Exception:
+            pass
 
         return {"success": True, "action": "REJECTED", "slip": slip}
 
