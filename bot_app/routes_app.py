@@ -534,9 +534,19 @@ def app_account():
         "balance_total_ks": total_bal,
         "points": pts.get("points", 0),
         "points_next_claim_in_s": claim_cooldown_remaining(pts),
+        "points_has_topped_up": bool(pts.get("has_topped_up")),
+        "points_redeem_cost": _starter_cost(),
         "points_streak_days": pts.get("streak_days", 0),
         "points_lifetime_earned": pts.get("lifetime_earned", 0),
     })
+
+
+def _starter_cost() -> int:
+    try:
+        from bot_app.config import points_settings
+        return int(points_settings()["starter_cost"])
+    except Exception:
+        return 5000
 
 
 @app_bp.route("/purchases", methods=["GET"])
@@ -601,7 +611,12 @@ from bot_app.services.outline import (
     get_user_ultimate_keys,
     renew_specific_unlimited_key,
 )
-from bot_app.services.points import claim_cooldown_remaining, try_claim
+from bot_app.services.points import (
+    claim_cooldown_remaining,
+    redeem_starter,
+    refund_starter,
+    try_claim,
+)
 from bot_app.services.slips import load_all_slips, record_slip
 from bot_app.timeutil import myanmar_now as _mm_now
 
@@ -871,6 +886,108 @@ def app_points_claim():
     except Exception:
         pass
     return jsonify(try_claim(chat_id))
+
+
+@app_bp.route("/points/redeem", methods=["POST"])
+def app_points_redeem():
+    """Redeem points for a Starter key (Server 1), exactly as the bot does.
+
+    Mirrors ``handlers/points.py``: deduct via ``redeem_starter`` (gate:
+    topped up at least once + balance >= cost), mint on Server 1 with
+    30-day validity, refund via ``refund_starter`` if minting fails, save
+    the purchase record + key mapping, DM the key, and return it so the
+    app can save it straight into My Keys.
+    """
+    if _rate_limited(_client_bucket("points_redeem"), 10):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        from bot_app.config import points_enabled
+        if not points_enabled():
+            return jsonify({"ok": False, "error": "disabled"}), 400
+    except Exception:
+        pass
+
+    lock = redis_set_nx(f"app_redeem_lock:{chat_id}", 120)
+    if lock is False:
+        return jsonify({"error": "redeem_in_progress"}), 409
+    try:
+        res = redeem_starter(chat_id)
+        if not res.get("ok"):
+            messages = {
+                "needs_topup": "လဲယူရန် အနည်းဆုံး တစ်ကြိမ် ငွေဖြည့်ဖူးရန် လိုအပ်ပါသည်။",
+                "insufficient_points": "Points မလုံလောက်ပါ။",
+            }
+            return jsonify({
+                "ok": False,
+                "error": res.get("error") or "cannot_redeem",
+                "message": messages.get(res.get("error"), "လဲယူ၍ မရနိုင်သေးပါ။"),
+                "points": res.get("points", 0),
+            }), 400
+
+        order_id = "PTS-" + "".join(
+            _random.choices(_string.ascii_uppercase + _string.digits, k=6))
+        try:
+            profile = get_user_profile(chat_id) or {}
+        except Exception:
+            profile = {}
+        user_name = (profile.get("full_name") or "Customer").strip()
+        plan = PLANS.get("starter") or {
+            "name": "Starter Plan", "data": "25 GB", "bytes": 25 * 1000 ** 3}
+        try:
+            vpn_key, key_name, expire_date = create_outline_key(
+                "1", user_name, plan_info=plan, target_chat_id=chat_id,
+                custom_days=30, is_giveaway=True, order_id=order_id)
+        except Exception:
+            vpn_key = key_name = expire_date = None
+
+        if not vpn_key:
+            refund = refund_starter(chat_id)
+            return jsonify({
+                "ok": False,
+                "error": "key_creation_failed",
+                "message": "ဆာဗာလိုင်းမရသဖြင့် Key ထုတ်မရပါ။ Points ပြန်ထည့်ပေးထားပါသည်။",
+                "points": refund.get("new_balance", res.get("new_balance", 0)),
+            }), 502
+
+        save_user_purchase_record(
+            chat_id=chat_id, order_id=order_id,
+            plan_name=f"{plan['name']} (Points Reward)",
+            disp_gb=plan.get("data", "25 GB"), months_count=1,
+            price_str="0 Ks (Points)", server_num="1",
+            expire_date=expire_date, vpn_key=vpn_key)
+        save_key_mapping(user_name.strip().lower(), chat_id)
+        push_app_notification(
+            chat_id, "points_redeem", "Points လဲယူမှု အောင်မြင်ပါပြီ 🎉",
+            f"Starter Plan · {order_id} · Expire {expire_date}")
+        try:
+            _bot.send_message(
+                chat_id,
+                f"🎉 <b>Points ဖြင့် Starter Plan လဲယူမှု အောင်မြင်ပါသည်!</b>\n\n"
+                f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+                f"🛍️ <b>Plan:</b> {plan['name']} ({plan.get('data', '25 GB')})\n\n"
+                f"📡 <b>Server:</b> {get_server_display_name('1')}\n\n"
+                f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
+                f"💎 <b>ကျန်ရှိ Points:</b> {res.get('new_balance', 0):,}\n\n"
+                f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n<code>{vpn_key}</code>",
+                parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
+        except Exception:
+            pass
+        return jsonify({
+            "status": "ok",
+            "order_id": order_id,
+            "access_key": vpn_key,
+            "key_name": key_name,
+            "expire_date": expire_date,
+            "plan_name": plan["name"],
+            "server": "1",
+            "new_points": res.get("new_balance", 0),
+        })
+    finally:
+        if lock is True:
+            redis_delete(f"app_redeem_lock:{chat_id}")
 
 
 @app_bp.route("/keys/replace", methods=["POST"])
