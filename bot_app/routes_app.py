@@ -37,7 +37,7 @@ from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 
-from bot_app.config import PLANS
+from bot_app.config import PLANS, TELEGRAM_TOKEN
 from bot_app.helpers.rate_limit import client_ip_from_headers
 from bot_app.services.outline import (
     _parse_expiry_from_name,
@@ -45,7 +45,11 @@ from bot_app.services.outline import (
     get_usage_by_server,
 )
 from bot_app.services.registry import clean_key_label, load_persistent_keys
-from bot_app.storage.kv import redis_increment_with_expiry
+from bot_app.storage.kv import (
+    redis_delete,
+    redis_get,
+    redis_increment_with_expiry,
+)
 from bot_app.timeutil import myanmar_now
 
 app_bp = Blueprint("app_bp", __name__, url_prefix="/api/app")
@@ -416,3 +420,141 @@ def key_detail():
     used = _live_used_bytes(str(entry.get("server") or "1"),
                             str(entry.get("key_id") or ""))
     return jsonify(build_key_detail(entry, used)), 200
+
+
+# --- app account linking + wallet / history (Phase 1) -----------------------
+# The native app links a Telegram account once via a one-time deep-link
+# code: the app opens https://t.me/<bot>?start=link_<code>, the bot's
+# /start handler stores app_link:<code> -> {chat_id, name, username, exp}
+# in Redis (10 min), and the app exchanges the code here for a long-lived
+# HMAC token bound to that chat_id. Wallet / points / purchase reads are
+# then served per linked account. Read-only: no money moves in Phase 1.
+import hmac as _hmac
+import os as _os
+
+from bot_app.services.billing import get_user_balance_breakdown
+from bot_app.services.orders import get_user_combined_purchase_records
+from bot_app.services.points import get_points
+from bot_app.services.profiles import get_user_profile
+
+_LINK_CODE_RE = re.compile(r"^[A-Za-z0-9\-_]{8,64}$")
+_APP_TOKEN_MAX_AGE_S = 180 * 24 * 3600  # 180 days
+
+
+def _app_secret() -> str:
+    return _os.environ.get("APP_API_SECRET") or TELEGRAM_TOKEN or ""
+
+
+def _make_app_token(chat_id) -> str:
+    payload = f"{chat_id}.{int(time.time())}"
+    sig = _hmac.new(_app_secret().encode("utf-8"), payload.encode("utf-8"),
+                    hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def _verify_app_token(token):
+    """chat_id for a valid app token, else None."""
+    if not token or not _app_secret():
+        return None
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    chat_id, issued, sig = parts
+    payload = f"{chat_id}.{issued}"
+    expect = _hmac.new(_app_secret().encode("utf-8"), payload.encode("utf-8"),
+                       hashlib.sha256).hexdigest()
+    if not _hmac.compare_digest(expect, sig):
+        return None
+    try:
+        issued_i = int(issued)
+    except ValueError:
+        return None
+    if int(time.time()) - issued_i > _APP_TOKEN_MAX_AGE_S:
+        return None
+    return chat_id
+
+
+def _bearer_chat_id():
+    auth = request.headers.get("Authorization") or ""
+    if auth.startswith("Bearer "):
+        return _verify_app_token(auth[len("Bearer "):].strip())
+    return None
+
+
+@app_bp.route("/auth/poll", methods=["POST"])
+def auth_poll():
+    """Exchange a link code for an app token once the bot recorded it."""
+    if _rate_limited(_client_bucket("auth_poll"), 60):
+        return _rate_limit_response()
+    body = request.get_json(silent=True) or {}
+    code = str(body.get("code") or "").strip()
+    if not _LINK_CODE_RE.match(code):
+        return jsonify({"status": "invalid"}), 400
+    rec = redis_get(f"app_link:{code}")
+    if not isinstance(rec, dict):
+        return jsonify({"status": "pending"})
+    if int(rec.get("exp") or 0) < int(time.time()):
+        redis_delete(f"app_link:{code}")
+        return jsonify({"status": "expired"})
+    chat_id = str(rec.get("chat_id") or "").strip()
+    if not chat_id:
+        return jsonify({"status": "pending"})
+    redis_delete(f"app_link:{code}")  # one-time use
+    return jsonify({
+        "status": "linked",
+        "token": _make_app_token(chat_id),
+        "telegram_id": chat_id,
+        "name": rec.get("name") or "",
+        "username": rec.get("username") or "",
+    })
+
+
+@app_bp.route("/account", methods=["GET"])
+def app_account():
+    """Linked account summary: wallet balances + loyalty points."""
+    if _rate_limited(_client_bucket("account"), 60):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    main_bal, bonus_bal, total_bal = get_user_balance_breakdown(chat_id)
+    pts = get_points(chat_id)
+    try:
+        profile = get_user_profile(chat_id) or {}
+    except Exception:
+        profile = {}
+    return jsonify({
+        "telegram_id": chat_id,
+        "name": profile.get("full_name") or "",
+        "username": profile.get("username") or "",
+        "balance_main_ks": main_bal,
+        "balance_bonus_ks": bonus_bal,
+        "balance_total_ks": total_bal,
+        "points": pts.get("points", 0),
+        "points_streak_days": pts.get("streak_days", 0),
+        "points_lifetime_earned": pts.get("lifetime_earned", 0),
+    })
+
+
+@app_bp.route("/purchases", methods=["GET"])
+def app_purchases():
+    """Linked account's purchase history (newest first, keys NOT included)."""
+    if _rate_limited(_client_bucket("purchases"), 60):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    records = get_user_combined_purchase_records(chat_id)
+    out = []
+    for r in reversed(records[-50:]):
+        out.append({
+            "timestamp": r.get("timestamp"),
+            "order_id": r.get("order_id"),
+            "plan_name": r.get("plan_name"),
+            "data": r.get("disp_gb"),
+            "months": r.get("months"),
+            "price": r.get("price_str"),
+            "server": r.get("server"),
+            "expire_date": r.get("expire_date"),
+        })
+    return jsonify({"purchases": out})
