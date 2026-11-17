@@ -30,6 +30,14 @@ def handle_admin_replace_callback(call):
             bot.send_message(target_chat_id, "❌ <b>လူကြီးမင်း တောင်းဆိုထားသော Key အစားထိုးခြင်းအား Admin မှ ငြင်းပယ်လိုက်ပါသည်ခင်ဗျာ။</b>", parse_mode="HTML")
         except:
             pass
+        try:
+            from bot_app.services.app_notify import push_app_notification
+            push_app_notification(
+                target_chat_id, "key_replace",
+                "Key လဲလှယ်မှု ငြင်းပယ်ခံရပါတယ် ❌",
+                "Admin မှ လဲလှယ်ရန် ငြင်းပယ်လိုက်ပါသည်။ အသေးစိတ်အတွက် Customer Service သို့ ဆက်သွယ်ပါ။")
+        except Exception:
+            pass
         bot.edit_message_text(call.message.text + "\n\n❌ <b>REJECTED</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
         return
 
@@ -80,6 +88,14 @@ def handle_admin_replace_callback(call):
                 f"☝️ Key ကို တစ်ချက်နှိပ်ရုံဖြင့် Auto Copy ကူးနိုင်သလို၊ အောက်က Button များကို နှိပ်ပြီးလည်း တိုက်ရိုက်ထည့်သွင်း အသုံးပြုနိုင်ပါပြီခင်ဗျာ။"
             )
             bot.send_message(target_chat_id, success_msg, parse_mode="HTML", reply_markup=get_key_delivery_markup(new_key))
+            try:
+                from bot_app.services.app_notify import push_app_notification
+                push_app_notification(
+                    target_chat_id, "key_replace",
+                    "Key အသစ် လဲလှယ်ပေးပြီးပါပြီ 🎉",
+                    f"Server {new_server_num} · Expire {expire_date}\n{new_key}")
+            except Exception:
+                pass
             bot.edit_message_text(call.message.text + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
             bot.answer_callback_query(call.id, "✅ Key အသစ် အစားထိုး ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
     except Exception as e:
