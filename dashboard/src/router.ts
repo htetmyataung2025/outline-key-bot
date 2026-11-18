@@ -1,23 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import OverviewView from '@/views/OverviewView.vue'
-import SlipsView from '@/views/SlipsView.vue'
-import KeysView from '@/views/KeysView.vue'
-import RedeemsView from '@/views/RedeemsView.vue'
-import PurchasesView from '@/views/PurchasesView.vue'
-import CustomersView from '@/views/CustomersView.vue'
-import CustomerDetailView from '@/views/CustomerDetailView.vue'
-import SettingsView from '@/views/SettingsView.vue'
 
 const routes = [
   { path: '/', redirect: '/overview' },
-  { path: '/overview', name: 'Overview', component: OverviewView },
-  { path: '/slips', name: 'Slips', component: SlipsView },
-  { path: '/purchases', name: 'Purchases', component: PurchasesView },
-  { path: '/keys', name: 'Keys', component: KeysView },
-  { path: '/redeems', name: 'Redeems', component: RedeemsView },
-  { path: '/customers', name: 'Customers', component: CustomersView },
-  { path: '/customers/:chatId', name: 'CustomerDetail', component: CustomerDetailView, props: true },
-  { path: '/settings', name: 'Settings', component: SettingsView },
+  { path: '/overview', name: 'Overview', component: () => import('@/views/OverviewView.vue') },
+  { path: '/slips', name: 'Slips', component: () => import('@/views/SlipsView.vue') },
+  { path: '/purchases', name: 'Purchases', component: () => import('@/views/PurchasesView.vue') },
+  { path: '/keys', name: 'Keys', component: () => import('@/views/KeysView.vue') },
+  { path: '/redeems', name: 'Redeems', component: () => import('@/views/RedeemsView.vue') },
+  { path: '/customers', name: 'Customers', component: () => import('@/views/CustomersView.vue') },
+  { path: '/customers/:chatId', name: 'CustomerDetail', component: () => import('@/views/CustomerDetailView.vue'), props: true },
+  { path: '/settings', name: 'Settings', component: () => import('@/views/SettingsView.vue') },
 ]
 
 const router = createRouter({

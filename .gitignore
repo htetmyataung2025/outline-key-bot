@@ -28,3 +28,4 @@ backup_dd09255/
 scripts/removed_user_*.json
 # ZCode agent workspace
 .zcode/
+.local_sandbox/

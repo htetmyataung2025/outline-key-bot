@@ -35,6 +35,8 @@ def clear_kv_cache(key=None):
 
 
 def _kv_config():
+    if os.environ.get("LOCAL_SANDBOX") == "1" or os.environ.get("DISABLE_REMOTE_DB") == "1":
+        return "", ""
     url = (os.environ.get("KV_REST_API_URL") or os.environ.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
     token = os.environ.get("KV_REST_API_TOKEN") or os.environ.get("UPSTASH_REDIS_REST_TOKEN") or ""
     # Vercel KV_* aliases (Upstash integration exposes KV_* names)

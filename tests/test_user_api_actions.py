@@ -1,7 +1,6 @@
 """Tests for Customer TMA Actions (daily claim, slip upload, key replace, history, leaderboard)."""
 
 import io
-from bot_app.services.points import get_points
 from bot_app.services.slips import load_all_slips, record_slip
 from bot_app.services.orders import save_user_purchase_record
 
@@ -137,6 +136,13 @@ def test_user_api_topup_slip_upload(client, make_telegram_init_data, isolated_st
     assert any(cb.startswith(f"approve_topup_{user_id}_5000_{data['slip_id']}") for cb in button_callbacks)
     assert any(cb == f"reject_topup_{data['slip_id']}" for cb in button_callbacks)
 
+    # Verify customer also received a Telegram receipt confirmation message
+    customer_receipt_msgs = [
+        msg for cid, msg in mock_bot.calls["send_message"]
+        if str(cid) == str(user_id) and data["slip_id"] in msg
+    ]
+    assert len(customer_receipt_msgs) == 1
+
     # Test Telegram-side Approve: Admin taps the Approve inline button
     from bot_app.handlers.topup import handle_approve_topup
     from types import SimpleNamespace
@@ -189,6 +195,183 @@ def test_user_api_key_replace(client, make_telegram_init_data, isolated_state, m
     )
     assert resp_valid.status_code == 200
     assert resp_valid.get_json()["success"] is True
+
+    # Assert admin received replacement request message with server options
+    admin_calls = [msg for chat_id, msg in mock_bot.calls["send_message"] if "KEY REPLACEMENT REQUEST" in msg]
+    assert len(admin_calls) >= 1
+
+    # Assert customer also received replacement confirmation in Telegram chat
+    customer_calls = [
+        msg for cid, msg in mock_bot.calls["send_message"]
+        if str(cid) == str(user_id) and "#ORD-REPL99" in msg
+    ]
+    assert len(customer_calls) == 1
+
+
+def test_user_api_redeem_points_success_and_failures(client, make_telegram_init_data, isolated_state, monkeypatch):
+    """Test Starter plan points redemption gating, server failure refund, and success."""
+    from bot_app.services.points import load_all_points, save_all_points, credit_points, points_settings
+    user_id = 555666111
+    init_data = make_telegram_init_data(user_id=user_id, username="points_user")
+    starter_cost = int(points_settings()["starter_cost"])
+
+    # 1. Gate: User has points but has never topped up
+    credit_points(user_id, starter_cost + 500, "test")
+    resp_no_topup = client.post(
+        "/api/user/redeem-points",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp_no_topup.status_code == 400
+    assert resp_no_topup.get_json()["error"] == "needs_topup"
+
+    # 2. Gate: User has topped up, but insufficient points
+    pts = load_all_points()
+    pts[str(user_id)]["has_topped_up"] = True
+    pts[str(user_id)]["points"] = 10  # Less than starter_cost
+    save_all_points(pts)
+
+    resp_low_pts = client.post(
+        "/api/user/redeem-points",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp_low_pts.status_code == 400
+    assert resp_low_pts.get_json()["error"] == "insufficient_points"
+
+    # 3. Server failure: automatic points refund
+    pts[str(user_id)]["points"] = starter_cost + 1000
+    save_all_points(pts)
+
+    def fake_failing_key(*args, **kwargs):
+        return (None, None, None)
+
+    import bot_app.routes_user as ru
+    monkeypatch.setattr(ru, "create_outline_key", fake_failing_key)
+
+    resp_server_fail = client.post(
+        "/api/user/redeem-points",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp_server_fail.status_code == 502
+    assert resp_server_fail.get_json()["error"] == "server_unavailable"
+    # Points refunded back to starter_cost + 1000
+    assert load_all_points()[str(user_id)]["points"] == starter_cost + 1000
+
+    # 4. Success: Key provisioned, points deducted
+    def fake_success_key(*args, **kwargs):
+        return ("ss://pointsStarterKey#Points", "PointsKey", "25.12.2026")
+
+    monkeypatch.setattr(ru, "create_outline_key", fake_success_key)
+
+    resp_success = client.post(
+        "/api/user/redeem-points",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp_success.status_code == 200
+    data = resp_success.get_json()
+    assert data["success"] is True
+    assert data["order_id"].startswith("PTS-")
+    assert data["vpn_key"].startswith("ss://")
+    assert data["new_points"] == 1000
+    assert data["key_details"] is not None
+    assert data["key_details"]["plan"] == "Starter"
+
+
+def test_user_api_redeem_promo_code(client, make_telegram_init_data, isolated_state, mock_bot):
+    """Test gift/promo code redemption modes, existing bonus lock, and expiration."""
+    from bot_app.services.orders import save_redeem_codes
+    from bot_app.services.billing import get_user_balance_breakdown
+    user_id = 555666222
+    init_data = make_telegram_init_data(user_id=user_id, username="code_redeemer")
+
+    # 1. Missing code
+    resp_empty = client.post(
+        "/api/user/redeem-code",
+        headers={"X-Telegram-Init-Data": init_data},
+        json={"code": ""}
+    )
+    assert resp_empty.status_code == 400
+    assert resp_empty.get_json()["error"] == "missing_code"
+
+    # 2. Invalid code
+    resp_invalid = client.post(
+        "/api/user/redeem-code",
+        headers={"X-Telegram-Init-Data": init_data},
+        json={"code": "NON_EXISTENT_CODE"}
+    )
+    assert resp_invalid.status_code == 400
+    assert resp_invalid.get_json()["error"] == "invalid_code"
+
+    # 3. Single promo code success
+    save_redeem_codes({
+        "GIFT1000": {
+            "amount": 1000,
+            "validity_days": 3,
+            "mode": "single",
+            "expires_at": "30.12.2026",
+            "created_at": "01.01.2026"
+        }
+    })
+
+    resp_redeem = client.post(
+        "/api/user/redeem-code",
+        headers={"X-Telegram-Init-Data": init_data},
+        json={"code": "gift1000"}  # Case-insensitive
+    )
+    assert resp_redeem.status_code == 200
+    data_redeem = resp_redeem.get_json()
+    assert data_redeem["success"] is True
+    assert data_redeem["awarded_amount"] == 1000
+    assert data_redeem["validity_days"] == 3
+    assert data_redeem["new_balance"] == 1000
+
+    # Balance verified
+    _, bonus, total = get_user_balance_breakdown(user_id)
+    assert bonus == 1000
+    assert total == 1000
+
+    # 4. Code cannot be redeemed again (deleted single code)
+    resp_again = client.post(
+        "/api/user/redeem-code",
+        headers={"X-Telegram-Init-Data": init_data},
+        json={"code": "gift1000"}
+    )
+    assert resp_again.status_code == 400
+
+    # 5. Lockout if existing bonus balance > 0
+    save_redeem_codes({
+        "ANOTHER_CODE": {
+            "amount": 2000,
+            "validity_days": 3,
+            "mode": "single",
+            "expires_at": "30.12.2026",
+        }
+    })
+    resp_locked = client.post(
+        "/api/user/redeem-code",
+        headers={"X-Telegram-Init-Data": init_data},
+        json={"code": "ANOTHER_CODE"}
+    )
+    assert resp_locked.status_code == 400
+    assert resp_locked.get_json()["error"] == "existing_bonus"
+
+    # 6. Expired code rejection
+    user2 = 555666333
+    init_data2 = make_telegram_init_data(user_id=user2)
+    save_redeem_codes({
+        "EXPIRED99": {
+            "amount": 1000,
+            "validity_days": 1,
+            "mode": "single",
+            "expires_at": "01/01/2020 12:00 AM",
+        }
+    })
+    resp_expired = client.post(
+        "/api/user/redeem-code",
+        headers={"X-Telegram-Init-Data": init_data2},
+        json={"code": "EXPIRED99"}
+    )
+    assert resp_expired.status_code == 400
+    assert resp_expired.get_json()["error"] == "code_expired"
 
 
 

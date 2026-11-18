@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onScopeDispose } from 'vue'
+import { ref, onActivated, onDeactivated, onMounted, onScopeDispose } from 'vue'
 import WalletCard from '../components/overview/WalletCard.vue'
 import KeyStack from '../components/overview/KeyStack.vue'
 import QuickAccess from '../components/overview/QuickAccess.vue'
@@ -11,12 +11,16 @@ const { state, activeKeys, refresh, setTab } = useMiniApp()
 const pullY = ref(0)
 const isRefreshing = ref(false)
 const readyToRelease = ref(false)
+const isTabInactive = ref(false)
 let startY = 0
 let tracking = false
+let scrollContainer: HTMLElement | null = null
+
+onActivated(() => { isTabInactive.value = false })
+onDeactivated(() => { isTabInactive.value = true })
 
 function onTouchStart(e: TouchEvent) {
-  const scrollEl = document.getElementById('screen-content')
-  if (scrollEl && scrollEl.scrollTop > 5) return
+  if (scrollContainer && scrollContainer.scrollTop > 5) return
   if (isRefreshing.value) return
   const touch = e.touches[0]
   if (!touch) return
@@ -70,28 +74,28 @@ async function onTouchEnd() {
 }
 
 onMounted(() => {
-  const container = document.getElementById('screen-content')
-  if (container) {
-    container.addEventListener('touchstart', onTouchStart, { passive: true })
-    container.addEventListener('touchmove', onTouchMove, { passive: true })
-    container.addEventListener('touchend', onTouchEnd)
-    container.addEventListener('touchcancel', onTouchEnd)
+  scrollContainer = document.getElementById('screen-content')
+  if (scrollContainer) {
+    scrollContainer.addEventListener('touchstart', onTouchStart, { passive: true })
+    scrollContainer.addEventListener('touchmove', onTouchMove, { passive: true })
+    scrollContainer.addEventListener('touchend', onTouchEnd)
+    scrollContainer.addEventListener('touchcancel', onTouchEnd)
   }
 })
 
 onScopeDispose(() => {
-  const container = document.getElementById('screen-content')
-  if (container) {
-    container.removeEventListener('touchstart', onTouchStart)
-    container.removeEventListener('touchmove', onTouchMove)
-    container.removeEventListener('touchend', onTouchEnd)
-    container.removeEventListener('touchcancel', onTouchEnd)
+  if (scrollContainer) {
+    scrollContainer.removeEventListener('touchstart', onTouchStart)
+    scrollContainer.removeEventListener('touchmove', onTouchMove)
+    scrollContainer.removeEventListener('touchend', onTouchEnd)
+    scrollContainer.removeEventListener('touchcancel', onTouchEnd)
+    scrollContainer = null
   }
 })
 </script>
 
 <template>
-  <div class="overview-view min-w-0">
+  <div class="overview-view min-w-0" :class="{ 'is-tab-inactive': isTabInactive }">
     <!-- Pull-to-Refresh Indicator -->
     <div
       class="pull-refresh-bar"

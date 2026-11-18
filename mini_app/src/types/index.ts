@@ -3,9 +3,15 @@ import type { IconName } from './icons'
 export type TabId = 'overview' | 'keys' | 'shop' | 'history'
 export type KeyStatus = 'active' | 'expiring' | 'expired'
 export type KeyFilter = 'all' | KeyStatus
-export type PlanName = 'Starter' | 'Basic' | 'VIP'
-export type PaymentMethod = 'kbz' | 'wave'
+export type PlanName = 'Starter' | 'Basic' | 'VIP' | string
+export type PaymentMethod = 'kbz' | 'wave' | 'aya' | 'uab' | 'cb'
+export type VpnAppId = 'outline' | 'v2box' | 'incy'
 export type TopUpAmount = number | 'custom'
+export interface LeaderboardMe {
+  rank: number | null
+  name: string
+  points: number
+}
 export interface VpnKey {
   id: string
   server: string
@@ -19,8 +25,19 @@ export interface VpnKey {
   status: KeyStatus
   connected: boolean
   key: string
+  go_url?: string
 }
-export interface Plan { name: PlanName; quota: number; description: string; icon: IconName; price: number | null; code?: string }
+export interface Plan {
+  name: PlanName
+  quota: number
+  description: string
+  icon: IconName
+  price: number | null
+  code?: string
+  quotaLabel?: string
+  manual?: boolean
+  months?: number
+}
 export interface TelegramUser { id: number | string; first_name?: string; last_name?: string; username?: string }
 export interface Member { name: string; id: string; initials: string }
 export interface Receipt { name: string; url: string; file: File }
@@ -82,6 +99,9 @@ export interface BootstrapData {
     streak_days: number
     cooldown_remaining: number
     cooldown_hours: number
+    starter_cost?: number
+    has_topped_up?: boolean
+    can_redeem_points?: boolean
   }
   keys: VpnKey[]
   plans: Array<{
@@ -91,6 +111,8 @@ export interface BootstrapData {
     price: number
     description: string
     symbol: string
+    manual?: boolean
+    months?: number
   }>
   servers: ServerOption[]
   payment_methods: Record<string, PaymentMethodInfo>
@@ -103,6 +125,16 @@ export type AppDialog =
   | { kind: 'key-qr'; keyId: string }
   | { kind: 'purchase'; plan: PlanName }
   | { kind: 'payment'; method: PaymentMethod; amount: number }
+  | {
+      kind: 'claim-reward'
+      status: 'loading' | 'success'
+      awarded?: number
+      newBalance?: number
+      streakDays?: number
+      isStreakBonus?: boolean
+      cooldownHours?: number
+      message?: string
+    }
   | { kind: 'manual-copy'; value: string }
   | { kind: 'profile' }
   | { kind: 'leaderboard' }

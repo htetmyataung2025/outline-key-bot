@@ -8,13 +8,16 @@ import requests
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-OLD_URL = "https://relaxed-coral-166624.upstash.io"
-OLD_TOKEN = "gQAAAAAAAorgAAIgcDFmOTM0YWQwN2U4MTg0NzQ3OGE1YWFiZDhiOGZiZGQwNw"
+OLD_URL = os.environ.get("OLD_UPSTASH_URL", "https://relaxed-coral-166624.upstash.io")
+OLD_TOKEN = os.environ.get("OLD_UPSTASH_TOKEN", "")
 
-NEW_URL = "https://select-seasnail-127182.upstash.io"
-NEW_TOKEN = "gQAAAAAAAfDOAAIgcDI0ODBhOGQyMTM5ODI0ZWMyOTQ4OTE5YjU3MTViMjQyMw"
+NEW_URL = os.environ.get("UPSTASH_REDIS_REST_URL") or os.environ.get("KV_REST_API_URL") or "https://select-seasnail-127182.upstash.io"
+NEW_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN") or os.environ.get("KV_REST_API_TOKEN", "")
 
 def migrate():
+    if not OLD_TOKEN or not NEW_TOKEN:
+        print("ERROR: OLD_UPSTASH_TOKEN and UPSTASH_REDIS_REST_TOKEN / KV_REST_API_TOKEN must be set in environment.")
+        return False
     print(f"Connecting to Old Upstash: {OLD_URL}")
     r = requests.get(f"{OLD_URL}/keys/*", headers={"Authorization": f"Bearer {OLD_TOKEN}"})
     if r.status_code != 200:
@@ -53,9 +56,9 @@ def migrate():
         else:
             print(f"  ✗ Failed to write {clean_k}")
 
-    print(f"\n==========================================")
+    print("\n==========================================")
     print(f"MIGRATION COMPLETE: {success_count}/{len(keys)} keys copied to New Upstash!")
-    print(f"==========================================")
+    print("==========================================")
     return True
 
 if __name__ == "__main__":

@@ -15,10 +15,14 @@ export class ApiError extends Error {
 
 export function getTelegramInitData(): string {
   if (typeof window === 'undefined') return ''
-  return (
-    window.Telegram?.WebApp?.initData ||
-    (typeof localStorage !== 'undefined' ? localStorage.getItem('dev_init_data') || '' : '')
-  )
+  try {
+    return (
+      window.Telegram?.WebApp?.initData ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('dev_init_data') || '' : '')
+    )
+  } catch {
+    return window.Telegram?.WebApp?.initData || ''
+  }
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -51,14 +55,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  /** Check if running with real Telegram WebApp credentials or in local dev mode */
+  /** Check if running with real Telegram WebApp credentials or in local dev/sandbox mode */
   hasAuth(): boolean {
+    if (typeof window !== 'undefined' && window.location.port === '5000') {
+      return true
+    }
     return Boolean(getTelegramInitData()) || Boolean(import.meta.env.DEV)
   },
 
   /** Consolidated user bootstrap */
-  async getBootstrap(): Promise<BootstrapData> {
-    return request<BootstrapData>('/api/user/bootstrap', { method: 'GET' })
+  async getBootstrap(refresh = false): Promise<BootstrapData> {
+    const query = refresh ? '?refresh=1' : ''
+    return request<BootstrapData>(`/api/user/bootstrap${query}`, { method: 'GET' })
   },
 
   /** Claim daily loyalty points reward */
@@ -83,8 +91,10 @@ export const api = {
     success: boolean
     order_id: string
     vpn_key: string
-    key_details: VpnKey
+    key_details?: VpnKey | null
+    new_balance?: number
     remaining_balance: number
+    manual?: boolean
     message: string
   }> {
     return request('/api/user/purchase', {
@@ -94,12 +104,46 @@ export const api = {
     })
   },
 
+  /** Redeem loyalty points for a Starter Plan key (25GB / 30 days) */
+  async redeemPoints(): Promise<{
+    success: boolean
+    order_id: string
+    vpn_key: string
+    expire_date: string
+    new_points: number
+    key_details: VpnKey
+    message: string
+  }> {
+    return request('/api/user/redeem-points', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+  },
+
+  /** Redeem promo / gift wallet balance code */
+  async redeemCode(code: string): Promise<{
+    success: boolean
+    code?: string
+    awarded_amount: number
+    validity_days: number
+    new_balance: number
+    message: string
+  }> {
+    return request('/api/user/redeem-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+  },
+
   /** Upload payment slip receipt screenshot for OCR verification */
-  async uploadSlip(file: File, amount: number, method: 'kbz' | 'wave'): Promise<{
+  async uploadSlip(file: File, amount: number, method: 'kbz' | 'wave' | 'aya' | 'uab' | 'cb'): Promise<{
     success: boolean
     slip_id: string
     status: string
     amount: number
+    method?: string
+    submitted_at?: string
     message: string
   }> {
     const formData = new FormData()
@@ -135,8 +179,11 @@ export const api = {
 
   /** 7-day points leaderboard */
   async getLeaderboard(): Promise<{
-    period: string
+    period?: string
+    mode?: string
     rows: LeaderboardRow[]
+    me?: { rank: number | null; name: string; points: number } | null
+    total_players?: number
   }> {
     return request('/api/user/leaderboard', { method: 'GET' })
   },

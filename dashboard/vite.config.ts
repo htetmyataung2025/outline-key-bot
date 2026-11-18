@@ -9,6 +9,17 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/naive-ui')) return 'naive-ui'
+          if (id.includes('node_modules/@vicons/ionicons5')) return 'icons'
+          if (id.includes('node_modules/vue')) return 'vue-vendor'
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     host: '0.0.0.0',

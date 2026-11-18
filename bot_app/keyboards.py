@@ -7,7 +7,7 @@ from telebot.types import (
     ReplyKeyboardMarkup,
 )
 
-from bot_app.config import REQUIRED_CHANNEL, is_admin, points_enabled
+from bot_app.config import PLANS, REQUIRED_CHANNEL, is_admin, points_enabled
 
 
 def get_force_join_keyboard():
@@ -68,15 +68,27 @@ def get_back_inline_keyboard():
     return markup
 
 
+_PLAN_EMOJIS = {
+    "starter": "🌟",
+    "basic": "💎",
+    "standard": "⚡",
+    "premium": "🔥",
+    "vip": "👑",
+    "pro": "🚀",
+    "ultimate": "🌌",
+}
+
+
 def get_plan_keyboard():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("🌟 Starter (25 GB) - 1,000 Ks", callback_data="selectplan_starter"))
-    markup.row(InlineKeyboardButton("💎 Basic (50 GB) - 2,000 Ks", callback_data="selectplan_basic"))
-    markup.row(InlineKeyboardButton("⚡ Standard (75 GB) - 3,000 Ks", callback_data="selectplan_standard"))
-    markup.row(InlineKeyboardButton("🔥 Premium (100 GB) - 4,000 Ks", callback_data="selectplan_premium"))
-    markup.row(InlineKeyboardButton("👑 VIP (150 GB) - 5,000 Ks", callback_data="selectplan_vip"))
-    markup.row(InlineKeyboardButton("🚀 Pro (200 GB) - 7,000 Ks", callback_data="selectplan_pro"))
-    markup.row(InlineKeyboardButton("🌌 Ultimate VIP (500 GB) - 10,000 Ks", callback_data="selectplan_ultimate"))
+    for code, plan in PLANS.items():
+        emoji = _PLAN_EMOJIS.get(code, "📦")
+        raw_name = str(plan.get("name") or code.capitalize()).strip()
+        label_name = raw_name[:-5].strip() if raw_name.endswith(" Plan") else raw_name
+        data_label = str(plan.get("data") or "").strip()
+        price = int(plan.get("price") or 0)
+        text = f"{emoji} {label_name} ({data_label}) - {price:,} Ks" if data_label else f"{emoji} {label_name} - {price:,} Ks"
+        markup.row(InlineKeyboardButton(text, callback_data=f"selectplan_{code}"))
     markup.row(InlineKeyboardButton("🔙 မူလ Menu သို့ ပြန်သွားရန်", callback_data="back_to_main"))
     return markup
 

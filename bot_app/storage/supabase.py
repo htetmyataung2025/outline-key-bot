@@ -11,6 +11,8 @@ from bot_app.helpers.http_session import get_session
 
 def get_supabase_config() -> tuple[str, str]:
     """Retrieve validated Supabase URL and API Key from environment."""
+    if os.environ.get("LOCAL_SANDBOX") == "1" or os.environ.get("DISABLE_REMOTE_DB") == "1":
+        return "", ""
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     key = os.environ.get("SUPABASE_KEY", "").strip()
     return url, key

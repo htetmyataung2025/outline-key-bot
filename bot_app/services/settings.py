@@ -11,9 +11,12 @@ Persistence backend (first available wins):
   3. In-memory fallback / env defaults — local dev and tests.
 """
 
+import json
+import os
 import time
 import requests
 from bot_app.storage.kv import redis_get, redis_set
+from bot_app.storage.paths import SETTINGS_FILE
 from bot_app.storage.supabase import is_supabase_configured, supabase_get, supabase_upsert
 from bot_app.timeutil import myanmar_now
 
@@ -92,8 +95,15 @@ def get_system_settings(force_refresh: bool = False) -> dict:
 
     if not is_supabase_configured():
         # KV-only mode: settings persist in the same Redis store as everything
-        # else. Missing keys fall back to env/in-memory defaults.
+        # else. In local sandbox mode, fall back to SETTINGS_FILE so Admin
+        # Dashboard edits survive local restarts.
         kv_data = redis_get(_KV_SETTINGS_KEY)
+        if not kv_data and os.environ.get("LOCAL_SANDBOX") == "1" and os.path.exists(SETTINGS_FILE):
+            try:
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                    kv_data = json.load(f)
+            except Exception:
+                kv_data = None
         if isinstance(kv_data, dict) and kv_data:
             merged = {k: kv_data.get(k, defaults[k]) for k in defaults}
             _SETTINGS_CACHE = merged
@@ -177,6 +187,12 @@ def save_system_settings(new_settings: dict, updated_by: str = "Admin") -> dict:
         # KV-only mode: persist the whole settings dict. redis_set bumps the
         # live-refresh data version itself (no separate bump needed).
         redis_set(_KV_SETTINGS_KEY, _FALLBACK_SETTINGS)
+        if os.environ.get("LOCAL_SANDBOX") == "1":
+            try:
+                with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(_FALLBACK_SETTINGS, f, indent=2)
+            except Exception:
+                pass
 
     invalidate_settings_cache()
     return get_system_settings(force_refresh=True)

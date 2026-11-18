@@ -6,10 +6,7 @@ import telebot
 from telebot.types import MenuButtonDefault, WebAppInfo
 
 from bot_app.config import (
-    ADMIN_MENU_BUTTON,
     DASHBOARD_URL,
-    MINI_APP_URL,
-    MENU_BUTTON_TEXT,
     PLANS,
     is_admin,
 )
@@ -83,7 +80,7 @@ def send_welcome(message):
         if is_admin(chat_id) and admin_mode != "miniapp":
             bot.set_chat_menu_button(chat_id, telebot.types.MenuButtonWebApp(
                 type="web_app",
-                text="🎛 Control",
+                text="Control",
                 web_app=WebAppInfo(url=DASHBOARD_URL))
             )
         elif miniapp_url:
