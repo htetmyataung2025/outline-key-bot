@@ -79,7 +79,7 @@ test('real touch swipes advance vertically, return, and stop at both ends', asyn
   await expect(page.locator('.stack-dot.active')).toHaveAttribute('data-snapshot-index', '1')
 })
 
-test('dots, keyboard and wheel select the same key; connect button opens Outline dialog', async ({ page }) => {
+test('dots, keyboard and wheel select the same key; connect button opens Available VPN dialog', async ({ page }) => {
   await injectTestKeys(page)
   const stage = page.locator('.snapshot-stage')
   await stage.focus()
@@ -97,8 +97,9 @@ test('dots, keyboard and wheel select the same key; connect button opens Outline
   await expect(page.locator('#snapshot-current')).toHaveText('02')
   await page.locator('[data-snapshot-index="0"]').click()
   await settle(page)
+  await expect(current(page).locator('[data-action="connect"]')).toContainText('Available VPN')
   await current(page).locator('[data-action="connect"]').click()
-  await expect(page.locator('#modal-title')).toContainText('Outline')
+  await expect(page.locator('#modal-title')).toContainText('ကိုယ်နဲ့ အဆင်ပြေတဲ့ VPN')
   await page.keyboard.press('Escape')
 })
 
@@ -134,6 +135,9 @@ test('dialog traps focus, makes the background inert, closes on Escape and resto
   await expect(page.locator('#modal')).toBeVisible()
   await expect(page.locator('.modal-close')).toBeFocused()
   await expect(page.locator('#screen-content')).toHaveAttribute('inert', '')
+  // Tapping empty backdrop space must NOT dismiss the dialog — only explicit close (X / Escape)
+  await page.locator('#modal').click({ position: { x: 6, y: 6 } })
+  await expect(page.locator('#modal')).toBeVisible()
   await page.keyboard.press('Shift+Tab')
   await expect(page.locator('#modal .modal-full-btn')).toBeFocused()
   await page.keyboard.press('Tab')
@@ -168,9 +172,14 @@ test('custom top-up, payment method and receipt survive tab switches; min amount
   expect(customFontSize).toBeGreaterThanOrEqual(16)
   await expect(page.locator('#custom-amount')).toHaveAttribute('inputmode', 'numeric')
   await expect(page.locator('#custom-amount')).toHaveAttribute('pattern', '[0-9]*')
-  await expect(page.locator('.bottom-nav')).toBeHidden()
+  await expect(page.locator('.bottom-nav')).toBeVisible()
   await page.locator('#custom-amount').fill('abc၃၄၅၆!')
   await expect(page.locator('#custom-amount')).toHaveValue('3456')
+  for (const method of ['kbz', 'wave', 'aya', 'uab', 'cb']) {
+    await expect(page.locator(`[data-method="${method}"]`)).toBeVisible()
+  }
+  await page.locator('[data-method="aya"]').click()
+  await expect(page.locator('[data-method="aya"]')).toHaveAttribute('aria-pressed', 'true')
   await page.locator('[data-method="wave"]').click()
   await page.locator('#receipt-file').setInputFiles({
     name: 'receipt.png',
@@ -280,4 +289,178 @@ test('compiled standalone Vue preview works in an offline opaque-origin iframe',
   await frame.locator('.nav-item[data-tab="shop"]').click()
   await expect(frame.locator('.plans-grid')).toBeVisible()
   expect(requests).toEqual([])
+})
+
+test('daily reward claim displays loading suspense spinner before revealing points', async ({ page }) => {
+  await page.route('**/api/user/claim', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        awarded: 42,
+        new_balance: 42,
+        streak_days: 1,
+        is_streak_bonus: false,
+        next_in_s: 14400,
+        cooldown_hours: 4,
+        message: '🎉 +42 Points ရရှိပါသည်!',
+      }),
+    }),
+  )
+  await page.locator('.wallet-card [data-action="claim"]').click()
+  await expect(page.locator('#modal [data-claim-stage="loading"]')).toBeVisible()
+  await expect(page.locator('#modal progress.claim-spinner')).toBeVisible()
+  await expect(page.locator('#modal [data-claim-stage="success"]')).toBeVisible({ timeout: 5000 })
+  await expect(page.locator('#modal .claim-reveal-points')).toContainText('+42 PTS')
+  await page.locator('#modal .modal-close').click()
+  await expect(page.locator('#modal')).toHaveCount(0)
+})
+
+test('2-row scrollable plans, bounded 30-item history & leaderboard modals, and Available VPN deep links', async ({ page }) => {
+  await page.addInitScript(() => {
+    const opened: Array<{ url: string; opts: unknown }> = []
+    ;(window as any).__openedLinks = opened
+    window.Telegram = {
+      WebApp: {
+        initData: 'query_id=e2e&user=%7B%22id%22%3A123%7D&auth_date=1700000000&hash=mock',
+        initDataUnsafe: { user: { id: 123, first_name: 'Tester', last_name: 'One', username: 'tester_one' } },
+        openLink(url: string, opts?: { try_instant_view?: boolean }) {
+          opened.push({ url, opts })
+        },
+      },
+    }
+  })
+
+  const mockPlans = [
+    { code: 'starter', name: 'Starter Plan', quota: '25 GB', price: 1000, description: '25 GB / 1 လစာ', symbol: 'leaf' },
+    { code: 'basic', name: 'Basic Plan', quota: '50 GB', price: 2000, description: '50 GB / 1 လစာ', symbol: 'zap' },
+    { code: 'standard', name: 'Standard Plan', quota: '75 GB', price: 3000, description: '75 GB / 1 လစာ', symbol: 'zap' },
+    { code: 'premium', name: 'Premium Plan', quota: '100 GB', price: 4000, description: '100 GB / 1 လစာ', symbol: 'zap' },
+    { code: 'vip', name: 'VIP Plan', quota: '150 GB', price: 5000, description: '150 GB / 1 လစာ', symbol: 'crown' },
+    { code: 'pro', name: 'Pro Plan', quota: '200 GB', price: 7000, description: '200 GB / 1 လစာ', symbol: 'crown' },
+    { code: 'ultimate', name: 'Ultimate VIP Plan', quota: '500 GB', price: 10000, description: '500 GB / 1 လစာ', symbol: 'crown' },
+    { code: 'max', name: 'Max Plan', quota: '1000 GB', price: 18000, description: '1000 GB / 1 လစာ', symbol: 'crown' },
+  ]
+
+  await page.route('**/api/user/bootstrap**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        user: { id: '123', name: 'Tester One', username: 'tester_one', initials: 'TO' },
+        wallet: { balance: 15000, main_balance: 15000, bonus_balance: 0, points: 70, claimed_today: false, can_claim: true, streak_days: 1, cooldown_remaining: 0, cooldown_hours: 4 },
+        keys: [
+          { id: 'k1', server: 'Server 1', location: 'Singapore', country: 'SG', plan: 'Starter', quota: 25, used: 2, expires: '2026-12-18', left: '30 days left', status: 'active', connected: true, key: 'ss://dGVzdEAxMjcuMC4wLjE6ODM4OA==#Starter', go_url: '/go/signedtoken123' },
+        ],
+        plans: mockPlans,
+        servers: [{ id: '1', name: 'Server 1', location: 'Singapore', country: 'SG', flag: '🇸🇬' }],
+        payment_methods: { kbz: { name: 'KBZPay', account_name: 'Htet Myat Aung', phone: '09699970092', type: 'QR' } },
+      }),
+    }),
+  )
+
+  const purchases = Array.from({ length: 15 }, (_, idx) => ({
+    order_id: `#ORD${idx + 1}`,
+    plan_name: 'Starter Plan',
+    disp_gb: '25 GB',
+    price: '1,000 Ks',
+    date: `18/11/2026 (0${(idx % 9) + 1}:15 PM)`,
+    status: idx % 5 === 0 ? 'Expired' : 'Active',
+  }))
+  const slips = Array.from({ length: 15 }, (_, idx) => ({
+    slip_id: `SLIP${idx + 1}`,
+    amount: 2000,
+    method: idx % 2 === 0 ? 'WAVE' : 'KBZ',
+    status: idx === 0 ? 'APPROVED' : idx === 1 ? 'REJECTED' : 'PENDING',
+    submitted_at: `2026-11-18 10:${String(10 + idx).padStart(2, '0')}:00`,
+  }))
+  await page.route('**/api/user/history', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ purchases, slips }) }),
+  )
+
+  const rows = Array.from({ length: 30 }, (_, idx) => ({
+    rank: idx + 1,
+    name: idx === 23 ? 'Tester One' : `Customer #${idx + 1}`,
+    points: 1000 - idx * 20,
+    is_you: idx === 23,
+  }))
+  await page.route('**/api/user/leaderboard', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rows, me: { rank: 24, name: 'Tester One', points: 540 }, total_players: 30, mode: '7d' }) }),
+  )
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.reload()
+  await expect(page.locator('.snapshot-card[data-depth="0"] [data-action="connect"]')).toContainText('Available VPN')
+
+  // 1. Open Available VPN modal from Overview & verify V2Box / INCY / Outline open /go/<token>?app=
+  await page.locator('.snapshot-card[data-depth="0"] [data-action="connect"]').click()
+  await expect(page.locator('#modal-title')).toHaveText('ကိုယ်နဲ့ အဆင်ပြေတဲ့ VPN နဲ့ ချိတ်ဆက်ရန်')
+  for (const app of ['outline', 'v2box', 'incy']) {
+    await expect(page.locator(`#modal [data-vpn-app="${app}"]`)).toBeVisible()
+    await expect(page.locator(`#modal [data-vpn-app="${app}"] .vpn-app-logo-svg`)).toBeVisible()
+  }
+  await page.locator('#modal [data-vpn-app="v2box"]').click()
+  await page.locator('#modal [data-vpn-app="incy"]').click()
+  const opened = await page.evaluate(() => (window as any).__openedLinks)
+  expect(opened.some((x: any) => String(x.url).endsWith('/go/signedtoken123?app=v2box') && x.opts?.try_instant_view === false)).toBe(true)
+  expect(opened.some((x: any) => String(x.url).endsWith('/go/signedtoken123?app=incy') && x.opts?.try_instant_view === false)).toBe(true)
+  await page.locator('#modal .modal-close').click()
+
+  // 2. Verify My Keys button also shows Available VPN and opens connect modal
+  await tab(page, 'keys')
+  await expect(page.locator('.key-card [data-action="connect"]').first()).toContainText('Available VPN')
+  await page.locator('.key-card [data-action="connect"]').first().click()
+  await expect(page.locator('#modal-title')).toHaveText('ကိုယ်နဲ့ အဆင်ပြေတဲ့ VPN နဲ့ ချိတ်ဆက်ရန်')
+  await page.locator('#modal .modal-close').click()
+
+  // 3. Verify 2-row default VPN Plans (6 visible cards, zero scroll trap) + Smooth Expand/Collapse + Wallet Jump + BottomNav Glider
+  await tab(page, 'shop')
+  const plansGrid = page.locator('.plans-grid').first()
+  await expect(plansGrid).toBeVisible()
+  await expect(page.locator('.plans-shell .plan-card:visible')).toHaveCount(6)
+  await expect(plansGrid).toHaveCSS('overflow-y', 'visible')
+  await expect(page.locator('.bottom-nav-track')).toHaveCSS('--active-idx', '2')
+  await expect(page.locator('[data-action="toggle-plans"]')).toHaveAttribute('aria-expanded', 'false')
+
+  await page.locator('[data-action="toggle-plans"]').click()
+  await expect(page.locator('[data-action="toggle-plans"]')).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.locator('.plans-extra-collapse')).toHaveClass(/is-open/)
+  await expect(page.locator('.plans-shell .plan-card:visible')).toHaveCount(8)
+
+  await page.locator('[data-action="toggle-plans"]').click()
+  await expect(page.locator('[data-action="toggle-plans"]')).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator('.plans-shell .plan-card:visible')).toHaveCount(6)
+
+  await page.locator('[data-action="jump-topup"]').click()
+  await expect(page.locator('#wallet-topup-card')).toBeInViewport()
+
+  // 4. Verify Rewards previews + bounded 30-item History & Leaderboard modals (plus background animation pause)
+  await tab(page, 'history')
+  await expect(page.locator('.bottom-nav-track')).toHaveCSS('--active-idx', '3')
+  await expect(page.locator('.history-card .history-row')).toHaveCount(5)
+  await expect(page.locator('.leaderboard-card .leader-row')).toHaveCount(6) // Top 5 + pinned You row
+
+  await page.locator('[data-action="all-history"]').click()
+  await expect(page.locator('.app-frame')).toHaveClass(/has-modal/)
+  await expect(page.locator('#modal-title')).toHaveText('Purchase history')
+  await expect(page.locator('#modal .list-head')).toHaveCount(0)
+  await expect(page.locator('#modal .history-row')).toHaveCount(30)
+  const historyBox = await page.locator('#modal .modal-sheet').boundingBox()
+  expect(historyBox!.height).toBeLessThanOrEqual(844 * 0.88)
+  await expect(page.locator('#modal .modal-footer button')).toBeInViewport()
+  await page.locator('[data-history-filter="slips"]').click()
+  await expect(page.locator('#modal .history-row')).toHaveCount(15)
+  await page.locator('[data-history-filter="purchases"]').click()
+  await expect(page.locator('#modal .history-row')).toHaveCount(15)
+  await page.locator('#modal .modal-close').click()
+
+  await page.locator('[data-action="leaderboard"]').click()
+  await expect(page.locator('#modal-title')).toHaveText('Leaderboard')
+  await expect(page.locator('#modal .leader-row')).toHaveCount(30)
+  await expect(page.locator('#modal .leaderboard-summary-bar')).toContainText('#24')
+  const lbBox = await page.locator('#modal .modal-sheet').boundingBox()
+  expect(lbBox!.height).toBeLessThanOrEqual(844 * 0.88)
+  await expect(page.locator('#modal .modal-footer button')).toBeInViewport()
+  await page.locator('#modal .modal-close').click()
 })

@@ -1,24 +1,33 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import ScreenHeading from '../components/ui/ScreenHeading.vue'
 import SvgIcon from '../components/ui/SvgIcon.vue'
+import PaymentLogo from '../components/ui/PaymentLogo.vue'
 import PlanCard from '../components/shop/PlanCard.vue'
 import ReceiptUpload from '../components/shop/ReceiptUpload.vue'
 import { useMiniApp } from '../composables/useMiniApp'
 import { plans as defaultPlans } from '../data/demo'
 import { formatNumber } from '../utils/format'
-import type { PlanName, TopUpAmount } from '../types'
+import type { PaymentMethod, PlanName, TopUpAmount } from '../types'
 
 const { state, amountLabel, openDialog, showPayment, submitTopUp, redeemCode, copyKey } = useMiniApp()
 const amounts: TopUpAmount[] = [1000, 2000, 5000, 'custom']
+const paymentOptions: Array<{ id: PaymentMethod; label: string }> = [
+  { id: 'kbz', label: 'KBZPay' },
+  { id: 'wave', label: 'WavePay' },
+  { id: 'aya', label: 'AYA Pay' },
+  { id: 'uab', label: 'uab pay' },
+  { id: 'cb', label: 'CB Pay' },
+]
 const customInput = ref<HTMLInputElement | null>(null)
 const promoCodeInput = ref('')
 
 const currentPayment = computed(() => {
+  const fallbackLabel = paymentOptions.find(p => p.id === state.paymentMethod)?.label || 'KBZPay'
   return state.paymentMethods[state.paymentMethod] || {
-    name: state.paymentMethod === 'kbz' ? 'KBZPay' : 'WavePay',
+    name: fallbackLabel,
     account_name: 'Htet Myat Aung',
-    phone: '09699970092',
+    phone: state.paymentMethods.kbz?.phone || '09699970092',
     type: 'Direct Transfer',
   }
 })
@@ -34,6 +43,52 @@ async function handleRedeemCode() {
 
 const activePlans = computed(() => {
   return state.plans && state.plans.length > 0 ? state.plans : defaultPlans
+})
+
+const plansExpanded = ref(false)
+const hasExtraPlans = computed(() => activePlans.value.length > 6)
+const hiddenPlans = computed(() => activePlans.value.slice(6))
+const basePlans = computed(() => (hasExtraPlans.value ? activePlans.value.slice(0, 6) : activePlans.value))
+const extraPlans = computed(() => (hasExtraPlans.value ? activePlans.value.slice(6) : []))
+
+const plansToggleLabel = computed(() => {
+  if (plansExpanded.value) return 'Plan များ ပြန်သိမ်းရန်'
+  const firstHidden = hiddenPlans.value[0]
+  if (hiddenPlans.value.length === 1 && firstHidden) {
+    const quotaText = firstHidden.quotaLabel || (firstHidden.quota ? `${firstHidden.quota} GB` : 'Unlimited')
+    return `နောက်ထပ် Plan · ${firstHidden.name} (${quotaText})`
+  }
+  return `နောက်ထပ် Plan ${hiddenPlans.value.length} ခု ထပ်ကြည့်ရန်`
+})
+
+function togglePlansExpand() {
+  window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
+  plansExpanded.value = !plansExpanded.value
+}
+
+function scrollToTopUp() {
+  window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light')
+  document.getElementById('wallet-topup-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+watch(() => activePlans.value.length, len => {
+  if (len <= 6) plansExpanded.value = false
+})
+
+const selectedPlanObj = computed(() => {
+  const target = state.selectedPlan
+  return activePlans.value.find(p =>
+    p.name === target ||
+    (p.code && p.code.toLowerCase() === target.toLowerCase()) ||
+    p.name.toLowerCase().startsWith(target.toLowerCase())
+  )
+})
+
+const selectedPlanCta = computed(() => {
+  const plan = selectedPlanObj.value
+  if (!plan) return 'Wallet ဖြင့် 1-click ဝယ်ယူရန်'
+  const label = plan.name.toLowerCase().includes('plan') ? plan.name : `${plan.name} Plan`
+  return plan.price !== null ? `${label} ဝယ်ယူရန် · ${formatNumber(plan.price)} Ks` : `${label} ဝယ်ယူရန်`
 })
 
 function choosePlan(planName: PlanName) {
@@ -69,9 +124,17 @@ function setCustomAmount(event: Event) {
 function onInputFocus(event: FocusEvent) {
   const el = event.target as HTMLElement | null
   if (!el) return
+  // Only nudge the page when the field is not fully visible — prevents the
+  // sudden "page drops down" jump when tapping Custom / Redeem Code on desktop.
   setTimeout(() => {
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, 150)
+    // The field may already be removed (e.g. user switched back to a preset chip)
+    if (!el.isConnected || document.activeElement !== el) return
+    const rect = el.getBoundingClientRect()
+    const vh = window.visualViewport?.height || window.innerHeight
+    if (rect.bottom > vh - 8 || rect.top < 64) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, 250)
 }
 
 async function pay() {
@@ -86,20 +149,57 @@ async function pay() {
   <div>
     <ScreenHeading kicker="Plans & payments" title="Shop & Top-Up" description="သင့်လိုအပ်ချက်နဲ့ကိုက်ညီတဲ့ plan ကိုရွေးချယ်ပါ" icon="bag" />
     <div class="section-title-row">
-      <span class="section-title">VPN plans</span>
-      <span class="wallet-context"><SvgIcon name="wallet" />Wallet · <b>{{ formatNumber(state.walletBalance) }} Ks</b></span>
+      <span class="section-title">VPN plans <span v-if="hasExtraPlans" class="plans-count-pill">{{ activePlans.length }} Plans</span></span>
+      <button type="button" class="wallet-context wallet-jump-btn" data-action="jump-topup" @click="scrollToTopUp">
+        <SvgIcon name="wallet" />
+        <span><b>{{ formatNumber(state.walletBalance) }} Ks</b></span>
+        <span class="jump-chip">ငွေဖြည့် ↓</span>
+      </button>
     </div>
-    <div class="plans-grid">
-      <PlanCard
-        v-for="plan in activePlans"
-        :key="plan.name"
-        :plan="plan"
-        :selected="state.selectedPlan === plan.name"
-        @select="choosePlan($event)"
-      />
+    <div class="plans-shell">
+      <div class="plans-grid" aria-label="VPN plans">
+        <PlanCard
+          v-for="plan in basePlans"
+          :key="plan.code || plan.name"
+          :plan="plan"
+          :selected="state.selectedPlan === plan.name"
+          @select="choosePlan($event)"
+        />
+      </div>
+      <div
+        v-if="hasExtraPlans"
+        class="plans-extra-collapse"
+        :class="{ 'is-open': plansExpanded }"
+        :aria-hidden="!plansExpanded"
+        :inert="!plansExpanded"
+      >
+        <div class="plans-extra-inner">
+          <div class="plans-grid plans-grid-extra">
+            <PlanCard
+              v-for="(plan, index) in extraPlans"
+              :key="plan.code || plan.name"
+              :plan="plan"
+              :selected="state.selectedPlan === plan.name"
+              :wide="(activePlans.length % 3 === 1) && index === extraPlans.length - 1"
+              @select="choosePlan($event)"
+            />
+          </div>
+        </div>
+      </div>
+      <button
+        v-if="hasExtraPlans"
+        type="button"
+        class="plans-toggle-btn"
+        data-action="toggle-plans"
+        :aria-expanded="plansExpanded"
+        @click="togglePlansExpand"
+      >
+        <span>{{ plansToggleLabel }}</span>
+        <span class="plans-toggle-arrow" aria-hidden="true">{{ plansExpanded ? '↑' : '↓' }}</span>
+      </button>
     </div>
     <button class="primary-btn purchase-btn" data-action="purchase-plan" @click="openDialog({ kind: 'purchase', plan: state.selectedPlan })">
-      <SvgIcon name="zap" />Wallet ဖြင့် 1-click ဝယ်ယူရန်
+      <SvgIcon name="zap" />{{ selectedPlanCta }}
     </button>
     <p class="small-hint price-hint">
       <SvgIcon name="info" />
@@ -109,7 +209,7 @@ async function pay() {
     <section id="wallet-topup-card" class="topup-card card">
       <div class="section-title-row topup-heading">
         <span class="section-title"><SvgIcon name="wallet" />Wallet Top-Up</span>
-        <span class="section-caption">KBZPay · WavePay</span>
+        <span class="section-caption">KBZ · Wave · AYA · uab · CB</span>
       </div>
       <span id="amount-label" class="form-label">ငွေပမာဏရွေးရန် (Ks)</span>
       <div class="amount-options" role="group" aria-labelledby="amount-label">
@@ -125,47 +225,44 @@ async function pay() {
           {{ amount === 'custom' ? 'Custom' : `${formatNumber(amount)} Ks` }}
         </button>
       </div>
-      <input
-        v-if="state.selectedAmount === 'custom'"
-        id="custom-amount"
-        ref="customInput"
-        class="custom-amount"
-        type="text"
-        inputmode="numeric"
-        pattern="[0-9]*"
-        autocomplete="off"
-        enterkeyhint="done"
-        maxlength="8"
-        :value="state.customAmount"
-        aria-label="Custom top-up amount in Ks"
-        placeholder="ငွေပမာဏထည့်ပါ (Ks)"
-        @focus="onInputFocus"
-        @input="setCustomAmount"
-      />
+      <Transition name="custom-slot">
+        <input
+          v-if="state.selectedAmount === 'custom'"
+          id="custom-amount"
+          ref="customInput"
+          class="custom-amount"
+          type="text"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          autocomplete="off"
+          enterkeyhint="done"
+          maxlength="8"
+          :value="state.customAmount"
+          aria-label="Custom top-up amount in Ks"
+          placeholder="ငွေပမာဏထည့်ပါ (Ks)"
+          @focus="onInputFocus"
+          @input="setCustomAmount"
+        />
+      </Transition>
 
       <span id="method-label" class="form-label method-label">ငွေပေးချေမည့်နည်းလမ်း</span>
       <div class="method-row" role="group" aria-labelledby="method-label">
         <button
+          v-for="m in paymentOptions"
+          :key="m.id"
+          type="button"
           class="method-card"
-          :class="{ selected: state.paymentMethod === 'kbz' }"
-          data-method="kbz"
-          :aria-pressed="state.paymentMethod === 'kbz'"
-          @click="state.paymentMethod = 'kbz'"
+          :class="[m.id, { selected: state.paymentMethod === m.id }]"
+          :data-method="m.id"
+          :aria-label="m.label"
+          :aria-pressed="state.paymentMethod === m.id"
+          @click="state.paymentMethod = m.id"
         >
-          <span class="method-logo" aria-hidden="true">K</span>
-          <span class="method-name">KBZPay<small>{{ state.paymentMethods.kbz?.phone || '09699970092' }}</small></span>
-          <SvgIcon v-if="state.paymentMethod === 'kbz'" name="check-circle" class="method-check" />
-        </button>
-        <button
-          class="method-card wave"
-          :class="{ selected: state.paymentMethod === 'wave' }"
-          data-method="wave"
-          :aria-pressed="state.paymentMethod === 'wave'"
-          @click="state.paymentMethod = 'wave'"
-        >
-          <span class="method-logo" aria-hidden="true">W</span>
-          <span class="method-name">WavePay<small>{{ state.paymentMethods.wave?.phone || '09699970092' }}</small></span>
-          <SvgIcon v-if="state.paymentMethod === 'wave'" name="check-circle" class="method-check" />
+          <PaymentLogo :method="m.id" />
+          <span class="method-short">{{ m.label }}</span>
+          <span v-if="state.paymentMethod === m.id" class="method-check-dot" aria-hidden="true">
+            <SvgIcon name="check-circle" />
+          </span>
         </button>
       </div>
 
@@ -218,7 +315,7 @@ async function pay() {
         <input
           v-model="promoCodeInput"
           type="text"
-          class="custom-amount"
+          class="custom-amount redeem-code-input"
           style="margin-top: 0; flex: 1; min-width: 0; text-transform: uppercase;"
           placeholder="CODE ထည့်ပါ (ဥပမာ- GIFT1000)"
           autocomplete="off"

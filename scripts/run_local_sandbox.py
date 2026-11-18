@@ -1,11 +1,13 @@
 """Local Sandbox Runner for Outline Key Bot & Customer Mini App.
 
 Runs the Flask backend and Mini App locally with 100% file-based storage
-(/tmp/*.json) — completely bypassing Upstash Redis, Supabase, and live
-Outline VPN servers so you can test every feature offline in 0ms.
+(.local_sandbox/*.json, persistent across restarts) — completely bypassing
+Upstash Redis, Supabase, and live Outline VPN servers so you can test every
+feature offline in 0ms.
 
 Usage:
     .venv/bin/python scripts/run_local_sandbox.py
+    .venv/bin/python scripts/run_local_sandbox.py --seed
     .venv/bin/python scripts/run_local_sandbox.py --reset
     .venv/bin/python scripts/run_local_sandbox.py --empty
 """
@@ -14,6 +16,8 @@ import argparse
 import json
 import os
 import sys
+import threading
+import time
 from datetime import timedelta
 
 # Ensure project root is on sys.path
@@ -22,12 +26,17 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 # Activate Local Sandbox & Dev Auth BEFORE importing bot_app
+SANDBOX_DIR = os.path.join(ROOT_DIR, ".local_sandbox")
+os.makedirs(SANDBOX_DIR, exist_ok=True)
+os.environ.setdefault("LOCAL_STATE_DIR", SANDBOX_DIR)
 os.environ["LOCAL_SANDBOX"] = "1"
 os.environ["DISABLE_REMOTE_DB"] = "1"
 os.environ["DEV_MODE"] = "1"
 os.environ.setdefault("DEV_CUSTOMER_ID", "8777968077")
 
-from bot_app import app  # noqa: E402
+from bot_app import app, bot  # noqa: E402
+from bot_app.config import is_telegram_configured  # noqa: E402
+from bot_app.helpers.webhook_guard import polling_conflict  # noqa: E402
 from bot_app.storage import paths  # noqa: E402
 from bot_app.timeutil import myanmar_now  # noqa: E402
 
@@ -61,6 +70,7 @@ ALL_SANDBOX_FILES = [
     paths.DATA_VERSION_FILE,
     paths.USER_PROFILES_FILE,
     paths.POINTS_FILE,
+    paths.SETTINGS_FILE,
 ]
 
 
@@ -222,24 +232,44 @@ def seed_sandbox_data(uid: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Outline Key Bot & Mini App in Local Sandbox mode (No DB required)")
     parser.add_argument("--port", type=int, default=5000, help="Port to run the local server on (default: 5000)")
-    parser.add_argument("--reset", action="store_true", help="Reset and re-seed local sandbox sample data")
-    parser.add_argument("--empty", action="store_true", help="Start with an empty fresh customer account")
+    parser.add_argument("--seed", action="store_true", help="Reset and seed sample sandbox data (15,000 Ks, 2 keys)")
+    parser.add_argument("--reset", action="store_true", help="Clear local sandbox data and start from 0")
+    parser.add_argument("--empty", action="store_true", help="Clear local sandbox data and start from 0")
+    parser.add_argument("--no-bot", action="store_true", help="Skip Telegram bot polling thread")
     args = parser.parse_args()
 
     uid = str(os.environ.get("DEV_CUSTOMER_ID", "8777968077"))
 
-    if args.empty:
-        clear_sandbox_files()
-        print("🧹 Local sandbox cleared (starting with an empty fresh account).")
-    elif args.reset or not os.path.exists(paths.WALLET_FILE):
+    if args.seed:
         clear_sandbox_files()
         seed_sandbox_data(uid)
-        print("🌱 Seeded local sandbox sample data in /tmp/*.json:")
+        print("🌱 Seeded local sandbox sample data in .local_sandbox/*.json:")
         print(f"   • Customer ID : {uid} (Ryan Wez)")
         print("   • Wallet      : 15,000 Ks")
         print("   • Points      : 1,250 PTS")
         print("   • Active Keys : 2 keys (Server 1 VIP 150GB & Server 2 Basic 50GB)")
         print("   • Promo Codes : TEST1000 (+1,000 Ks), VIP5000 (+5,000 Ks)")
+    elif args.empty or args.reset:
+        clear_sandbox_files()
+        print("🧹 Local sandbox cleared (starting fresh from 0 in .local_sandbox/*.json).")
+    else:
+        print("💾 Using persistent local sandbox state in .local_sandbox/*.json (starts at 0 when empty).")
+
+    if not args.no_bot and is_telegram_configured():
+        allowed, active_url = polling_conflict(bot, allow_remove=False)
+        if allowed:
+            def _sandbox_polling():
+                while True:
+                    try:
+                        bot.infinity_polling(skip_pending=False, timeout=30)
+                    except Exception as exc:
+                        print(f"⚠️ Sandbox bot polling error: {exc}", flush=True)
+                    time.sleep(3)
+
+            threading.Thread(target=_sandbox_polling, daemon=True).start()
+            print("🤖 Telegram Bot Polling active (Approve/Reject inline buttons ready).")
+        else:
+            print(f"⚠️ Telegram Bot Polling skipped — active webhook detected: {active_url}")
 
     print("\n🚀 Local Sandbox Mode (Database-Free) is running!")
     print(f"👉 Built Mini App URL : http://127.0.0.1:{args.port}/app/")

@@ -76,35 +76,58 @@ def test_user_api_purchase_success(client, make_telegram_init_data, isolated_sta
 
 
 def test_user_api_purchase_manual_plan(client, make_telegram_init_data, isolated_state, mock_bot):
-    """5-Device Custom Plan (manual) requires admin delivery."""
+    """Admin-configured manual 5-Device Custom Plan requires admin delivery."""
+    from bot_app.config import default_plans
+    from bot_app.services.settings import invalidate_settings_cache, save_system_settings
+
     user_id = 12345005
     init_data = make_telegram_init_data(user_id=user_id, username="custom_customer")
     update_user_balance(user_id, 25000)
 
-    resp = client.post(
-        "/api/user/purchase",
-        headers={"X-Telegram-Init-Data": init_data},
-        json={"plan_code": "custom_1m", "server_id": "1"}
+    invalidate_settings_cache(reset_fallback=True)
+    save_system_settings(
+        {
+            "plans": {
+                **default_plans(),
+                "custom_1m": {
+                    "name": "၁ လ စိတ်ကြိုက်သုံး (5 Device)",
+                    "price": 20000,
+                    "months": 1,
+                    "bytes": None,
+                    "data": "Unlimited Data",
+                    "manual": True,
+                },
+            }
+        },
+        updated_by="Admin",
     )
-    assert resp.status_code == 200
-    data = resp.get_json()
+    try:
+        resp = client.post(
+            "/api/user/purchase",
+            headers={"X-Telegram-Init-Data": init_data},
+            json={"plan_code": "custom_1m", "server_id": "1"}
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
 
-    assert data["success"] is True
-    assert data["manual"] is True
-    assert data["vpn_key"] == ""
-    assert data["key_details"] is None
-    assert data["remaining_balance"] == 5000  # 25000 - 20000 = 5000
-    assert "စိတ်ကြိုက်သုံး 5 Device Plan" in data["message"]
+        assert data["success"] is True
+        assert data["manual"] is True
+        assert data["vpn_key"] == ""
+        assert data["key_details"] is None
+        assert data["remaining_balance"] == 5000  # 25000 - 20000 = 5000
+        assert "စိတ်ကြိုက်သုံး 5 Device Plan" in data["message"]
 
-    # Verify purchase record saved
-    records = get_user_combined_purchase_records(user_id)
-    assert len(records) == 1
-    assert records[0]["order_id"] == data["order_id"]
-    assert records[0]["vpn_key"] == "N/A"
+        # Verify purchase record saved
+        records = get_user_combined_purchase_records(user_id)
+        assert len(records) == 1
+        assert records[0]["order_id"] == data["order_id"]
+        assert records[0]["vpn_key"] == "N/A"
 
-    # Verify admin alert was sent
-    admin_calls = [msg for chat_id, msg in mock_bot.calls["send_message"] if "5 Device Plan" in msg]
-    assert len(admin_calls) >= 1
+        # Verify admin alert was sent
+        admin_calls = [msg for chat_id, msg in mock_bot.calls["send_message"] if "5 Device Plan" in msg]
+        assert len(admin_calls) >= 1
+    finally:
+        invalidate_settings_cache(reset_fallback=True)
 
 
 def test_user_api_purchase_with_redeem_bonus_forces_server_1(client, make_telegram_init_data, isolated_state, monkeypatch):
@@ -157,3 +180,50 @@ def test_user_api_purchase_server_failure_refunds_balance(client, make_telegram_
 
     # Crucial assertion: Balance was refunded back to 5000!
     assert get_user_balance(user_id) == 5000
+
+
+def test_user_api_purchase_honors_plan_months_from_admin_settings(client, make_telegram_init_data, isolated_state, mock_bot, monkeypatch):
+    """Purchases must use the plan's configured months from Admin Settings rather than assuming 1 month."""
+    from bot_app.config import default_plans
+    from bot_app.services.settings import invalidate_settings_cache, save_system_settings
+    import bot_app.routes_user as ru
+
+    user_id = 12345009
+    init_data = make_telegram_init_data(user_id=user_id, username="multi_month_buyer")
+    update_user_balance(user_id, 20000)
+
+    captured_months = []
+
+    def fake_create_key(server_num, user_name, plan_info=None, target_chat_id=None, months_count=1, **kwargs):
+        captured_months.append(months_count)
+        return ("ss://mock3MonthKey#3M", "3MKey", "25.02.2027")
+
+    monkeypatch.setattr(ru, "create_outline_key", fake_create_key)
+    invalidate_settings_cache(reset_fallback=True)
+    save_system_settings(
+        {
+            "plans": {
+                **default_plans(),
+                "vip_3m": {
+                    "name": "VIP 3 Months",
+                    "price": 12000,
+                    "months": 3,
+                    "bytes": 150 * (1000**3),
+                    "data": "150 GB",
+                },
+            }
+        },
+        updated_by="Admin",
+    )
+    try:
+        resp = client.post(
+            "/api/user/purchase",
+            headers={"X-Telegram-Init-Data": init_data},
+            json={"plan_code": "vip_3m", "server_id": "1"},
+        )
+        assert resp.status_code == 200
+        assert captured_months == [3]
+        admin_calls = [msg for _, msg in mock_bot.calls["send_message"] if "3 လစာ" in msg]
+        assert len(admin_calls) >= 1
+    finally:
+        invalidate_settings_cache(reset_fallback=True)

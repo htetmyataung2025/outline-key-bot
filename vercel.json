@@ -8,6 +8,13 @@
   },
   "buildCommand": "cd dashboard && npm install && npm run build && cd ../mini_app && npm install && npm run build && mkdir -p ../dashboard/dist/app && cp -r dist/* ../dashboard/dist/app/",
   "outputDirectory": "dashboard/dist",
+  "redirects": [
+    {
+      "source": "/app",
+      "destination": "/app/",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -34,7 +41,7 @@
       "destination": "/api/index.py"
     },
     {
-      "source": "/app",
+      "source": "/app/",
       "destination": "/app/index.html"
     },
     {

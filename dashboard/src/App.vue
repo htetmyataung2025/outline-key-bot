@@ -249,8 +249,10 @@ onUnmounted(() => {
 
             <!-- Router View Content Container -->
             <main class="page-content">
-              <router-view v-if="isAuthenticated" v-slot="{ Component }">
-                <component :is="Component" ref="currentViewRef" />
+              <router-view v-if="isAuthenticated" v-slot="{ Component, route }">
+                <Transition name="admin-page" mode="out-in">
+                  <component :is="Component" :key="route.path" ref="currentViewRef" />
+                </Transition>
               </router-view>
             </main>
           </div>
@@ -388,7 +390,32 @@ body {
   margin: 0 auto;
   width: 100%;
   padding-bottom: 80px; /* Space for mobile bottom nav */
-  transition: all 0.22s ease;
+}
+
+.admin-page-enter-active {
+  transition: opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1), transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.admin-page-leave-active {
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+.admin-page-enter-from {
+  opacity: 0;
+  transform: translate3d(0, 8px, 0);
+}
+.admin-page-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -4px, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-page-enter-active,
+  .admin-page-leave-active {
+    transition: opacity 0.1s ease;
+  }
+  .admin-page-enter-from,
+  .admin-page-leave-to {
+    transform: none;
+  }
 }
 
 @media (min-width: 768px) {

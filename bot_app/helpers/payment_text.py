@@ -5,8 +5,10 @@ from bot_app.config import MY_PAYMENT_PHONES
 
 def get_payment_instruction_text(amt):
     phones = [str(p).strip() for p in MY_PAYMENT_PHONES if str(p).strip()]
-    primary_phone = phones[0] if len(phones) >= 1 else "09699970092"
-    wave_phone = phones[1] if len(phones) >= 2 else primary_phone
+    primary_phone = phones[0] if phones else "09699970092"
+    second_phone = phones[1] if len(phones) >= 2 else ""
+    is_ocr_suffix = bool(second_phone and primary_phone.endswith(second_phone) and len(second_phone) < len(primary_phone))
+    wave_phone = second_phone if (second_phone and not is_ocr_suffix) else primary_phone
     return (
         f"✅ <b>Wallet ထဲသို့ ငွေဖြည့်သွင်းရန်</b>\n"
         f"💵 ဖြည့်သွင်းမည့် ပမာဏ: <b>{amt:,} Ks</b>\n\n"

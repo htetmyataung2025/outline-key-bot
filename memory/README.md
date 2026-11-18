@@ -81,6 +81,12 @@ This directory contains the complete technical blueprints, database schemas, API
 21. [**2026-11-12_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-12_PROGRESS.md)
    - Customer Mini App Step 1–5 Stabilization (branch `feat/miniapp-stabilization`): Added database-free Local Sandbox mode (`LOCAL_SANDBOX=1` & `scripts/run_local_sandbox.py`), fixed iOS/Telegram WebView input auto-zoom (`font-size: 16px`), pure Numpad (`inputmode="numeric" pattern="[0-9]*"`), and bottom-nav auto-hide on focus, replaced fake QR placeholder in `ShopView.vue` with live KBZPay/WavePay phone copy card, removed default SSE/polling overhead, fixed manual refresh throttling, added 1-click direct Top-Up slip submission, cleaned `KeyCard` to a 3-button layout, removed the fake header notification bell, wired smooth section scrolling (`navigateTo`), and synced dynamic `MY_PAYMENT_PHONES` + customer Telegram chat receipt/replace notifications. 408/408 backend tests and 13/13 Playwright E2E tests passing.
 
+22. [**2026-11-17_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-17_PROGRESS.md)
+   - Customer Mini App UI/UX Bug Fixes (4 owner-reported issues): stable Custom-amount layout (no auto-scroll, smooth expand transition), bottom tab bar stays visible on input focus (visualViewport keyboard guard), dialogs close only via explicit `X` (backdrop taps no longer dismiss), Rewards screen typography bumped (7–11px → 10–14px). 409/409 backend tests and 13/13 Playwright E2E tests passing.
+
+23. [**2026-11-18_PROGRESS.md**](file:///home/zixuan/Projects/outline-key-bot/memory/2026-11-18_PROGRESS.md)
+   - Local Dev Database Isolation (`LOCAL_STATE_DIR` → `.local_sandbox/`), 7 Production Plans + Admin Dashboard sync, 2-row scrollable Shop Plans grid, bounded chronological/filterable Purchase History & Top-50 Leaderboard modals, and Multi-VPN "Available VPN" deep-link auto-import (`Outline`, `V2Box`, `INCY`). 416/416 backend tests and 15/15 Playwright E2E tests passing.
+
 
 
 

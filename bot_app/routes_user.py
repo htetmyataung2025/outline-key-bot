@@ -103,13 +103,17 @@ def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_
     disp_gb = rec.get("disp_gb", "50 GB")
     expire_date_str = rec.get("expire_date", "")
 
-    quota = 50.0
-    m = re.search(r"(\d+)\s*GB", str(disp_gb), re.IGNORECASE)
-    if m:
-        try:
-            quota = float(m.group(1))
-        except ValueError:
-            quota = 50.0
+    disp_gb_str = str(disp_gb or "")
+    if "unlimited" in disp_gb_str.lower():
+        quota = 0.0
+    else:
+        quota = 50.0
+        m = re.search(r"(\d+)\s*GB", disp_gb_str, re.IGNORECASE)
+        if m:
+            try:
+                quota = float(m.group(1))
+            except ValueError:
+                quota = 50.0
 
     exp_dt = _parse_expiry_from_name(expire_date_str)
     now = myanmar_now()
@@ -131,7 +135,7 @@ def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_
         expires_display = expire_date_str or "N/A"
 
     canonical_plan = "Basic"
-    for p in ("Starter", "Basic", "VIP", "Standard", "Premium", "Pro", "Ultimate"):
+    for p in ("Starter", "Basic", "Ultimate", "VIP", "Standard", "Premium", "Pro"):
         if p.lower() in plan_name.lower():
             canonical_plan = p
             break
@@ -140,16 +144,26 @@ def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_
     server_label = server_num if server_num.lower().startswith("server ") else f"Server {server_num}"
 
     used_gb = 0.0
-    if usage_by_server and vpn_key:
+    target_sid = server_num
+    target_kid = str(rec.get("key_id") or "")
+    if vpn_key:
         k_clean = clean_ss_url(vpn_key)
-        target_sid = server_num
-        target_kid = str(rec.get("key_id") or "")
         if (not target_kid or target_kid == "N/A") and url_to_key and k_clean in url_to_key:
             target_sid, target_kid = url_to_key[k_clean]
-        if target_kid and target_sid in usage_by_server:
+        if not target_kid or target_kid == "N/A":
+            from bot_app.helpers.deeplink import find_key_ref_by_url
+            ref = find_key_ref_by_url(vpn_key)
+            if ref:
+                target_sid, target_kid = ref
+        if usage_by_server and target_kid and target_kid != "N/A" and target_sid in usage_by_server:
             b_val = usage_by_server[target_sid].get(target_kid, 0)
             if b_val:
                 used_gb = bytes_to_gb(b_val)
+
+    go_url = ""
+    if target_sid and target_kid and target_kid != "N/A":
+        from bot_app.helpers.deeplink import make_go_token
+        go_url = f"/go/{make_go_token(target_sid, target_kid)}"
 
     return {
         "id": order_id if order_id and order_id != "N/A" else f"k_{idx}",
@@ -164,12 +178,17 @@ def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_
         "status": status,
         "connected": (status != "expired"),
         "key": vpn_key,
+        "go_url": go_url,
     }
 
 
 @user_bp.route("/bootstrap", methods=["GET"])
 def get_bootstrap():
     """Consolidated bootstrap payload for the Customer Mini App."""
+    if request.args.get("refresh") == "1":
+        from bot_app.services.settings import get_system_settings
+        get_system_settings(force_refresh=True)
+
     uid = current_user_id()
     user_info = getattr(g, "current_user", {}) or {}
 
@@ -243,13 +262,19 @@ def get_bootstrap():
     formatted_plans = []
     for code, p in PLANS.items():
         months = int(p.get("months", 1) or 1)
+        code_l = str(code).lower()
+        symbol = (
+            "crown"
+            if any(k in code_l for k in ("vip", "pro", "ultimate"))
+            else ("zap" if any(k in code_l for k in ("basic", "standard", "premium")) else "leaf")
+        )
         formatted_plans.append({
             "code": code,
             "name": p.get("name", code.capitalize()),
             "quota": p.get("data", "50 GB"),
             "price": p.get("price", 0),
             "description": f"{p.get('data')} / {months} လစာ",
-            "symbol": "zap" if "basic" in code else ("crown" if "vip" in code else "leaf"),
+            "symbol": symbol,
             "manual": bool(p.get("manual", False)),
             "months": months,
         })
@@ -269,22 +294,43 @@ def get_bootstrap():
 
     # Payment Methods (dynamic from Admin Control Center Settings -> fallback to baseline)
     configured_phones = [str(p).strip() for p in MY_PAYMENT_PHONES if str(p).strip()]
-    kbz_phone = configured_phones[0] if len(configured_phones) >= 1 else "09699970092"
-    wave_phone = configured_phones[1] if len(configured_phones) >= 2 else kbz_phone
+    kbz_phone = configured_phones[0] if configured_phones else "09699970092"
+    second_phone = configured_phones[1] if len(configured_phones) >= 2 else ""
+    # Skip leading-zero-stripped OCR suffix duplicates (e.g. "9699970092" for "09699970092")
+    is_ocr_suffix = bool(second_phone and kbz_phone.endswith(second_phone) and len(second_phone) < len(kbz_phone))
+    wave_phone = second_phone if (second_phone and not is_ocr_suffix) else kbz_phone
 
     payment_methods = {
         "kbz": {
             "name": "KBZPay",
             "account_name": "Htet Myat Aung",
             "phone": kbz_phone,
-            "type": "QR / Direct Transfer"
+            "type": "QR / Direct Transfer",
         },
         "wave": {
             "name": "WavePay",
             "account_name": "Htet Myat Aung",
             "phone": wave_phone,
-            "type": "QR / Direct Transfer"
-        }
+            "type": "QR / Direct Transfer",
+        },
+        "aya": {
+            "name": "AYA Pay",
+            "account_name": "Htet Myat Aung",
+            "phone": kbz_phone,
+            "type": "QR / Direct Transfer",
+        },
+        "uab": {
+            "name": "uab pay",
+            "account_name": "Htet Myat Aung",
+            "phone": kbz_phone,
+            "type": "QR / Direct Transfer",
+        },
+        "cb": {
+            "name": "CB Pay",
+            "account_name": "Htet Myat Aung",
+            "phone": kbz_phone,
+            "type": "QR / Direct Transfer",
+        },
     }
 
     return jsonify({
@@ -495,13 +541,14 @@ def purchase_plan():
         })
 
     # Auto key minting
+    months_count = max(1, int(plan.get("months", 1) or 1))
     vpn_key = None
     key_name = None
     expire_date = None
     try:
         if plan_code == "ultimate":
             vpn_key, key_name, expire_date, _ = renew_or_create_unlimited_key(
-                server_num, user_name, uid, months_count=1, custom_days=apply_days, order_id=order_id
+                server_num, user_name, uid, months_count=months_count, custom_days=apply_days, order_id=order_id
             )
         else:
             vpn_key, key_name, expire_date = create_outline_key(
@@ -509,7 +556,7 @@ def purchase_plan():
                 user_name,
                 plan_info=plan,
                 target_chat_id=uid,
-                months_count=1,
+                months_count=months_count,
                 custom_days=apply_days,
                 is_giveaway=False,
                 order_id=order_id,
@@ -526,13 +573,13 @@ def purchase_plan():
             "message": "ဆာဗာလိုင်း မရရှိသဖြင့် ဝယ်ယူမှု မအောင်မြင်ပါ။ ငွေကို အလိုအလျောက် ပြန်လည် ထည့်သွင်းပေးထားပါသည်။",
         }), 502
 
-    save_sale_transaction(server_num, uid, plan_code, plan['name'], 1, amount, order_id=order_id)
+    save_sale_transaction(server_num, uid, plan_code, plan['name'], months_count, amount, order_id=order_id)
     save_user_purchase_record(
         chat_id=uid,
         order_id=order_id,
         plan_name=plan['name'],
         disp_gb=disp_gb,
-        months_count=1,
+        months_count=months_count,
         price_str=f"{amount:,} Ks",
         server_num=server_num,
         expire_date=expire_date,
@@ -545,7 +592,7 @@ def purchase_plan():
         "order_id": order_id,
         "plan_name": plan['name'],
         "disp_gb": disp_gb,
-        "months": 1,
+        "months": months_count,
         "price_str": f"{amount:,} Ks",
         "server": str(server_num),
         "expire_date": expire_date,
@@ -585,7 +632,7 @@ def purchase_plan():
                 f"🛍️ Plan: {plan['name']}\n"
                 f"📡 Server: {get_server_display_name(server_num)}\n"
                 f"💵 ရရှိငွေ: {amount:,} MMK\n"
-                f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else '၁လစာ'})",
+                f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else f'{months_count} လစာ'})",
                 parse_mode="HTML",
             )
         except Exception:
@@ -1066,9 +1113,9 @@ def get_history():
 
 @user_bp.route("/leaderboard", methods=["GET"])
 def get_leaderboard():
-    """Retrieve customer points leaderboard."""
+    """Retrieve customer points leaderboard (up to Top 50)."""
     uid = current_user_id()
-    board = build_leaderboard(load_all_points(), load_all_profiles(), "7d", uid, myanmar_now())
+    board = build_leaderboard(load_all_points(), load_all_profiles(), "7d", uid, myanmar_now(), top_n=50)
 
     formatted_rows = []
     for r in board.get("rows", []):
@@ -1091,5 +1138,6 @@ def get_leaderboard():
     return jsonify({
         "rows": formatted_rows,
         "me": formatted_me,
+        "total_players": board.get("total_players", len(formatted_rows)),
         "mode": board.get("mode", "7d"),
     })

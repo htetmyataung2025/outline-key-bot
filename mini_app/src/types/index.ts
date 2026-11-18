@@ -4,8 +4,14 @@ export type TabId = 'overview' | 'keys' | 'shop' | 'history'
 export type KeyStatus = 'active' | 'expiring' | 'expired'
 export type KeyFilter = 'all' | KeyStatus
 export type PlanName = 'Starter' | 'Basic' | 'VIP' | string
-export type PaymentMethod = 'kbz' | 'wave'
+export type PaymentMethod = 'kbz' | 'wave' | 'aya' | 'uab' | 'cb'
+export type VpnAppId = 'outline' | 'v2box' | 'incy'
 export type TopUpAmount = number | 'custom'
+export interface LeaderboardMe {
+  rank: number | null
+  name: string
+  points: number
+}
 export interface VpnKey {
   id: string
   server: string
@@ -19,6 +25,7 @@ export interface VpnKey {
   status: KeyStatus
   connected: boolean
   key: string
+  go_url?: string
 }
 export interface Plan {
   name: PlanName
@@ -118,6 +125,16 @@ export type AppDialog =
   | { kind: 'key-qr'; keyId: string }
   | { kind: 'purchase'; plan: PlanName }
   | { kind: 'payment'; method: PaymentMethod; amount: number }
+  | {
+      kind: 'claim-reward'
+      status: 'loading' | 'success'
+      awarded?: number
+      newBalance?: number
+      streakDays?: number
+      isStreakBonus?: boolean
+      cooldownHours?: number
+      message?: string
+    }
   | { kind: 'manual-copy'; value: string }
   | { kind: 'profile' }
   | { kind: 'leaderboard' }

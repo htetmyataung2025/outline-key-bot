@@ -137,7 +137,7 @@ export const api = {
   },
 
   /** Upload payment slip receipt screenshot for OCR verification */
-  async uploadSlip(file: File, amount: number, method: 'kbz' | 'wave'): Promise<{
+  async uploadSlip(file: File, amount: number, method: 'kbz' | 'wave' | 'aya' | 'uab' | 'cb'): Promise<{
     success: boolean
     slip_id: string
     status: string
@@ -179,8 +179,11 @@ export const api = {
 
   /** 7-day points leaderboard */
   async getLeaderboard(): Promise<{
-    period: string
+    period?: string
+    mode?: string
     rows: LeaderboardRow[]
+    me?: { rank: number | null; name: string; points: number } | null
+    total_players?: number
   }> {
     return request('/api/user/leaderboard', { method: 'GET' })
   },

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import SvgIcon from '../ui/SvgIcon.vue'
 import { useMiniApp } from '../../composables/useMiniApp'
+import { formatNumber } from '../../utils/format'
 
 const { state, claimReward, redeemPoints, cooldownFormatted } = useMiniApp()
 
@@ -19,6 +20,9 @@ const completedDays = computed(() => {
 const days = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7']
 
 const claimButtonText = computed(() => {
+  if (state.isClaiming) {
+    return 'Points ဆုမဲ ဖွင့်လှစ်နေပါသည်...'
+  }
   if (!state.claimedToday) {
     if (completedDays.value === 6) {
       return 'Day 7 Jackpot Points ရယူမည် 🎁'
@@ -38,7 +42,7 @@ const claimButtonText = computed(() => {
       <span class="reward-label">Points Check-in</span>
       <span class="streak-pill"><SvgIcon name="flame" />{{ streak }} day streak</span>
     </div>
-    <div class="reward-points">{{ state.points }} <small>PTS</small></div>
+    <div class="reward-points">{{ formatNumber(state.points) }} <small>PTS</small></div>
     <p>{{ state.cooldownHours }} နာရီတစ်ကြိမ် ဝင်ရောက်ပြီး points စုဆောင်းပါ (၇ ရက်ပြည့်ပါက အပိုဆု ရရှိပါမည်)</p>
     <div class="checkin-days" aria-label="Daily check-in progress">
       <div
@@ -55,19 +59,19 @@ const claimButtonText = computed(() => {
     <button
       class="primary-btn"
       data-action="claim"
-      :disabled="state.claimedToday"
-      :class="{ 'is-cooldown': state.claimedToday }"
+      :disabled="state.claimedToday || state.isClaiming"
+      :class="{ 'is-cooldown': state.claimedToday && !state.isClaiming }"
       @click="claimReward"
     >
-      <SvgIcon :name="state.claimedToday ? 'clock' : 'gift'" />
+      <SvgIcon :name="state.isClaiming ? 'refresh' : (state.claimedToday ? 'clock' : 'gift')" :class="{ 'spin-inline': state.isClaiming }" />
       {{ claimButtonText }}
     </button>
 
     <!-- Starter Plan Points Redemption -->
     <div class="card" style="margin-top: 14px; padding: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <span style="font-weight: 600; font-size: 13px; color: #f8fafc;">🎫 Starter Plan (25 GB / 30 ရက်)</span>
-        <span style="font-size: 12px; color: #2aefbd; font-weight: 600;">{{ state.points }} / {{ state.starterCost }} PTS</span>
+        <span style="font-weight: 600; font-size: 14px; color: #f8fafc;">🎫 Starter Plan (25 GB / 30 ရက်)</span>
+        <span style="font-size: 13px; color: #2aefbd; font-weight: 600;">{{ formatNumber(state.points) }} / {{ formatNumber(state.starterCost) }} PTS</span>
       </div>
       <div style="width: 100%; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 999px; overflow: hidden; margin-bottom: 8px;">
         <div
@@ -75,12 +79,12 @@ const claimButtonText = computed(() => {
           :style="{ width: `${Math.min(100, Math.round((state.points / (state.starterCost || 5000)) * 100))}%` }"
         />
       </div>
-      <p v-if="!state.hasToppedUp" style="font-size: 11px; color: #f87171; margin: 0 0 8px 0;">
+      <p v-if="!state.hasToppedUp" style="font-size: 12px; color: #f87171; margin: 0 0 8px 0;">
         🔒 Points ဖြင့် လဲယူရန် အနည်းဆုံး တစ်ကြိမ် ငွေဖြည့်ထားရန် လိုအပ်ပါသည်။
       </p>
       <button
         class="soft-btn"
-        style="width: 100%; justify-content: center; font-size: 12px;"
+        style="width: 100%; justify-content: center; font-size: 13px;"
         :disabled="state.isSubmitting || state.points < state.starterCost || !state.hasToppedUp"
         @click="redeemPoints"
       >

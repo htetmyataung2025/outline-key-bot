@@ -1,23 +1,32 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import DialogShell from './ui/DialogShell.vue'
 import SvgIcon from './ui/SvgIcon.vue'
+import VpnAppLogo from './ui/VpnAppLogo.vue'
 import PurchaseHistory from './rewards/PurchaseHistory.vue'
 import LeaderboardCard from './rewards/LeaderboardCard.vue'
 import ReceiptUpload from './shop/ReceiptUpload.vue'
 import { useMiniApp } from '../composables/useMiniApp'
 import { formatNumber } from '../utils/format'
+import type { VpnAppId, VpnKey } from '../types'
 
 const {
   state,
+  openDialog,
   closeDialog,
   setTab,
   purchasePlan,
   submitTopUp,
   requestKeyReplace,
   copyKey,
-  openOutline,
+  openVpnApp,
 } = useMiniApp()
+
+const VPN_APPS: Array<{ id: VpnAppId; name: string; badge: string; hint: string }> = [
+  { id: 'outline', name: 'Outline', badge: 'Official', hint: 'ss:// Key ကို တိုက်ရိုက် ချိတ်ဆက်မည်' },
+  { id: 'v2box', name: 'V2Box', badge: 'iOS · Android', hint: 'V2Box App ထဲသို့ Auto Import ထည့်မည်' },
+  { id: 'incy', name: 'INCY', badge: 'Multi-Client', hint: 'INCY App ထဲသို့ Auto Import ထည့်မည်' },
+]
 
 const activeKey = computed(() => {
   const dialog = state.dialog
@@ -44,26 +53,34 @@ function selectServer(sid: string) {
   }
 }
 
+const PAYMENT_NAMES: Record<string, string> = {
+  kbz: 'KBZPay',
+  wave: 'WavePay',
+  aya: 'AYA Pay',
+  uab: 'uab pay',
+  cb: 'CB Pay',
+}
+
 const title = computed(() => {
   const d = state.dialog
   if (!d) return ''
   switch (d.kind) {
     case 'usage': return activeKey.value ? `${activeKey.value.plan} Plan · ${activeKey.value.location}` : 'Key details'
-    case 'connect': return 'Outline နဲ့ ချိတ်ဆက်ရန်'
+    case 'connect': return 'ကိုယ်နဲ့ အဆင်ပြေတဲ့ VPN နဲ့ ချိတ်ဆက်ရန်'
     case 'replace': return 'Key အသစ်လဲမလား?'
-    case 'key-qr': return 'Outline တိုက်ရိုက်ချိတ်ဆက်ရန်'
-    case 'purchase': return `${d.plan} Plan`
-    case 'payment': return `${d.method === 'kbz' ? 'KBZPay' : 'WavePay'} · ${formatNumber(d.amount)} Ks`
-    case 'manual-copy': return 'Outline Key'
+    case 'key-qr': return 'ကိုယ်နဲ့ အဆင်ပြေတဲ့ VPN နဲ့ ချိတ်ဆက်ရန်'
+    case 'purchase': return d.plan.toLowerCase().includes('plan') ? d.plan : `${d.plan} Plan`
+    case 'payment': return `${state.paymentMethods[d.method]?.name || PAYMENT_NAMES[d.method] || 'KBZPay'} · ${formatNumber(d.amount)} Ks`
+    case 'claim-reward': return d.status === 'loading' ? 'Daily Points Claim' : '🎉 ဆုလက်ဆောင် ရရှိပါသည်!'
+    case 'manual-copy': return 'VPN Access Key'
     case 'profile': return state.user.name
     case 'leaderboard': return 'Leaderboard'
     case 'history': return 'Purchase history'
   }
 })
 
-function handleOpenOutline(keyStr?: string) {
-  openOutline(keyStr)
-  closeDialog()
+function handleOpenVpnApp(appId: VpnAppId, keyObj?: VpnKey) {
+  openVpnApp(appId, keyObj?.key, keyObj?.go_url)
 }
 
 async function handleConfirmPurchase() {
@@ -78,15 +95,45 @@ function selectField(event: MouseEvent) {
 
 const currentPaymentInfo = computed(() => {
   if (state.dialog?.kind === 'payment') {
-    return state.paymentMethods[state.dialog.method] || {
-      name: state.dialog.method === 'kbz' ? 'KBZPay' : 'WavePay',
+    const m = state.dialog.method
+    return state.paymentMethods[m] || {
+      name: PAYMENT_NAMES[m] || 'KBZPay',
       account_name: 'Htet Myat Aung',
-      phone: '09699970092',
+      phone: state.paymentMethods.kbz?.phone || '09699970092',
       type: 'Direct Transfer / QR',
     }
   }
   return null
 })
+
+// Smooth count-up for the Daily Reward reveal modal
+const shownAward = ref(0)
+let awardFrame = 0
+watch(
+  () => (state.dialog?.kind === 'claim-reward' ? `${state.dialog.status}:${state.dialog.awarded ?? 0}` : ''),
+  () => {
+    cancelAnimationFrame(awardFrame)
+    if (state.dialog?.kind !== 'claim-reward' || state.dialog.status !== 'success') {
+      shownAward.value = 0
+      return
+    }
+    const target = state.dialog.awarded ?? 0
+    const prefersReduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (prefersReduced || target <= 0) {
+      shownAward.value = target
+      return
+    }
+    const started = performance.now()
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - started) / 600)
+      shownAward.value = Math.round(target * (1 - Math.pow(1 - t, 3)))
+      if (t < 1) awardFrame = requestAnimationFrame(tick)
+      else shownAward.value = target
+    }
+    awardFrame = requestAnimationFrame(tick)
+  },
+)
+onScopeDispose(() => cancelAnimationFrame(awardFrame))
 </script>
 
 <template>
@@ -102,7 +149,7 @@ const currentPaymentInfo = computed(() => {
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: #94a3b8;">စုစုပေါင်း Data:</span>
-          <b>{{ activeKey.quota }} GB</b>
+          <b>{{ activeKey.quota > 0 ? `${activeKey.quota} GB` : 'Unlimited' }}</b>
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: #94a3b8;">အသုံးပြုပြီး:</span>
@@ -110,7 +157,7 @@ const currentPaymentInfo = computed(() => {
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: #94a3b8;">လက်ကျန် Data:</span>
-          <b>{{ formatNumber(Math.max(0, activeKey.quota - activeKey.used)) }} GB</b>
+          <b>{{ activeKey.quota > 0 ? `${formatNumber(Math.max(0, activeKey.quota - activeKey.used))} GB` : 'Unlimited' }}</b>
         </div>
         <div style="display: flex; justify-content: space-between;">
           <span style="color: #94a3b8;">သက်တမ်း:</span>
@@ -121,8 +168,8 @@ const currentPaymentInfo = computed(() => {
         <button class="soft-btn" style="flex: 1;" @click="copyKey(activeKey.key)">
           <SvgIcon name="copy" />Key ကူးယူမည်
         </button>
-        <button class="primary-btn" style="flex: 1;" @click="handleOpenOutline(activeKey.key)">
-          <SvgIcon name="zap" />Outline ဖွင့်မည်
+        <button class="primary-btn" style="flex: 1;" @click="openDialog({ kind: 'connect', keyId: activeKey.id })">
+          <SvgIcon name="zap" />Available VPN
         </button>
       </div>
       <button class="soft-btn modal-full-btn" style="margin-top: 8px;" @click="closeDialog(); setTab('keys')">
@@ -130,20 +177,42 @@ const currentPaymentInfo = computed(() => {
       </button>
     </template>
 
-    <!-- 2. Outline Connect Modal -->
-    <template v-else-if="state.dialog?.kind === 'connect'">
+    <!-- 2. Multi-VPN Available Apps Connect Modal -->
+    <template v-else-if="state.dialog?.kind === 'connect' || state.dialog?.kind === 'key-qr'">
       <span v-if="activeKey" class="badge-pill">{{ activeKey.plan }} Plan · {{ activeKey.server }}</span>
-      <p>VPN Key ကို Outline App ထဲသို့ တိုက်ရိုက် Import ပြုလုပ်ပြီး ချိတ်ဆက်နိုင်ပါသည်ခင်ဗျာ။</p>
-      <div v-if="activeKey?.key" class="manual-key-box" style="margin-bottom: 12px;">
-        <input class="manual-key" :value="activeKey.key" readonly @click="selectField" />
+      <p>အောက်ပါ VPN App များထဲမှ မိမိနှင့် အဆင်ပြေရာ App ကို နှိပ်၍ Key ကို အလိုအလျောက် ထည့်သွင်းချိတ်ဆက်နိုင်ပါသည်ခင်ဗျာ။</p>
+      <div v-if="activeKey?.key" class="connect-key-row">
+        <input class="manual-key" :value="activeKey.key" readonly aria-label="VPN Access Key" @click="selectField" />
+        <button type="button" class="soft-btn connect-copy-btn" @click="copyKey(activeKey.key)">
+          <SvgIcon name="copy" />Copy
+        </button>
       </div>
-      <div class="modal-actions">
-        <button class="soft-btn" @click="copyKey(activeKey?.key || '')">
-          <SvgIcon name="copy" />Key ကူးယူမည်
+      <div class="vpn-app-list">
+        <button
+          v-for="app in VPN_APPS"
+          :key="app.id"
+          type="button"
+          class="vpn-app-card"
+          :class="`is-${app.id}`"
+          :data-vpn-app="app.id"
+          @click="handleOpenVpnApp(app.id, activeKey)"
+        >
+          <VpnAppLogo :app="app.id" />
+          <span class="vpn-app-info">
+            <span class="vpn-app-head">
+              <strong>{{ app.name }}</strong>
+              <span class="vpn-app-tag">{{ app.badge }}</span>
+            </span>
+            <small>{{ app.hint }}</small>
+          </span>
+          <span class="vpn-app-go">
+            <span>ဖွင့်ရန်</span>
+            <SvgIcon name="arrow-up-right" />
+          </span>
         </button>
-        <button class="primary-btn" @click="handleOpenOutline(activeKey?.key)">
-          Outline ဖွင့်ရန်<SvgIcon name="arrow-up-right" />
-        </button>
+      </div>
+      <div class="modal-footer">
+        <button class="soft-btn modal-full-btn" @click="closeDialog">ပိတ်ရန်</button>
       </div>
     </template>
 
@@ -157,19 +226,6 @@ const currentPaymentInfo = computed(() => {
           <SvgIcon name="refresh" />{{ state.isSubmitting ? 'ဆောင်ရွက်နေပါသည်...' : 'ဆက်လုပ်မည်' }}
         </button>
       </div>
-    </template>
-
-    <!-- 4. Direct Outline Connect Modal -->
-    <template v-else-if="state.dialog?.kind === 'key-qr' && activeKey">
-      <span class="badge-pill">{{ activeKey.plan }} Plan · {{ activeKey.server }}</span>
-      <p>Outline App ထဲသို့ တိုက်ရိုက် ရောက်ရှိသွားပြီး Key အလိုအလျောက် ထည့်သွင်းပေးမည် ဖြစ်ပါသည်။</p>
-      <div v-if="activeKey?.key" class="manual-key-box" style="margin-bottom: 12px;">
-        <input class="manual-key" :value="activeKey.key" readonly @click="selectField" />
-      </div>
-      <button class="primary-btn modal-full-btn" @click="handleOpenOutline(activeKey.key)">
-        <SvgIcon name="zap" />Outline ဖွင့်ပြီး ချိတ်ဆက်မည်
-      </button>
-      <button class="soft-btn modal-full-btn" style="margin-top: 8px;" @click="closeDialog">ပိတ်ရန်</button>
     </template>
 
     <!-- 5. 1-Click Plan Purchase Modal -->
@@ -268,9 +324,42 @@ const currentPaymentInfo = computed(() => {
       </div>
     </template>
 
-    <!-- 7. Manual Copy Modal -->
+    <!-- 7. Daily Reward Suspense & Reveal Modal -->
+    <template v-else-if="state.dialog?.kind === 'claim-reward'">
+      <div v-if="state.dialog.status === 'loading'" class="claim-modal-stage" data-claim-stage="loading">
+        <div class="claim-spinner-wrap">
+          <progress aria-label="Points ဆုလက်ဆောင် ဖွင့်လှစ်နေပါသည်" class="claim-spinner" />
+          <span class="claim-spinner-icon" aria-hidden="true"><SvgIcon name="gift" /></span>
+        </div>
+        <div class="claim-stage-title">Points ဆုမဲ ဖွင့်လှစ်နေပါသည်...</div>
+        <p class="claim-stage-sub">သင့်အတွက် ယနေ့ Points ဆုလက်ဆောင်ကို တွက်ချက်နေပါသည်</p>
+      </div>
+      <div v-else class="claim-modal-stage is-revealed" data-claim-stage="success">
+        <div class="claim-reveal-badge">
+          <SvgIcon :name="state.dialog.isStreakBonus ? 'flame' : 'sparkles'" />
+          <span>{{ state.dialog.isStreakBonus ? `Day ${state.dialog.streakDays} Streak Bonus!` : `${state.dialog.streakDays || 1} Day Streak` }}</span>
+        </div>
+        <div class="claim-reveal-points">+{{ formatNumber(shownAward) }} <small>PTS</small></div>
+        <p class="claim-stage-sub">{{ state.dialog.message || 'နေ့စဉ် Points ဆုလက်ဆောင် ရရှိပြီးပါပြီ!' }}</p>
+        <div class="claim-summary-box">
+          <div>
+            <span>စုစုပေါင်း Points</span>
+            <b>{{ formatNumber(state.dialog.newBalance ?? state.points) }} PTS</b>
+          </div>
+          <div>
+            <span>နောက် Claim</span>
+            <b>{{ state.dialog.cooldownHours ?? state.cooldownHours }} နာရီတစ်ကြိမ်</b>
+          </div>
+        </div>
+        <button class="primary-btn modal-full-btn" @click="closeDialog">
+          <SvgIcon name="check" />သိမ်းဆည်းမည်
+        </button>
+      </div>
+    </template>
+
+    <!-- 8. Manual Copy Modal -->
     <template v-else-if="state.dialog?.kind === 'manual-copy'">
-      <p>Outline Access Key ကို copy ပြုလုပ်ရန်:</p>
+      <p>VPN Access Key ကို copy ပြုလုပ်ရန်:</p>
       <input class="manual-key" :value="state.dialog.value" readonly aria-label="Key to copy" @click="selectField" />
       <button class="primary-btn modal-full-btn" @click="closeDialog">ပိတ်ရန်</button>
     </template>
@@ -291,14 +380,18 @@ const currentPaymentInfo = computed(() => {
 
     <!-- 9. Leaderboard Modal -->
     <template v-else-if="state.dialog?.kind === 'leaderboard'">
-      <LeaderboardCard :interactive="false" />
-      <button class="soft-btn modal-full-btn" @click="closeDialog">ပိတ်ရန်</button>
+      <LeaderboardCard :interactive="false" :in-dialog="true" />
+      <div class="modal-footer">
+        <button class="soft-btn modal-full-btn" @click="closeDialog">ပိတ်ရန်</button>
+      </div>
     </template>
 
     <!-- 10. History Modal -->
     <template v-else-if="state.dialog?.kind === 'history'">
-      <PurchaseHistory :interactive="false" />
-      <button class="soft-btn modal-full-btn" @click="closeDialog">ပိတ်ရန်</button>
+      <PurchaseHistory :interactive="false" :in-dialog="true" />
+      <div class="modal-footer">
+        <button class="soft-btn modal-full-btn" @click="closeDialog">ပိတ်ရန်</button>
+      </div>
     </template>
   </DialogShell>
 </template>

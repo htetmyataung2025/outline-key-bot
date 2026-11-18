@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { onActivated, onDeactivated, ref } from 'vue'
 import KeyCard from '../components/keys/KeyCard.vue'
 import ScreenHeading from '../components/ui/ScreenHeading.vue'
 import SvgIcon from '../components/ui/SvgIcon.vue'
 import { useMiniApp } from '../composables/useMiniApp'
 import type { KeyFilter } from '../types'
 const { state, visibleKeys, setTab, showToast, refresh } = useMiniApp()
+const isTabInactive = ref(false)
+onActivated(() => { isTabInactive.value = false })
+onDeactivated(() => { isTabInactive.value = true })
 const filters: { id: KeyFilter; label: string }[] = [{ id: 'all', label: 'All keys' }, { id: 'active', label: 'Active' }, { id: 'expiring', label: 'Expiring' }, { id: 'expired', label: 'Expired' }]
 
 function selectFilter(filterId: KeyFilter) {
@@ -21,7 +25,7 @@ async function handleRefresh() {
 }
 </script>
 <template>
-  <div>
+  <div :class="{ 'is-tab-inactive': isTabInactive }">
     <ScreenHeading kicker="Your connections" title="My Keys" description="VPN key တွေနဲ့ data အသုံးပြုမှုကို စီမံပါ" icon="key" />
     <div class="toolbar-row">
       <div class="filter-row" aria-label="Filter keys">
@@ -66,7 +70,9 @@ async function handleRefresh() {
     </template>
 
     <template v-else-if="visibleKeys.length > 0">
-      <KeyCard v-for="entry in visibleKeys" :key="entry.id" :entry="entry" />
+      <TransitionGroup name="list-glide" tag="div" class="keys-list-wrap">
+        <KeyCard v-for="entry in visibleKeys" :key="entry.id" :entry="entry" />
+      </TransitionGroup>
     </template>
 
     <div v-else class="empty-state">
