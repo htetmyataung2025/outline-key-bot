@@ -1,20 +1,22 @@
 // H&E VPN — Google Sheets backup receiver (bot update #9).
+// Standalone project (script.google.com) — writes into the backup
+// spreadsheet by ID, so it does not need to be bound to the sheet.
 //
 // Setup (owner, one time):
-//   1. Open the backup spreadsheet → Extensions → Apps Script.
-//   2. Replace ALL existing code with this file's contents.
-//   3. Set SECRET below to the same value as the Vercel env var
-//      GOOGLE_SHEETS_BACKUP_SCRIPT_SECRET.
-//   4. Deploy → New deployment → type "Web app" → Execute as: Me →
+//   1. script.google.com → New project → replace ALL code with this.
+//   2. Deploy → New deployment → type "Web app" → Execute as: Me →
 //      Who has access: Anyone → Deploy → authorize with your account.
-//   5. Copy the Web app URL into the Vercel env var
-//      GOOGLE_SHEETS_BACKUP_SCRIPT_URL and redeploy.
+//   3. Copy the Web app URL into the Vercel env var
+//      GOOGLE_SHEETS_BACKUP_SCRIPT_URL and redeploy. The SECRET below
+//      must match the Vercel env var GOOGLE_SHEETS_BACKUP_SCRIPT_SECRET.
+//   If the code is ever edited: Deploy → Manage deployments → edit →
+//   Version: "New version" → Deploy (the URL stays the same).
 //
 // The bot POSTs {secret, tabs: [{title, rows}]}; this script creates any
-// missing tab, clears it, and rewrites it from the payload. It only ever
-// touches the spreadsheet it is bound to.
+// missing tab, clears it, and rewrites it from the payload.
 
-const SECRET = "CHANGE_ME";
+const SECRET = "CHANGE_ME"; // must match the Vercel env GOOGLE_SHEETS_BACKUP_SCRIPT_SECRET — never commit the real value
+const SHEET_ID = "1pxGSdXA522uMYRAixiXjNCUmIT4QRD9S4Qafzxzob9M";
 
 function doPost(e) {
   try {
@@ -22,15 +24,9 @@ function doPost(e) {
     if (body.secret !== SECRET) {
       return _json({ ok: false, error: "bad_secret" });
     }
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
     const wanted = {};
     (body.tabs || []).forEach(function (tab) { wanted[tab.title] = true; });
-
-    // Drop the untouched default tab so the workbook stays clean.
-    const starter = ss.getSheetByName("Sheet1");
-    if (starter && !wanted["Sheet1"] && starter.getDataRange().isBlank()) {
-      ss.deleteSheet(starter);
-    }
 
     const counts = {};
     (body.tabs || []).forEach(function (tab) {
@@ -54,6 +50,14 @@ function doPost(e) {
       }
       counts[tab.title] = Math.max(0, rows.length - 1);
     });
+
+    // Drop the untouched default tab so the workbook stays clean.
+    // Done LAST: a spreadsheet must always keep at least one sheet.
+    const starter = ss.getSheetByName("Sheet1");
+    if (starter && !wanted["Sheet1"] && ss.getSheets().length > 1 &&
+        starter.getDataRange().isBlank()) {
+      ss.deleteSheet(starter);
+    }
     return _json({ ok: true, counts: counts });
   } catch (err) {
     return _json({ ok: false, error: String(err) });
