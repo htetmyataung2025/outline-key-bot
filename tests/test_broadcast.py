@@ -182,3 +182,49 @@ def test_photo_caption_becomes_app_body(isolated_state, start):
     B.advance_broadcast(bot)
     items, _ = list_app_notifications(8)
     assert items[0]["body"] == "Promo today"
+
+
+# ── continue-button handler ──────────────────────────────────────────────────
+
+def _continue_call(message_id=42):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        id="cb-1",
+        data="broadcast_continue",
+        message=SimpleNamespace(
+            chat=SimpleNamespace(id=int(ADMIN)), message_id=message_id
+        ),
+    )
+
+
+def test_continue_button_completes_and_edits_message(isolated_state, start, mock_bot, monkeypatch):
+    import bot_app.handlers.admin as admin_handlers
+
+    monkeypatch.setattr(admin_handlers, "ADMIN_CHAT_IDS", [ADMIN])
+    start([111, 222])
+
+    admin_handlers.handle_broadcast_continue(_continue_call())
+
+    # The callback is answered and customers got the message via the
+    # global (mocked) bot; the tapped progress message is edited to done.
+    assert mock_bot.calls["answer_callback"]
+    sent_to = [str(m[0]) for m in mock_bot.calls["send_message"]]
+    assert "111" in sent_to and "222" in sent_to
+    edits = mock_bot.calls["edit_message_text"]
+    assert edits and "ပို့ပြီးပါပြီ" in edits[0][0][0]
+    assert B.get_active_job() is None
+
+
+def test_continue_button_edits_progress_when_more_remain(isolated_state, start, mock_bot, monkeypatch):
+    import bot_app.handlers.admin as admin_handlers
+
+    monkeypatch.setattr(admin_handlers, "ADMIN_CHAT_IDS", [ADMIN])
+    start(list(range(1000, 1100)))  # 100 users; the tap cap is 80
+
+    admin_handlers.handle_broadcast_continue(_continue_call())
+
+    job = B.get_active_job()
+    assert job is not None and job["cursor"] == 80
+    edits = mock_bot.calls["edit_message_text"]
+    assert edits and "ကျန်: <b>20</b>" in edits[0][0][0]
