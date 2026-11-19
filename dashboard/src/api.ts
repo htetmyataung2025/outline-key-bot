@@ -197,6 +197,9 @@ export const extendKey = (keyId: string, addDays: number, addGb: number = 0) =>
 export const deleteKey = (serverId: string | number, keyId: string | number) =>
   api.delete(`/keys/${serverId}/${keyId}`).then((r) => r.data)
 
+export const deleteExpiredKeys = () =>
+  api.post('/keys/delete-expired').then((r) => r.data)
+
 export const fetchRedeems = () => api.get('/redeems').then((r) => r.data)
 export const createRedeemBatch = (payload: { amount_ks: number; mode: 'single' | 'shared'; valid_days: number; count: number }) =>
   api.post('/redeems/batch', payload).then((r) => r.data)

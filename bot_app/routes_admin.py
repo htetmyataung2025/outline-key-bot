@@ -579,6 +579,131 @@ def delete_key_endpoint(server_id, key_id):
     return jsonify({"success": True, "server_id": str(server_id), "key_id": str(key_id)}), 200
 
 
+def _parse_registry_expiry(value):
+    """Parse a registry ``expire_date`` into a ``date``, or ``None``.
+
+    Accepts the formats the bot and dashboard write: DD.MM.YYYY / DD.MM.YY
+    (also with ``/`` or ``-`` separators) and ISO YYYY-MM-DD. Anything else
+    (including the "unknown" placeholder) returns ``None`` — the sweep must
+    never delete a key whose expiry it cannot read.
+    """
+    import re
+
+    s = str(value or "").strip()
+    if not s:
+        return None
+    m = re.search(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})", s)
+    if m:
+        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        m = re.search(r"(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})", s)
+        if not m:
+            return None
+        day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if year < 100:
+            year += 2000
+    try:
+        return datetime(year, month, day).date()
+    except ValueError:
+        return None
+
+
+@admin_bp.route("/keys/delete-expired", methods=["POST"])
+def delete_expired_keys_endpoint():
+    """Permanently delete EVERY expired key: Outline server + registry.
+
+    Batch version of the single-key DELETE, for clearing the backlog of
+    long-expired keys the key manager accumulates. A key counts as expired
+    when its registry expiry date is before today (Myanmar). Safety rules:
+    synthesized history rows are excluded (same as the list), VIP/manual
+    keys are skipped (the single-key delete refuses them too), keys whose
+    expiry cannot be parsed are skipped, and a registry entry is removed
+    only when the server confirms deletion (HTTP 200/204) or reports the
+    key already gone (404) — an unreachable server keeps its entries.
+    Sales/purchase history is NOT touched; this is key cleanup only.
+    """
+    from bot_app.services.outline import refresh_registry_from_servers, resolve_server_api_url
+
+    # Pull live server keys into the registry first (same as GET /keys), so
+    # keys that exist only on a server are swept too.
+    try:
+        refresh_registry_from_servers()
+    except Exception:
+        pass
+
+    today = myanmar_now().date()
+    registry = load_persistent_keys()
+
+    candidates = []
+    skipped_unknown_date = 0
+    skipped_vip = 0
+    for entry in registry.values():
+        if not _is_manageable_key(entry):
+            continue
+        server = str(entry.get("server", ""))
+        if server.upper() == "VIP":
+            skipped_vip += 1
+            continue
+        exp = _parse_registry_expiry(entry.get("expire_date", ""))
+        if exp is None:
+            skipped_unknown_date += 1
+            continue
+        if exp < today:
+            candidates.append((server, str(entry.get("key_id", "")), entry.get("name", "")))
+
+    def _delete_one(candidate):
+        server, key_id, name = candidate
+        api_url = resolve_server_api_url(server)
+        if not api_url:
+            return candidate, "no_api_url"
+        try:
+            resp = requests.delete(
+                f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
+        except Exception:
+            return candidate, "unreachable"
+        if resp.status_code in (200, 204, 404):
+            return candidate, "deleted"
+        return candidate, f"http_{resp.status_code}"
+
+    results = []
+    if candidates:
+        with ThreadPoolExecutor(max_workers=min(8, len(candidates))) as executor:
+            results = list(executor.map(_delete_one, candidates))
+        # Registry removals run sequentially in this thread on purpose:
+        # delete_persistent_key rewrites the whole registry dict, so calling
+        # it from the pool threads would race and resurrect entries.
+        for (server, key_id, _name), outcome in results:
+            if outcome == "deleted":
+                delete_persistent_key(server, key_id)
+
+    deleted = [c for c, outcome in results if outcome == "deleted"]
+    failed = [{"server": c[0], "key_id": c[1], "name": c[2], "reason": outcome}
+              for c, outcome in results if outcome != "deleted"]
+
+    record_audit_log(
+        admin_id=current_admin_id(),
+        action="KEY_DELETE_EXPIRED_SWEEP",
+        target_type="key",
+        target_id="expired",
+        details={
+            "expired_found": len(candidates),
+            "deleted": len(deleted),
+            "failed": len(failed),
+            "skipped_unknown_date": skipped_unknown_date,
+            "skipped_vip": skipped_vip,
+        },
+    )
+
+    return jsonify({
+        "success": True,
+        "expired_found": len(candidates),
+        "deleted": len(deleted),
+        "failed": failed,
+        "skipped_unknown_date": skipped_unknown_date,
+        "skipped_vip": skipped_vip,
+    }), 200
+
+
 # ---------------------------------------------------------------------------
 # 4. Redeem Code Management
 # ---------------------------------------------------------------------------

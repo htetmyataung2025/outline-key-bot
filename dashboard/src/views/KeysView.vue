@@ -6,6 +6,7 @@ import {
   createKey,
   extendKey,
   deleteKey,
+  deleteExpiredKeys,
   triggerHaptic,
   triggerHapticNotification,
 } from '@/api'
@@ -321,8 +322,27 @@ async function handleDelete(row: any): Promise<boolean> {
   }
 }
 
+async function handleDeleteExpired(): Promise<boolean> {
+  triggerHaptic('medium')
+  try {
+    const res = await deleteExpiredKeys()
+    if (res.success) {
+      triggerHapticNotification('success')
+      const failedNote = res.failed?.length ? ` · ${res.failed.length} could not be deleted` : ''
+      message.success(`Deleted ${res.deleted} expired key${res.deleted === 1 ? '' : 's'}${failedNote}`)
+      await loadKeys()
+      return true
+    }
+    return false
+  } catch (err: any) {
+    triggerHapticNotification('error')
+    message.error(err?.response?.data?.error || 'Failed to delete expired keys')
+    return false
+  }
+}
+
 // ── Confirm dialog (replaces the cramped anchored NPopconfirm) ──────
-type ConfirmAction = 'extend' | 'delete'
+type ConfirmAction = 'extend' | 'delete' | 'delete-expired'
 const confirmOpen = ref(false)
 const confirmAction = ref<ConfirmAction>('extend')
 const confirmTarget = ref<any>(null)
@@ -349,12 +369,15 @@ function closeConfirm() {
 }
 
 async function runConfirm() {
-  if (!confirmTarget.value || confirmBusy.value) return
+  if (confirmBusy.value) return
+  if (confirmAction.value !== 'delete-expired' && !confirmTarget.value) return
   confirmBusy.value = true
   try {
     const ok = confirmAction.value === 'extend'
       ? await handleExtend(confirmTarget.value)
-      : await handleDelete(confirmTarget.value)
+      : confirmAction.value === 'delete'
+        ? await handleDelete(confirmTarget.value)
+        : await handleDeleteExpired()
     if (ok) {
       confirmOpen.value = false
       confirmTarget.value = null
@@ -365,11 +388,17 @@ async function runConfirm() {
 }
 
 const confirmTitle = computed(() =>
-  confirmAction.value === 'extend' ? 'Extend Access Key' : 'Delete Access Key')
+  confirmAction.value === 'extend'
+    ? 'Extend Access Key'
+    : confirmAction.value === 'delete'
+      ? 'Delete Access Key'
+      : 'Delete All Expired Keys')
 const confirmVerb = computed(() =>
   confirmAction.value === 'extend'
     ? (extendAddGb.value > 0 ? `Extend +30 Days · ${topupChipLabel(extendAddGb.value)}` : 'Extend +30 Days')
-    : 'Delete Permanently')
+    : confirmAction.value === 'delete'
+      ? 'Delete Permanently'
+      : 'Delete All Permanently')
 
 // Outline's cap is lifetime and usage never resets, so the backend raises the
 // limit to (used + add_gb): the fresh allowance is what the user gets on top.
@@ -437,12 +466,20 @@ defineExpose({
         <h1 class="page-title">Outline Access Keys</h1>
         <p class="page-subtitle">Manage, extend, and provision VPN credentials across servers</p>
       </div>
-      <NButton class="provision-btn" type="primary" size="medium" @click="showCreateModal = true">
-        <template #icon>
-          <AddOutline />
-        </template>
-        Provision Key
-      </NButton>
+      <div class="header-actions">
+        <NButton class="sweep-btn" type="error" secondary size="medium" @click="openConfirm('delete-expired', null)">
+          <template #icon>
+            <TrashOutline />
+          </template>
+          Delete Expired
+        </NButton>
+        <NButton class="provision-btn" type="primary" size="medium" @click="showCreateModal = true">
+          <template #icon>
+            <AddOutline />
+          </template>
+          Provision Key
+        </NButton>
+      </div>
     </div>
 
     <!-- Filters Bar -->
@@ -665,15 +702,22 @@ defineExpose({
         </div>
         <h3 class="confirm-title">{{ confirmTitle }}</h3>
         <p class="confirm-desc">
-          <span class="confirm-key-name">{{ confirmTarget?.name || confirmTarget?.key_id }}</span>
-          <template v-if="confirmAction === 'extend'">
-            gets 30 more days on Server {{ confirmTarget?.server }}<template v-if="newExpiryText">
-            — new expiry {{ newExpiryText }}.</template
-            >
+          <template v-if="confirmAction === 'delete-expired'">
+            Every key whose expiry date has passed will be permanently removed
+            from its Outline server and from the registry. Active keys are not
+            touched. This cannot be undone.
           </template>
           <template v-else>
-            will be permanently removed from Server {{ confirmTarget?.server }}.
-            This cannot be undone.
+            <span class="confirm-key-name">{{ confirmTarget?.name || confirmTarget?.key_id }}</span>
+            <template v-if="confirmAction === 'extend'">
+              gets 30 more days on Server {{ confirmTarget?.server }}<template v-if="newExpiryText">
+              — new expiry {{ newExpiryText }}.</template
+              >
+            </template>
+            <template v-else>
+              will be permanently removed from Server {{ confirmTarget?.server }}.
+              This cannot be undone.
+            </template>
           </template>
         </p>
         <div v-if="confirmAction === 'extend'" class="topup-block">
@@ -707,7 +751,7 @@ defineExpose({
         </NButton>
         <NButton
           class="confirm-ok"
-          :type="confirmAction === 'delete' ? 'error' : 'primary'"
+          :type="confirmAction === 'extend' ? 'primary' : 'error'"
           :loading="confirmBusy"
           @click="runConfirm"
         >
@@ -821,6 +865,12 @@ defineExpose({
 <style scoped>
 .keys-view {
   padding: 24px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .view-header {
