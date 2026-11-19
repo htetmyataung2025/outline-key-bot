@@ -329,7 +329,8 @@ async function handleDeleteExpired(): Promise<boolean> {
     if (res.success) {
       triggerHapticNotification('success')
       const failedNote = res.failed?.length ? ` · ${res.failed.length} could not be deleted` : ''
-      message.success(`Deleted ${res.deleted} expired key${res.deleted === 1 ? '' : 's'}${failedNote}`)
+      const registryNote = res.registry_only ? ` · ${res.registry_only} registry-only (server unreachable)` : ''
+      message.success(`Deleted ${res.deleted} expired key${res.deleted === 1 ? '' : 's'}${registryNote}${failedNote}`)
       await loadKeys()
       return true
     }
@@ -704,7 +705,8 @@ defineExpose({
         <p class="confirm-desc">
           <template v-if="confirmAction === 'delete-expired'">
             Every key whose expiry date has passed will be permanently removed
-            from its Outline server and from the registry. Active keys are not
+            from its Outline server and from the registry (keys on unreachable
+            servers are removed from the registry only). Active keys are not
             touched. This cannot be undone.
           </template>
           <template v-else>

@@ -483,9 +483,11 @@ def _fmt(days_delta):
 
 
 def test_delete_expired_keys_sweep(client, make_telegram_init_data, monkeypatch):
-    """The sweep permanently removes expired keys (server + registry) and
-    leaves everything else: active keys, unparseable dates, VIP/manual keys,
-    synthesized history rows, and keys on unreachable servers."""
+    """The sweep permanently removes expired keys and leaves everything
+    else: active keys, unparseable dates, VIP/manual keys, synthesized
+    history rows, and keys whose server answers but refuses deletion.
+    Keys on unreachable servers are removed registry-only (self-healing:
+    a later registry refresh resurrects them if the server comes back)."""
     init_data = make_telegram_init_data(user_id=ADMIN_ID)
     headers = {"X-Telegram-Init-Data": init_data}
 
@@ -497,6 +499,8 @@ def test_delete_expired_keys_sweep(client, make_telegram_init_data, monkeypatch)
                         access_url="ss://gone")
     save_persistent_key(server_num="1", key_id="103", name=f"stuck_user {_fmt(-5)}",
                         access_url="ss://stuck")
+    save_persistent_key(server_num="1", key_id="105", name=f"refused_user {_fmt(-5)}",
+                        access_url="ss://refused")
     save_persistent_key(server_num="1", key_id="104", name="nodate_user",
                         access_url="ss://nodate")
     save_persistent_key(server_num="VIP", key_id="custom_1", name=f"vip_user {_fmt(-90)}",
@@ -520,6 +524,8 @@ def test_delete_expired_keys_sweep(client, make_telegram_init_data, monkeypatch)
             raise ConnectionError("unreachable")
         if url.endswith("/201"):
             return FakeResp(404)  # already gone from the server
+        if url.endswith("/105"):
+            return FakeResp(500)  # server answers but refuses
         return FakeResp(204)
 
     monkeypatch.setattr("requests.delete", fake_delete)
@@ -528,17 +534,20 @@ def test_delete_expired_keys_sweep(client, make_telegram_init_data, monkeypatch)
     assert resp.status_code == 200
     data = resp.json
     assert data["success"] is True
-    assert data["expired_found"] == 3
-    assert data["deleted"] == 2
-    assert [f["key_id"] for f in data["failed"]] == ["103"]
+    assert data["expired_found"] == 4
+    assert data["deleted"] == 3
+    assert data["deleted_from_server"] == 2
+    assert data["registry_only"] == 1
+    assert [f["key_id"] for f in data["failed"]] == ["105"]
     assert data["skipped_unknown_date"] >= 1
     assert data["skipped_vip"] == 1
 
     registry = load_persistent_keys()
-    assert "1_101" not in registry       # expired, deleted
+    assert "1_101" not in registry       # expired, deleted from server
     assert "2_201" not in registry       # expired, 404 on server, still cleaned
+    assert "1_103" not in registry       # unreachable server, registry-only removal
+    assert "1_105" in registry           # server refused, kept
     assert "1_102" in registry           # active, untouched
-    assert "1_103" in registry           # unreachable server, kept
     assert "1_104" in registry           # unknown expiry, kept
     assert "VIP_custom_1" in registry    # VIP/manual, skipped
     assert "1_sale_9" in registry        # synthesized history row, excluded

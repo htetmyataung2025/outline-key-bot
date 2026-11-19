@@ -616,10 +616,14 @@ def delete_expired_keys_endpoint():
     long-expired keys the key manager accumulates. A key counts as expired
     when its registry expiry date is before today (Myanmar). Safety rules:
     synthesized history rows are excluded (same as the list), VIP/manual
-    keys are skipped (the single-key delete refuses them too), keys whose
-    expiry cannot be parsed are skipped, and a registry entry is removed
-    only when the server confirms deletion (HTTP 200/204) or reports the
-    key already gone (404) — an unreachable server keeps its entries.
+    keys are skipped (the single-key delete refuses them too), and keys
+    whose expiry cannot be parsed are skipped. A registry entry is removed
+    when the server confirms deletion (HTTP 200/204), reports the key
+    already gone (404), or cannot be consulted at all (no API URL /
+    unreachable) — the last case is registry-only and self-healing: if
+    that server ever comes back, the registry refresh resurrects rows for
+    keys that still exist there, and a re-sweep deletes them properly. A
+    server that answers but refuses (other HTTP status) keeps its entry.
     Sales/purchase history is NOT touched; this is key cleanup only.
     """
     from bot_app.services.outline import refresh_registry_from_servers, resolve_server_api_url
@@ -655,12 +659,12 @@ def delete_expired_keys_endpoint():
         server, key_id, name = candidate
         api_url = resolve_server_api_url(server)
         if not api_url:
-            return candidate, "no_api_url"
+            return candidate, "registry_only"
         try:
             resp = requests.delete(
                 f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
         except Exception:
-            return candidate, "unreachable"
+            return candidate, "registry_only"
         if resp.status_code in (200, 204, 404):
             return candidate, "deleted"
         return candidate, f"http_{resp.status_code}"
@@ -673,12 +677,14 @@ def delete_expired_keys_endpoint():
         # delete_persistent_key rewrites the whole registry dict, so calling
         # it from the pool threads would race and resurrect entries.
         for (server, key_id, _name), outcome in results:
-            if outcome == "deleted":
+            if outcome in ("deleted", "registry_only"):
                 delete_persistent_key(server, key_id)
 
     deleted = [c for c, outcome in results if outcome == "deleted"]
+    registry_only = [c for c, outcome in results if outcome == "registry_only"]
     failed = [{"server": c[0], "key_id": c[1], "name": c[2], "reason": outcome}
-              for c, outcome in results if outcome != "deleted"]
+              for c, outcome in results
+              if outcome not in ("deleted", "registry_only")]
 
     record_audit_log(
         admin_id=current_admin_id(),
@@ -688,6 +694,7 @@ def delete_expired_keys_endpoint():
         details={
             "expired_found": len(candidates),
             "deleted": len(deleted),
+            "registry_only": len(registry_only),
             "failed": len(failed),
             "skipped_unknown_date": skipped_unknown_date,
             "skipped_vip": skipped_vip,
@@ -697,7 +704,9 @@ def delete_expired_keys_endpoint():
     return jsonify({
         "success": True,
         "expired_found": len(candidates),
-        "deleted": len(deleted),
+        "deleted": len(deleted) + len(registry_only),
+        "deleted_from_server": len(deleted),
+        "registry_only": len(registry_only),
         "failed": failed,
         "skipped_unknown_date": skipped_unknown_date,
         "skipped_vip": skipped_vip,
