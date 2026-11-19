@@ -381,11 +381,41 @@ def handle_broadcast_continue(call):
     if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         bot.answer_callback_query(call.id, "⛔ Admin သီးသန့်ပါ။")
         return
-    from bot_app.services.broadcast import advance_broadcast, send_progress
+    from bot_app.services.broadcast import (
+        advance_broadcast, continue_markup, get_active_job, progress_text,
+    )
 
-    job = advance_broadcast(bot)
-    if not job or job.get("status") == "done":
-        bot.answer_callback_query(call.id, "✅ Broadcast ပို့ပြီးပါပြီ!")
-        return
+    # Answer FIRST: advancing a chunk takes tens of seconds, and
+    # Telegram spins the button until the callback is answered —
+    # answering only after the chunk made the button look dead, and a
+    # function timeout lost the answer (and the progress) entirely.
     bot.answer_callback_query(call.id, "▶️ ဆက်ပို့နေပါတယ်…")
-    send_progress(bot, job, chat_id=chat_id)
+
+    job = get_active_job()
+    if not job:
+        bot.send_message(chat_id, "ℹ️ လက်ရှိ ပို့နေဆဲ Broadcast မရှိပါ — ပြီးသွားပြီ (သို့) မစရသေးတာ ဖြစ်နိုင်ပါတယ်။")
+        return
+    try:
+        # Shorter budget than the pinger path so a tap returns quickly
+        # and the admin sees fresh numbers within this same request.
+        job = advance_broadcast(bot, job=job, budget_s=25.0, cap=80)
+    except Exception:
+        bot.send_message(chat_id, "⚠️ ဆက်ပို့ရာမှာ ခဏ အဆင်မပြေဖြစ်သွားပါတယ် — ကျန်တာကို အလိုအလျောက် ဆက်ပို့ပေးပါမယ်။")
+        return
+
+    # Refresh the tapped message in place so the admin sees the numbers
+    # move in the message they are already looking at.
+    if job and job.get("status") == "done":
+        text, markup = "✅ <b>Broadcast ပို့ပြီးပါပြီ!</b> (အကျဉ်းချုပ်ကို အောက်မှာ ကြည့်ပါ)", None
+    else:
+        text, markup = progress_text(job), continue_markup(job)
+    try:
+        bot.edit_message_text(
+            text,
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+            reply_markup=markup,
+        )
+    except Exception:
+        pass
