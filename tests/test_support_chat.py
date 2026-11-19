@@ -35,8 +35,12 @@ def store(monkeypatch):
     bot = BotStub()
     monkeypatch.setattr(sc, "bot", bot)
     pushes = []
+    # raising=False: support_chat no longer imports the inbox push at all
+    # (support replies stay out of the 30-cap inbox); the stub stays as a
+    # tripwire so any future push through this module is caught here.
     monkeypatch.setattr(sc, "push_app_notification",
-                        lambda cid, ntype, title, body: pushes.append((cid, ntype, title, body)))
+                        lambda cid, ntype, title, body: pushes.append((cid, ntype, title, body)),
+                        raising=False)
     return SimpleNamespace(data=data, bot=bot, pushes=pushes)
 
 
@@ -63,9 +67,9 @@ def test_admin_reply_routes_back_and_marks_presence(store):
     thread = sc.load_thread(CUSTOMER)
     assert [m["from"] for m in thread] == ["user", "admin"]
     assert thread[-1]["text"] == "Restart ချကြည့်ပါ"
-    # Customer is notified in the app, and the owner counts as present.
-    assert store.pushes and store.pushes[0][0] == str(CUSTOMER)
-    assert store.pushes[0][1] == "support"
+    # Support replies stay OUT of the app inbox (30-item cap — owner
+    # decision 2026-11-20); the owner still counts as present.
+    assert store.pushes == []
     assert sc.owner_present() is True
 
 
@@ -95,7 +99,8 @@ def test_agent_reply_blocked_while_owner_present(store):
     status, msg = sc.agent_reply(CUSTOMER, "Starter 1,000 Ks ပါ")
     assert status == "ok"
     assert [m["from"] for m in sc.load_thread(CUSTOMER)] == ["user", "Muse"]
-    assert store.pushes and store.pushes[0][0] == str(CUSTOMER)
+    # Agent answers also stay out of the app inbox (30-item cap).
+    assert store.pushes == []
     # Admins receive an oversight copy of every agent answer.
     assert any("Claude Support ဖြေပြီး" in text for _, text, _ in store.bot.sent)
 

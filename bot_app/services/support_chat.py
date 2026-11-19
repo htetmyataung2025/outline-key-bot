@@ -31,7 +31,6 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
-from bot_app.services.app_notify import push_app_notification
 from bot_app.storage.kv import redis_get, redis_set
 
 _MAX_MSGS = 100
@@ -169,7 +168,10 @@ def admin_reply(admin_chat_id, reply_to_message_id, text: str) -> bool:
     append_message(customer, "admin", text)
     # An admin actively answering counts as being present.
     set_owner_present(True)
-    push_app_notification(customer, "support", "💬 Support Chat", text)
+    # Support replies deliberately stay OUT of the app inbox: chat
+    # back-and-forth would eat its 30-item cap and push out real
+    # announcements (owner decision, 2026-11-20). The app detects new
+    # support replies straight from the thread for its notification.
     return True
 
 
@@ -186,7 +188,7 @@ def agent_reply(chat_id, text: str) -> tuple:
         return "owner_present", None
     chat_id = str(chat_id)
     msg = append_message(chat_id, "Muse", text)
-    push_app_notification(chat_id, "support", "💬 Support Chat", text)
+    # No inbox push here either — see admin_reply (30-item inbox cap).
     note = (
         "🤖 <b>Claude Support ဖြေပြီး</b>\n"
         f"👤 Customer: <code>{chat_id}</code>\n\n"
