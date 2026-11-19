@@ -152,7 +152,7 @@ async function pay() {
       <span class="section-title">VPN plans <span v-if="hasExtraPlans" class="plans-count-pill">{{ activePlans.length }} Plans</span></span>
       <button type="button" class="wallet-context wallet-jump-btn" data-action="jump-topup" @click="scrollToTopUp">
         <SvgIcon name="wallet" />
-        <span><b>{{ formatNumber(state.walletBalance) }} Ks</b></span>
+        <span><b>{{ state.walletUnlimited ? 'Unlimited' : formatNumber(state.walletBalance) + ' Ks' }}</b></span>
         <span class="jump-chip">ငွေဖြည့် ↓</span>
       </button>
     </div>

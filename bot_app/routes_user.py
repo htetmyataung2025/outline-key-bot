@@ -1,3 +1,4 @@
+import base64
 import json
 import queue
 import random
@@ -33,7 +34,7 @@ from bot_app.services.outline import (
     _parse_expiry_from_name,
     create_outline_key,
     get_configured_servers,
-    get_live_key_ids_by_server,
+    get_live_keys_by_server,
     get_server_display_name,
     get_usage_by_server,
     renew_or_create_unlimited_key,
@@ -117,6 +118,44 @@ def _resolve_key_ref(rec: dict, url_to_key: dict = None) -> tuple:
             if ref:
                 target_sid, target_kid = ref
     return str(target_sid), str(target_kid)
+
+
+def _ss_host_port(url: str):
+    """Extract ``(host, port)`` from an ss:// URL, or ``None`` when unparsable.
+
+    Handles both SIP002 (``ss://base64@host:port``) and legacy
+    (``ss://base64(everything)``) forms. Outline keys are unique per
+    (host, port), so this identity survives base64/fragment drift between a
+    stored purchase record and the server's canonical accessUrl.
+    """
+    if not url:
+        return None
+    u = str(url).strip()
+    if not u.startswith("ss://"):
+        return None
+    body = u[len("ss://"):].split("#")[0].split("?")[0].strip()
+    if not body:
+        return None
+    if "@" in body:
+        hostport = body.rsplit("@", 1)[1]
+    else:
+        try:
+            padded = body + "=" * (-len(body) % 4)
+            decoded = base64.b64decode(padded).decode("utf-8", "ignore")
+        except Exception:
+            return None
+        if "@" not in decoded:
+            return None
+        hostport = decoded.rsplit("@", 1)[1]
+    hostport = hostport.strip().strip("/")
+    if ":" not in hostport:
+        return None
+    host, _, port = hostport.rpartition(":")
+    host = host.strip().strip("[]").lower()
+    port = port.strip()
+    if not host or not port.isdigit():
+        return None
+    return (host, port)
 
 
 def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_to_key: dict = None) -> dict:
@@ -269,28 +308,59 @@ def get_bootstrap():
 
     # Live key existence per server: a key deleted directly on an Outline
     # server (e.g. via Outline Manager) must disappear from My Keys even
-    # though its purchase record remains. Fail-open — a server missing from
-    # live_key_ids was unreachable, so its keys are kept exactly as before.
-    live_key_ids = {}
+    # though its purchase record remains. A record is dropped ONLY when its
+    # own server answered the /access-keys probe AND none of the key's
+    # identities match a live key: not its key id, not its access-URL base,
+    # not its (host, port). The port identity matters because stored record
+    # URLs can drift from the server's canonical accessUrl (re-encoding,
+    # fragments), while an Outline port belongs to exactly one key.
+    # Fail-open everywhere else: unreachable server, unidentifiable record.
+    live_keys = {}
     if servers_needed:
         try:
             if request.args.get("refresh") == "1":
-                live_key_ids = get_live_key_ids_by_server(servers_needed, force=True)
+                live_keys = get_live_keys_by_server(servers_needed, force=True)
             else:
-                live_key_ids = get_live_key_ids_by_server(servers_needed)
+                live_keys = get_live_keys_by_server(servers_needed)
         except TypeError:
-            live_key_ids = get_live_key_ids_by_server(servers_needed)
+            live_keys = get_live_keys_by_server(servers_needed)
         except Exception:
-            live_key_ids = {}
+            live_keys = {}
+
+    live_ids_by_server = {}
+    live_url_bases = set()
+    live_host_ports = set()
+    for _sid_live, _srv_keys in live_keys.items():
+        _ids = set()
+        for _k in _srv_keys or []:
+            if not isinstance(_k, dict):
+                continue
+            if _k.get("id") is not None:
+                _ids.add(str(_k.get("id")))
+            _u = _k.get("accessUrl", "")
+            if _u:
+                live_url_bases.add(clean_ss_url(_u))
+                _hp = _ss_host_port(_u)
+                if _hp:
+                    live_host_ports.add(_hp)
+        live_ids_by_server[_sid_live] = _ids
 
     formatted_keys = []
     for i, rec in enumerate(reversed(records), 1):
         if not rec.get("vpn_key") or rec.get("vpn_key") == "N/A":
             continue
-        if live_key_ids:
+        if live_keys:
             _sid, _kid = _resolve_key_ref(rec, url_to_key)
-            if _kid and _kid != "N/A" and _sid in live_key_ids and _kid not in live_key_ids[_sid]:
-                continue  # deleted on the server — hide from My Keys
+            if _sid in live_keys:
+                _rec_url = clean_ss_url(rec.get("vpn_key", ""))
+                _rec_hp = _ss_host_port(rec.get("vpn_key", ""))
+                _alive = (
+                    (_kid and _kid != "N/A" and _kid in live_ids_by_server.get(_sid, set()))
+                    or (_rec_url and _rec_url in live_url_bases)
+                    or (_rec_hp is not None and _rec_hp in live_host_ports)
+                )
+                if not _alive:
+                    continue  # deleted on the server — hide from My Keys
         formatted_keys.append(
             _format_user_key(rec, idx=i, usage_by_server=usage_data, url_to_key=url_to_key)
         )
@@ -520,7 +590,12 @@ def purchase_plan():
         server_num = "1"
 
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    new_bal, used_bonus_days = update_user_balance(uid, -amount)
+    if is_admin_user:
+        # Admins are truly unlimited: the balance check above is skipped and
+        # the wallet is never charged, so an admin can buy at 0 Ks forever.
+        new_bal, used_bonus_days = total_bal, None
+    else:
+        new_bal, used_bonus_days = update_user_balance(uid, -amount)
 
     user_info = getattr(g, "current_user", {}) or {}
     user_name = user_info.get("name") or user_info.get("first_name") or "HMA Customer"
@@ -603,8 +678,9 @@ def purchase_plan():
         vpn_key = None
 
     if not vpn_key:
-        # Automatic fail-safe refund
-        update_user_balance(uid, amount)
+        # Automatic fail-safe refund (admins were never charged — no refund)
+        if not is_admin_user:
+            update_user_balance(uid, amount)
         return jsonify({
             "success": False,
             "error": "server_unavailable",

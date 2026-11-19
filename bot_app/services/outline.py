@@ -246,7 +246,7 @@ def get_usage_by_server(server_ids=None, force=False):
 # server" apart from "key was deleted on the server" — the metrics endpoint
 # cannot distinguish a deleted key from one that simply has no traffic yet.
 LIVE_KEYS_CACHE_TTL = 60.0
-_live_keys_cache = {}  # {server_id(str): {"ts": monotonic, "data": set(key_id str)}}
+_live_keys_cache = {}  # {server_id(str): {"ts": monotonic, "data": [accessKey, ...]}}
 _live_keys_cache_lock = threading.Lock()
 
 
@@ -270,8 +270,8 @@ def fetch_access_keys(api_url, timeout=4):
     return None
 
 
-def get_live_key_ids_by_server(server_ids=None, force=False):
-    """Return ``{server_id: {key_id, ...}}`` of keys that exist on each server.
+def get_live_keys_by_server(server_ids=None, force=False):
+    """Return ``{server_id: [accessKey, ...]}`` with each server's live keys.
 
     Only servers whose ``/access-keys`` fetch succeeded appear in the result;
     a missing server id means "unknown — fail open", never "all keys gone".
@@ -284,7 +284,9 @@ def get_live_key_ids_by_server(server_ids=None, force=False):
             sid = str(k_data.get("server", "1"))
             kid = str(k_data.get("key_id", ""))
             if kid:
-                result.setdefault(sid, set()).add(kid)
+                result.setdefault(sid, []).append(
+                    {"id": kid, "accessUrl": k_data.get("access_url", "")}
+                )
         return result
 
     configured = get_configured_servers()
@@ -315,12 +317,23 @@ def get_live_key_ids_by_server(server_ids=None, force=False):
             for sid, keys in fetched:
                 if keys is None:
                     continue  # unreachable — stay fail-open, do not cache
-                ids = {str(k.get("id")) for k in keys
-                       if isinstance(k, dict) and k.get("id") is not None}
-                _live_keys_cache[sid] = {"ts": stamp, "data": ids}
-                result[sid] = ids
+                _live_keys_cache[sid] = {"ts": stamp, "data": keys}
+                result[sid] = keys
 
     return result
+
+
+def get_live_key_ids_by_server(server_ids=None, force=False):
+    """Return ``{server_id: {key_id, ...}}`` of keys that exist on each server.
+
+    Derived from :func:`get_live_keys_by_server`; same fail-open semantics —
+    a server missing from the result was unreachable, not emptied.
+    """
+    return {
+        sid: {str(k.get("id")) for k in keys
+              if isinstance(k, dict) and k.get("id") is not None}
+        for sid, keys in get_live_keys_by_server(server_ids, force=force).items()
+    }
 
 
 def get_servers_total_usage():

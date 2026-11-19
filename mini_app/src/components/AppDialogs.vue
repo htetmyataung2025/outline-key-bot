@@ -243,7 +243,7 @@ onScopeDispose(() => cancelAnimationFrame(awardFrame))
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
             <span>သင့် Wallet လက်ကျန်:</span>
-            <b>{{ formatNumber(state.walletBalance) }} Ks</b>
+            <b>{{ state.walletUnlimited ? 'Unlimited' : formatNumber(state.walletBalance) + ' Ks' }}</b>
           </div>
         </div>
 
@@ -270,7 +270,7 @@ onScopeDispose(() => cancelAnimationFrame(awardFrame))
         </div>
 
         <!-- Sufficient balance -->
-        <template v-if="state.walletBalance >= activePlan.price">
+        <template v-if="state.walletUnlimited || state.walletBalance >= activePlan.price">
           <button
             class="primary-btn modal-full-btn"
             :disabled="state.isSubmitting"
@@ -292,7 +292,7 @@ onScopeDispose(() => cancelAnimationFrame(awardFrame))
 
       <!-- Offline / No Price Fallback -->
       <template v-else>
-        <span class="badge-pill">WALLET · {{ formatNumber(state.walletBalance) }} Ks</span>
+        <span class="badge-pill">WALLET · {{ state.walletUnlimited ? 'Unlimited' : formatNumber(state.walletBalance) + ' Ks' }}</span>
         <p>ရွေးချယ်ထားသော Plan အတွက် ဈေးနှုန်း အချက်အလက် မရရှိနိုင်သေးသောကြောင့် ဝယ်ယူ၍မရသေးပါ။ ကျေးဇူးပြု၍ အခြား Plan တစ်ခုကို ရွေးချယ်ပေးပါခင်ဗျာ။</p>
         <button class="primary-btn modal-full-btn" @click="closeDialog">နားလည်ပါပြီ</button>
       </template>

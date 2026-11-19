@@ -227,3 +227,43 @@ def test_user_api_purchase_honors_plan_months_from_admin_settings(client, make_t
         assert len(admin_calls) >= 1
     finally:
         invalidate_settings_cache(reset_fallback=True)
+
+
+def test_user_api_purchase_admin_unlimited_never_charged(client, make_telegram_init_data, isolated_state, monkeypatch):
+    """Admins buy with a 0 Ks wallet: no insufficient-balance block and the
+    wallet is never deducted (truly unlimited, like the Mini App display)."""
+    admin_id = 111000111  # in ADMIN_CHAT_IDS (see tests/conftest.py)
+    init_data = make_telegram_init_data(user_id=admin_id, username="boss_admin")
+    # NOTE: get_user_balance() returns the 999999999 admin sentinel, so the
+    # stored wallet must be checked through the breakdown instead.
+    from bot_app.services.billing import get_user_balance_breakdown
+    assert get_user_balance_breakdown(admin_id)[2] == 0
+
+    def fake_create_key(*args, **kwargs):
+        return ("ss://Y2hhY2hhMjA6bW9ja0tleUAxMjcuMC4wLjE6MTA4OQ==#Admin (111000111) 25.11.2026",
+                "Admin (111000111) 25.11.2026",
+                "25.11.2026")
+
+    import bot_app.routes_user as ru
+    monkeypatch.setattr(ru, "create_outline_key", fake_create_key)
+
+    # Pro Plan costs 7,000 Ks — far above the admin's 0 Ks balance.
+    resp = client.post(
+        "/api/user/purchase",
+        headers={"X-Telegram-Init-Data": init_data},
+        json={"plan_code": "pro", "server_id": "1"}
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["vpn_key"].startswith("ss://")
+
+    # Wallet untouched: still exactly 0, never driven negative.
+    assert get_user_balance_breakdown(admin_id)[2] == 0
+    assert data["new_balance"] == 0
+    assert data["remaining_balance"] == 0
+
+    # The purchase is still recorded like any other.
+    records = get_user_combined_purchase_records(admin_id)
+    assert len(records) == 1
+    assert records[0]["order_id"] == data["order_id"]

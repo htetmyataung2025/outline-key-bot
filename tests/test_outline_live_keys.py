@@ -88,3 +88,19 @@ def test_fetch_access_keys_non_200_returns_none(monkeypatch):
         lambda url, verify=False, timeout=None: _Resp(404, {}),
     )
     assert outline.fetch_access_keys("https://s1.example/api") is None
+
+
+def test_live_keys_returns_raw_lists_and_omits_failures(monkeypatch):
+    _fake_servers(monkeypatch)
+
+    def fake_get(url, verify=False, timeout=None):
+        if url.startswith("https://s1.example"):
+            return _Resp(200, {"accessKeys": [{"id": "9", "accessUrl": "ss://eA@10.0.0.1:8388"}]})
+        return _Resp(500, {})
+
+    monkeypatch.setattr(outline.requests, "get", fake_get)
+
+    result = outline.get_live_keys_by_server()
+    assert result == {"1": [{"id": "9", "accessUrl": "ss://eA@10.0.0.1:8388"}]}
+    # Server 2 answered 500: omitted (fail-open), not an empty list.
+    assert "2" not in result

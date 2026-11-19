@@ -487,8 +487,10 @@ def test_user_api_bootstrap_hides_server_deleted_keys(client, make_telegram_init
     )
     # Only key 101 still exists on Server 1; 102 was deleted server-side.
     monkeypatch.setattr(
-        "bot_app.routes_user.get_live_key_ids_by_server",
-        lambda servers, force=False: {"1": {"101"}}
+        "bot_app.routes_user.get_live_keys_by_server",
+        lambda servers, force=False: {
+            "1": [{"id": "101", "accessUrl": "ss://bGl2ZWtleQ@127.0.0.1:1080"}]
+        }
     )
 
     resp = client.get(
@@ -512,7 +514,7 @@ def test_user_api_bootstrap_keeps_keys_when_server_unreachable(client, make_tele
         lambda servers, force=False: {}
     )
     monkeypatch.setattr(
-        "bot_app.routes_user.get_live_key_ids_by_server",
+        "bot_app.routes_user.get_live_keys_by_server",
         lambda servers, force=False: {}
     )
 
@@ -522,3 +524,57 @@ def test_user_api_bootstrap_keeps_keys_when_server_unreachable(client, make_tele
     )
     assert resp.status_code == 200
     assert len(resp.get_json()["keys"]) == 2
+
+
+def test_user_api_bootstrap_hides_deleted_key_without_registry_entry(client, make_telegram_init_data, isolated_state, monkeypatch):
+    """Records whose key_id cannot be resolved are still pruned when their
+    (host, port) is gone from the server; a record whose port is live is kept
+    even when its stored URL base differs from the server's canonical URL."""
+    user_id = 555444335
+    init_data = make_telegram_init_data(user_id=user_id, username="port_identity_user")
+
+    # Dead key: no registry entry, port 9999 not present on the server.
+    save_user_purchase_record(
+        chat_id=user_id,
+        order_id="#ORD-DEAD1",
+        plan_name="Basic Plan",
+        disp_gb="50 GB",
+        months_count=1,
+        price_str="2,000 Ks",
+        server_num="1",
+        expire_date="25.12.2026",
+        vpn_key="ss://ZGVhZA@203.0.113.5:9999",
+    )
+    # Live key: stored URL drifted (different userinfo, query suffix) but its
+    # port 8888 IS live on the server under a different canonical URL.
+    save_user_purchase_record(
+        chat_id=user_id,
+        order_id="#ORD-LIVE1",
+        plan_name="Basic Plan",
+        disp_gb="50 GB",
+        months_count=1,
+        price_str="2,000 Ks",
+        server_num="1",
+        expire_date="25.12.2026",
+        vpn_key="ss://YWxpdmU@203.0.113.5:8888?outline=1",
+    )
+
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_usage_by_server",
+        lambda servers, force=False: {}
+    )
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_live_keys_by_server",
+        lambda servers, force=False: {
+            "1": [{"id": "55", "accessUrl": "ss://b2s@203.0.113.5:8888"}]
+        }
+    )
+
+    resp = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp.status_code == 200
+    keys = resp.get_json()["keys"]
+    assert len(keys) == 1
+    assert keys[0]["id"] == "#ORD-LIVE1"
