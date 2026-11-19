@@ -315,6 +315,15 @@ def entry(path=""):
 
     if _is_reminder_request():
         result = run_cooldown_reminders()
+        # Also move any in-flight broadcast forward: the ~15-minute
+        # pinger guarantees a broadcast finishes even if the admin
+        # never taps the "continue" button.
+        try:
+            from bot_app.services.broadcast import advance_broadcast
+
+            advance_broadcast(bot)
+        except Exception:
+            pass
         return jsonify({"status": "reminder completed", **result}), 200
 
     # Hide secret-ish probe paths when the real path reaches us (dev/local).
