@@ -16,6 +16,24 @@ import uuid
 from bot_app.storage.kv import redis_get, redis_set
 
 _MAX_ITEMS = 30
+# Inbox entries older than 3 days are dropped automatically (the user
+# asked for a self-cleaning inbox; keys/history live elsewhere and are
+# unaffected — only the notification list is pruned).
+_MAX_AGE_SECONDS = 3 * 24 * 60 * 60
+
+
+def _fresh(items):
+    """Keep only dict items whose ts is within the retention window."""
+    cutoff = int(time.time()) - _MAX_AGE_SECONDS
+    kept = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ts = item.get("ts")
+        if isinstance(ts, (int, float)) and ts < cutoff:
+            continue
+        kept.append(item)
+    return kept
 
 
 def _key(chat_id) -> str:
@@ -28,7 +46,7 @@ def push_app_notification(chat_id, ntype: str, title: str, body: str) -> None:
         items = redis_get(key)
         if not isinstance(items, list):
             items = []
-        items = [i for i in items if isinstance(i, dict)]
+        items = _fresh(items)
         items.insert(0, {
             "id": uuid.uuid4().hex[:12],
             "ts": int(time.time()),
@@ -48,7 +66,13 @@ def list_app_notifications(chat_id):
         items = redis_get(_key(chat_id))
         if not isinstance(items, list):
             return [], 0
-        items = [i for i in items if isinstance(i, dict)]
+        fresh = _fresh(items)
+        if len(fresh) != len(items):
+            try:
+                redis_set(_key(chat_id), fresh)  # self-clean expired entries
+            except Exception:
+                pass
+        items = fresh
         unread = sum(1 for i in items if not i.get("read"))
         return items, unread
     except Exception:
@@ -61,7 +85,9 @@ def mark_app_notifications_read(chat_id) -> None:
         items = redis_get(key)
         if not isinstance(items, list):
             return
-        changed = False
+        raw_count = len(items)
+        items = _fresh(items)
+        changed = len(items) != raw_count
         for item in items:
             if isinstance(item, dict) and not item.get("read"):
                 item["read"] = True

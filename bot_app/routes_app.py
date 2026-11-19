@@ -872,6 +872,23 @@ def app_buy():
                 parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
         except Exception:
             pass
+        # Admin sale alert, mirroring the bot and Mini App purchase alerts
+        # (this was missing: app purchases never reached the admins).
+        for aid in ADMIN_CHAT_IDS:
+            try:
+                _bot.send_message(
+                    aid,
+                    f"🛍️ <b>H&E VPN App မှ ကီးဝယ်ယူမှု:</b>\n\n"
+                    f"🧾 Order ID: <code>{order_id}</code>\n"
+                    f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
+                    f"🛍️ Plan: {plan['name']}\n"
+                    f"📡 Server: {get_server_display_name(server_num)}\n"
+                    f"💵 ရရှိငွေ: {amount:,} MMK\n"
+                    f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else '၁လစာ'})",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
         return jsonify(result)
     finally:
         if lock is True:
