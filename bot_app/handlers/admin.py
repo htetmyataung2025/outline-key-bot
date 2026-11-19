@@ -419,3 +419,46 @@ def handle_broadcast_continue(call):
         )
     except Exception:
         pass
+
+
+@bot.message_handler(commands=["keyprobe"])
+def handle_keyprobe(message):
+    """Admin-only diagnostic: grade the caller's key records against the
+    live Outline servers.
+
+    Built for the "deleted the key on the server but it still shows in the
+    Mini App" class of bug: answers with data — per-server probe status
+    plus, per record, whether the key still exists live (matched by id /
+    URL / port) and whether the Mini App bootstrap will hide it.
+    """
+    chat_id = message.chat.id
+    if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    try:
+        from bot_app.routes_user import diagnose_user_keys
+        report = diagnose_user_keys(chat_id)
+    except Exception as exc:
+        bot.send_message(
+            chat_id,
+            f"🔧 Key စစ်ဆေးမှု မအောင်မြင်ပါ ({html.escape(type(exc).__name__)})")
+        return
+
+    lines = ["🔧 <b>Key စစ်ဆေးချက် (Live Servers)</b>", ""]
+    for srv in report["servers"]:
+        sid = html.escape(str(srv["id"]))
+        if srv["ok"]:
+            lines.append(f"📡 Server {sid}: ✅ ဆက်သွယ်ရပြီ · Live key {srv['live_keys']} ခု")
+        else:
+            lines.append(f"📡 Server {sid}: ❌ ဆက်သွယ်မရပါ ({html.escape(str(srv['error']))})")
+    lines.append("")
+    lines.append(f"<b>သင့် Key မှတ်တမ်းများ ({len(report['records'])})</b>")
+    for rec in report["records"]:
+        label = (f"{html.escape(str(rec['plan']))} · {html.escape(str(rec['order_id']))}"
+                 f" · S{html.escape(str(rec['server']))}")
+        if rec["dropped"]:
+            lines.append(f"🗑 {label} → Server မှာ မရှိတော့ပါ (Mini App မှာ ဖျောက်ပေးမယ်)")
+        elif not rec["server_fetched"]:
+            lines.append(f"❔ {label} → Server ကို ဆက်သွယ်မရလို့ မဖျောက်ဘဲ ထားထားတယ်")
+        else:
+            lines.append(f"✅ {label} → Server မှာ ရှိနေသေးတယ် (တွေ့ရှိနည်း: {html.escape(str(rec['via']))})")
+    bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML")

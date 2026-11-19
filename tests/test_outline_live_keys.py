@@ -104,3 +104,64 @@ def test_live_keys_returns_raw_lists_and_omits_failures(monkeypatch):
     assert result == {"1": [{"id": "9", "accessUrl": "ss://eA@10.0.0.1:8388"}]}
     # Server 2 answered 500: omitted (fail-open), not an empty list.
     assert "2" not in result
+
+
+def test_live_keys_tolerates_trailing_slash_api_url(monkeypatch):
+    """A stored api_url with a trailing slash (easy to paste into the
+    dashboard form) must not produce a ``//access-keys`` request — the
+    probe resolves the URL like every other server call and strips it."""
+    monkeypatch.setattr(
+        outline,
+        "get_configured_servers",
+        lambda: [{"id": "1", "name": "Server 1",
+                  "api_url": "https://s1.example/api/"}],
+    )
+    seen = []
+
+    def fake_get(url, verify=False, timeout=None):
+        seen.append(url)
+        return _Resp(200, {"accessKeys": [{"id": "3"}]})
+
+    monkeypatch.setattr(outline.requests, "get", fake_get)
+
+    assert outline.get_live_key_ids_by_server() == {"1": {"3"}}
+    assert seen == ["https://s1.example/api/access-keys"]
+
+
+def test_fetch_detailed_reports_error_without_url(monkeypatch):
+    monkeypatch.setattr(
+        outline.requests,
+        "get",
+        lambda url, verify=False, timeout=None: _Resp(500, {}),
+    )
+    keys, error = outline.fetch_access_keys_detailed("https://s1.example/secret-path")
+    assert keys is None
+    assert error == "HTTP 500"
+    assert "secret-path" not in error
+
+    def boom(url, verify=False, timeout=None):
+        raise ConnectionError("refused")
+
+    monkeypatch.setattr(outline.requests, "get", boom)
+    keys, error = outline.fetch_access_keys_detailed("https://s1.example/secret-path")
+    assert keys is None
+    assert error == "ConnectionError"
+
+
+def test_probe_live_servers_reports_counts_and_errors(monkeypatch):
+    _fake_servers(monkeypatch)
+
+    def fake_get(url, verify=False, timeout=None):
+        if url.startswith("https://s1.example"):
+            return _Resp(200, {"accessKeys": [{"id": "1"}, {"id": "2"}]})
+        return _Resp(503, {})
+
+    monkeypatch.setattr(outline.requests, "get", fake_get)
+
+    report = outline.probe_live_servers()
+    assert report["1"] == {"ok": True, "count": 2, "error": None}
+    assert report["2"]["ok"] is False
+    assert report["2"]["count"] is None
+    assert report["2"]["error"] == "HTTP 503"
+    # A successful probe warms the cache for get_live_keys_by_server.
+    assert outline.get_live_key_ids_by_server() == {"1": {"1", "2"}}

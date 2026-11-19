@@ -250,6 +250,33 @@ _live_keys_cache = {}  # {server_id(str): {"ts": monotonic, "data": [accessKey, 
 _live_keys_cache_lock = threading.Lock()
 
 
+def fetch_access_keys_detailed(api_url, timeout=4):
+    """Fetch one server's live ``accessKeys`` list with an error report.
+
+    Returns ``(keys, None)`` on success and ``(None, error)`` on failure,
+    where ``error`` is a short string (exception class name or HTTP status)
+    that never contains the API URL — the URL embeds a secret path.
+    """
+    api_url = (api_url or "").rstrip("/")
+    if not api_url:
+        return None, "no api_url"
+    if _is_local_sandbox():
+        return None, "local sandbox"
+    try:
+        resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=timeout)
+    except Exception as exc:
+        return None, type(exc).__name__
+    if resp.status_code != 200:
+        return None, f"HTTP {resp.status_code}"
+    try:
+        keys = resp.json().get("accessKeys", [])
+    except Exception:
+        return None, "bad json"
+    if not isinstance(keys, list):
+        return None, "bad payload"
+    return keys, None
+
+
 def fetch_access_keys(api_url, timeout=4):
     """Return one server's live ``accessKeys`` list, or ``None`` on any failure.
 
@@ -257,17 +284,8 @@ def fetch_access_keys(api_url, timeout=4):
     different from an empty list: callers must fail open on ``None`` and only
     treat a key as deleted when the server actually answered successfully.
     """
-    if not api_url or _is_local_sandbox():
-        return None
-    try:
-        resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=timeout)
-        if resp.status_code == 200:
-            keys = resp.json().get("accessKeys", [])
-            if isinstance(keys, list):
-                return keys
-    except Exception:
-        pass
-    return None
+    keys, _error = fetch_access_keys_detailed(api_url, timeout=timeout)
+    return keys
 
 
 def get_live_keys_by_server(server_ids=None, force=False):
@@ -308,7 +326,12 @@ def get_live_keys_by_server(server_ids=None, force=False):
 
     if to_fetch:
         def fetch(srv):
-            return str(srv.get("id")), fetch_access_keys(srv.get("api_url", ""))
+            sid = str(srv.get("id"))
+            # Resolve the URL exactly like every other server call (settings
+            # store, trailing slash stripped, legacy env fallback) — the raw
+            # stored value may carry a trailing slash or be blank mid-edit.
+            api_url = resolve_server_api_url(sid) or (srv.get("api_url") or "")
+            return sid, fetch_access_keys(api_url)
 
         with ThreadPoolExecutor(max_workers=min(8, max(1, len(to_fetch)))) as executor:
             fetched = list(executor.map(fetch, to_fetch))
@@ -334,6 +357,44 @@ def get_live_key_ids_by_server(server_ids=None, force=False):
               if isinstance(k, dict) and k.get("id") is not None}
         for sid, keys in get_live_keys_by_server(server_ids, force=force).items()
     }
+
+
+def probe_live_servers():
+    """Diagnostic snapshot of every configured server's ``/access-keys`` probe.
+
+    Returns ``{server_id: {"ok": bool, "count": int | None, "error": str | None}}``.
+    Successful probes refresh the live-keys cache, so a following
+    :func:`get_live_keys_by_server` call reuses them instead of refetching.
+    Errors are short and never contain the API URL (it embeds a secret path).
+    """
+    if _is_local_sandbox():
+        return {
+            sid: {"ok": True, "count": len(keys), "error": None}
+            for sid, keys in get_live_keys_by_server().items()
+        }
+    report = {}
+    configured = get_configured_servers()
+    if not configured:
+        return report
+
+    def probe(srv):
+        sid = str(srv.get("id"))
+        api_url = resolve_server_api_url(sid) or (srv.get("api_url") or "")
+        keys, error = fetch_access_keys_detailed(api_url)
+        return sid, keys, error
+
+    with ThreadPoolExecutor(max_workers=min(8, len(configured))) as executor:
+        results = list(executor.map(probe, configured))
+    stamp = time.monotonic()
+    with _live_keys_cache_lock:
+        for sid, keys, error in results:
+            if keys is None:
+                report[sid] = {"ok": False, "count": None,
+                               "error": error or "unreachable"}
+            else:
+                _live_keys_cache[sid] = {"ts": stamp, "data": keys}
+                report[sid] = {"ok": True, "count": len(keys), "error": None}
+    return report
 
 
 def get_servers_total_usage():

@@ -37,6 +37,7 @@ from bot_app.services.outline import (
     get_live_keys_by_server,
     get_server_display_name,
     get_usage_by_server,
+    probe_live_servers,
     renew_or_create_unlimited_key,
 )
 from bot_app.services.points import (
@@ -156,6 +157,96 @@ def _ss_host_port(url: str):
     if not host or not port.isdigit():
         return None
     return (host, port)
+
+
+def _liveness_context(live_keys: dict):
+    """Precompute identity sets from a ``{server_id: [accessKey]}`` map.
+
+    Returns ``(ids_by_server, url_bases, host_ports)`` — every identity a
+    purchase record can be matched against the live server state with.
+    """
+    ids_by_server = {}
+    url_bases = set()
+    host_ports = set()
+    for sid_live, srv_keys in (live_keys or {}).items():
+        ids = set()
+        for item in srv_keys or []:
+            if not isinstance(item, dict):
+                continue
+            if item.get("id") is not None:
+                ids.add(str(item.get("id")))
+            url = item.get("accessUrl", "")
+            if url:
+                url_bases.add(clean_ss_url(url))
+                hp = _ss_host_port(url)
+                if hp:
+                    host_ports.add(hp)
+        ids_by_server[sid_live] = ids
+    return ids_by_server, url_bases, host_ports
+
+
+def _record_liveness(rec: dict, url_to_key: dict, ctx) -> tuple:
+    """Grade one purchase record against the live identity sets.
+
+    Returns ``(server_id, key_id, via)`` where ``via`` is how the record's
+    key was found among the live keys — ``"id"``, ``"url"``, ``"port"`` —
+    or ``"none"``. ``"none"`` only proves deletion when the record's own
+    server was actually probed (its id appears in the live map).
+    """
+    ids_by_server, url_bases, host_ports = ctx
+    sid, kid = _resolve_key_ref(rec, url_to_key)
+    if kid and kid != "N/A" and kid in ids_by_server.get(sid, set()):
+        return sid, kid, "id"
+    rec_url = clean_ss_url(rec.get("vpn_key", ""))
+    if rec_url and rec_url in url_bases:
+        return sid, kid, "url"
+    rec_hp = _ss_host_port(rec.get("vpn_key", ""))
+    if rec_hp is not None and rec_hp in host_ports:
+        return sid, kid, "port"
+    return sid, kid, "none"
+
+
+def diagnose_user_keys(uid) -> dict:
+    """Admin diagnostic: probe the Outline servers and grade a user's records.
+
+    Returns ``{"servers": [...], "records": [...]}`` — rendered by the
+    ``/keyprobe`` bot command (handlers/admin.py). The probe is fresh
+    (``probe_live_servers`` bypasses the TTL cache and refreshes it), so the
+    verdicts reflect the servers right now.
+    """
+    records = get_user_combined_purchase_records(uid)
+    url_to_key = {}
+    for k_data in load_persistent_keys().values():
+        access_url = k_data.get("access_url", "")
+        if access_url:
+            clean = clean_ss_url(access_url)
+            if clean:
+                url_to_key[clean] = (
+                    str(k_data.get("server", "1")), str(k_data.get("key_id", "")))
+    probe = probe_live_servers()
+    live_keys = get_live_keys_by_server()
+    ctx = _liveness_context(live_keys)
+    graded = []
+    for rec in records:
+        if not rec.get("vpn_key") or rec.get("vpn_key") == "N/A":
+            continue
+        sid, kid, via = _record_liveness(rec, url_to_key, ctx)
+        fetched = sid in live_keys
+        graded.append({
+            "order_id": rec.get("order_id", ""),
+            "plan": rec.get("plan", ""),
+            "server": sid,
+            "key_id": kid,
+            "via": via,
+            "server_fetched": fetched,
+            "dropped": bool(fetched and via == "none"),
+        })
+    servers = [
+        {"id": sid, "ok": bool(info.get("ok")),
+         "live_keys": info.get("count"), "error": info.get("error")}
+        for sid, info in sorted(probe.items())
+    ]
+    return {"servers": servers, "records": graded}
 
 
 def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_to_key: dict = None) -> dict:
@@ -327,40 +418,16 @@ def get_bootstrap():
         except Exception:
             live_keys = {}
 
-    live_ids_by_server = {}
-    live_url_bases = set()
-    live_host_ports = set()
-    for _sid_live, _srv_keys in live_keys.items():
-        _ids = set()
-        for _k in _srv_keys or []:
-            if not isinstance(_k, dict):
-                continue
-            if _k.get("id") is not None:
-                _ids.add(str(_k.get("id")))
-            _u = _k.get("accessUrl", "")
-            if _u:
-                live_url_bases.add(clean_ss_url(_u))
-                _hp = _ss_host_port(_u)
-                if _hp:
-                    live_host_ports.add(_hp)
-        live_ids_by_server[_sid_live] = _ids
+    liveness_ctx = _liveness_context(live_keys)
 
     formatted_keys = []
     for i, rec in enumerate(reversed(records), 1):
         if not rec.get("vpn_key") or rec.get("vpn_key") == "N/A":
             continue
         if live_keys:
-            _sid, _kid = _resolve_key_ref(rec, url_to_key)
-            if _sid in live_keys:
-                _rec_url = clean_ss_url(rec.get("vpn_key", ""))
-                _rec_hp = _ss_host_port(rec.get("vpn_key", ""))
-                _alive = (
-                    (_kid and _kid != "N/A" and _kid in live_ids_by_server.get(_sid, set()))
-                    or (_rec_url and _rec_url in live_url_bases)
-                    or (_rec_hp is not None and _rec_hp in live_host_ports)
-                )
-                if not _alive:
-                    continue  # deleted on the server — hide from My Keys
+            _sid, _kid, _via = _record_liveness(rec, url_to_key, liveness_ctx)
+            if _sid in live_keys and _via == "none":
+                continue  # deleted on the server — hide from My Keys
         formatted_keys.append(
             _format_user_key(rec, idx=i, usage_by_server=usage_data, url_to_key=url_to_key)
         )
