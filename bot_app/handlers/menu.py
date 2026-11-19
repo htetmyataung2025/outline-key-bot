@@ -50,6 +50,15 @@ def handle_all_messages(message):
         return
     input_value = message.text.strip()
     chat_id = message.chat.id
+
+    # 💬 Support Chat — an admin answering with Telegram's Reply gesture on
+    # a forwarded support message sends the text back into the app thread.
+    if str(chat_id) in {str(a) for a in ADMIN_CHAT_IDS} and getattr(message, "reply_to_message", None):
+        from bot_app.services.support_chat import admin_reply
+        if admin_reply(chat_id, message.reply_to_message.message_id, input_value):
+            bot.reply_to(message, "✅ App Support Chat ထဲ ပို့ပြီးပါပြီ။")
+            return
+
     save_user_id(chat_id)
     touch_user(message.from_user)
 

@@ -30,6 +30,8 @@ in-memory fallback otherwise), following ``bot_app/helpers/rate_limit.py``.
 import base64
 import binascii
 import hashlib
+import hmac
+import os
 import re
 import threading
 import time
@@ -1128,4 +1130,106 @@ def app_notifications_read():
     if not chat_id:
         return jsonify({"error": "unauthorized"}), 401
     mark_app_notifications_read(chat_id)
+    return jsonify({"success": True})
+
+
+# --- Support Chat -------------------------------------------------------------
+# Customer side: the in-app chat screen (bearer-token auth, same as the
+# rest of /api/app). Agent side: the Muse support agent (secret header).
+
+def _support_display_name(chat_id) -> str:
+    try:
+        from bot_app.services.profiles import load_all_profiles
+        profile = (load_all_profiles() or {}).get(str(chat_id)) or {}
+        name = profile.get("full_name") or profile.get("username") or ""
+        return str(name).strip()
+    except Exception:
+        return ""
+
+
+@app_bp.route("/support/messages", methods=["GET"])
+def app_support_messages():
+    if _rate_limited(_client_bucket("support_messages"), 60):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    from bot_app.services.support_chat import load_thread
+    return jsonify({"messages": load_thread(chat_id)})
+
+
+@app_bp.route("/support/send", methods=["POST"])
+def app_support_send():
+    if _rate_limited(_client_bucket("support_send"), 30):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    text = str(data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "empty_message"}), 400
+    if len(text) > 1000:
+        return jsonify({"error": "message_too_long"}), 400
+    from bot_app.services.support_chat import customer_say
+    name = _support_display_name(chat_id) or f"User {chat_id}"
+    msg = customer_say(chat_id, name, text)
+    return jsonify({"success": True, "message": msg})
+
+
+def _agent_authorized() -> bool:
+    secret = os.environ.get("SUPPORT_AGENT_SECRET") or ""
+    if not secret:
+        return False
+    given = request.headers.get("X-Support-Agent-Secret") or ""
+    return hmac.compare_digest(given, secret)
+
+
+@app_bp.route("/support/agent/pending", methods=["GET"])
+def app_support_agent_pending():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    from bot_app.services.support_chat import owner_present, pending_threads
+    return jsonify({"owner_present": owner_present(), "threads": pending_threads()})
+
+
+@app_bp.route("/support/agent/reply", methods=["POST"])
+def app_support_agent_reply():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    chat_id = str(data.get("chat_id") or "").strip()
+    text = str(data.get("text") or "").strip()
+    if not chat_id or not text:
+        return jsonify({"error": "chat_id and text are required"}), 400
+    if len(text) > 2000:
+        return jsonify({"error": "message_too_long"}), 400
+    from bot_app.services.support_chat import agent_reply
+    status, msg = agent_reply(chat_id, text)
+    if status == "owner_present":
+        return jsonify({"error": "owner_present"}), 409
+    return jsonify({"success": True, "message": msg})
+
+
+@app_bp.route("/support/agent/presence", methods=["POST"])
+def app_support_agent_presence():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    from bot_app.services.support_chat import set_owner_present
+    present = set_owner_present(bool(data.get("present")))
+    return jsonify({"success": True, "owner_present": present})
+
+
+@app_bp.route("/support/agent/escalate", methods=["POST"])
+def app_support_agent_escalate():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    chat_id = str(data.get("chat_id") or "").strip()
+    summary = str(data.get("summary") or "").strip()
+    if not chat_id or not summary:
+        return jsonify({"error": "chat_id and summary are required"}), 400
+    from bot_app.services.support_chat import escalate
+    escalate(chat_id, summary)
     return jsonify({"success": True})

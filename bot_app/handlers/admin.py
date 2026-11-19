@@ -505,3 +505,53 @@ def handle_backup(message):
     for tab, n in counts.items():
         lines.append(f"• {html.escape(str(tab))}: {n} rows")
     bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
+
+
+# --- Support Chat presence (handover between owner and Muse agent) ---------
+
+def _support_panel_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("🙋 ရောက်ပြီ — Muse ရပ်", callback_data="sup_here"),
+        InlineKeyboardButton("🤖 Muse ဆက်ဖြေ", callback_data="sup_away"),
+    )
+    return markup
+
+
+@bot.message_handler(commands=["support"])
+def support_panel_command(message):
+    chat_id = message.chat.id
+    if str(chat_id) not in {str(a) for a in ADMIN_CHAT_IDS}:
+        return
+    from bot_app.services.support_chat import owner_present
+    mode = "🙋 Owner mode (Muse ရပ်ထားသည်)" if owner_present() else "🤖 Muse mode (Muse ဖြေပေးနေသည်)"
+    bot.send_message(
+        chat_id,
+        "💬 <b>Support Chat ထိန်းချုပ်မှု</b>\n\n"
+        f"လက်ရှိ အခြေအနေ: <b>{mode}</b>\n\n"
+        "🙋 <b>ရောက်ပြီ</b> — Support စာတွေ Admin ကိုယ်တိုင် ဖြေမယ်၊ Muse ဝင်မဖြေဘူး။\n"
+        "🤖 <b>Muse ဆက်ဖြေ</b> — Admin မအားတဲ့ အချိန် Muse က လုံခြုံတဲ့ မေးခွန်းတွေ ဝင်ဖြေပေးမယ်။\n\n"
+        "ℹ️ Owner mode မှာ ၁ နာရီ ကြာ ဘာမှ မလုပ်ရင် Muse mode ကို အလိုအလျောက် ပြန်ပြောင်းပါတယ်။",
+        parse_mode="HTML",
+        reply_markup=_support_panel_markup(),
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data in ("sup_here", "sup_away"))
+def support_presence_callback(call):
+    if str(call.from_user.id) not in {str(a) for a in ADMIN_CHAT_IDS}:
+        bot.answer_callback_query(call.id, "⛔ Admin only")
+        return
+    from bot_app.services.support_chat import set_owner_present
+    present = call.data == "sup_here"
+    set_owner_present(present)
+    if present:
+        bot.answer_callback_query(call.id, "🙋 Owner mode — Muse ရပ်ထားပါပြီ")
+        bot.send_message(call.message.chat.id,
+                         "🙋 <b>Owner mode</b> — Support Chat ကို Admin ကိုယ်တိုင် ဖြေပါမယ်။ Muse ဝင်ဖြေမှာ မဟုတ်ပါ။",
+                         parse_mode="HTML")
+    else:
+        bot.answer_callback_query(call.id, "🤖 Muse mode — Muse ဆက်ဖြေပါမယ်")
+        bot.send_message(call.message.chat.id,
+                         "🤖 <b>Muse mode</b> — Support Chat ကို Muse က ဆက်ဖြေပေးပါမယ်။",
+                         parse_mode="HTML")

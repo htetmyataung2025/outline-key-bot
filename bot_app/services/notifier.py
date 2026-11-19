@@ -137,6 +137,24 @@ def run_expiry_cron():
                         except:
                             pass
 
+                        # Mirror the same warning into the native app's
+                        # notification inbox (same moment, same content) so
+                        # app users get it as a phone notification too. The
+                        # bot's own Telegram behaviour is unchanged.
+                        try:
+                            from bot_app.services.app_notify import push_app_notification
+                            push_app_notification(
+                                target_chat_id,
+                                "expiry_warning",
+                                "⚠️ သတိပေးချက်",
+                                (
+                                    f"လူကြီးမင်း အသုံးပြုနေသော VPN Key ({full_name}) သည် {user_warning}\n\n"
+                                    f"ဆက်လက် အသုံးပြုလိုပါက H&E VPN App ၏ Plans မှဖြစ်စေ၊ Bot မှဖြစ်စေ ပြန်လည် ဝယ်ယူနိုင်ပါတယ်ဗျာ။ 🙏"
+                                ),
+                            )
+                        except:
+                            pass
+
                     admin_noti = (
                         f"📢 <b>Customer သတိပေးချက်</b>\n"
                         f"👤 အသုံးပြုသူ: {full_name}\n"
