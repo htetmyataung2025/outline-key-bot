@@ -249,6 +249,39 @@ _DEFAULT_PLANS = {
 }
 
 
+def _customer_plans(raw: dict) -> dict:
+    """Customer-facing view of a plans mapping: no HMA, sorted by quota.
+
+    The dynamic settings store (Supabase) holds plans in whatever order
+    the last dashboard save left them, and a discontinued "HMA" plan once
+    resurfaced there — every customer surface (bot shop keyboard, the
+    app's /api/app/plans, the Mini App bootstrap) iterates ``PLANS``, so
+    the cleanup lives in this one place: drop any plan whose code or
+    name mentions HMA, then order by data quota ascending
+    (25 GB -> 500 GB). The stored settings themselves are never
+    rewritten — ``save_system_settings`` works on the raw store dict.
+    """
+    def quota_gb(plan: dict) -> float:
+        try:
+            return int(plan.get("bytes") or 0) / 1000 ** 3
+        except (TypeError, ValueError):
+            pass
+        digits = "".join(ch for ch in str(plan.get("data") or "") if ch.isdigit() or ch == ".")
+        try:
+            return float(digits) if digits else 0.0
+        except ValueError:
+            return 0.0
+
+    cleaned = {}
+    for code, plan in raw.items():
+        if not isinstance(plan, dict):
+            continue
+        if "hma" in str(code).lower() or "hma" in str(plan.get("name") or "").lower():
+            continue
+        cleaned[code] = plan
+    return dict(sorted(cleaned.items(), key=lambda kv: quota_gb(kv[1])))
+
+
 class _DynamicPlans(dict):
     """Dynamic dictionary view of VPN plans from Supabase settings."""
 
@@ -257,10 +290,10 @@ class _DynamicPlans(dict):
             from bot_app.services.settings import get_system_settings
             dyn = get_system_settings().get("plans")
             if dyn and isinstance(dyn, dict):
-                return dyn
+                return _customer_plans(dyn)
         except Exception:
             pass
-        return _DEFAULT_PLANS
+        return _customer_plans(_DEFAULT_PLANS)
 
     def get(self, key, default=None):
         return self._data().get(key, default)
