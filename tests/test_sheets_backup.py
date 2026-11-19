@@ -27,6 +27,8 @@ FAKE_SA = json.dumps({
 
 @pytest.fixture
 def configured_env(monkeypatch):
+    monkeypatch.delenv("GOOGLE_SHEETS_BACKUP_SCRIPT_URL", raising=False)
+    monkeypatch.delenv("GOOGLE_SHEETS_BACKUP_SCRIPT_SECRET", raising=False)
     monkeypatch.setenv("GOOGLE_SHEETS_BACKUP_ID", "sheet-123")
     monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", FAKE_SA)
 
@@ -35,6 +37,15 @@ def configured_env(monkeypatch):
 def unconfigured_env(monkeypatch):
     monkeypatch.delenv("GOOGLE_SHEETS_BACKUP_ID", raising=False)
     monkeypatch.delenv("GOOGLE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GOOGLE_SHEETS_BACKUP_SCRIPT_URL", raising=False)
+    monkeypatch.delenv("GOOGLE_SHEETS_BACKUP_SCRIPT_SECRET", raising=False)
+
+
+@pytest.fixture
+def script_env(monkeypatch, unconfigured_env):
+    monkeypatch.setenv("GOOGLE_SHEETS_BACKUP_SCRIPT_URL",
+                       "https://script.example/macros/s/AKfyc/exec")
+    monkeypatch.setenv("GOOGLE_SHEETS_BACKUP_SCRIPT_SECRET", "s3cret")
 
 
 class FakeClient:
@@ -181,11 +192,59 @@ def test_daily_backup_throttle(configured_env, monkeypatch):
     assert set(fake.writes) == set(sheets_backup.ALL_TABS)
 
 
+class _FakeHttpResp:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+def test_script_transport_run_backup(isolated_state, script_env, monkeypatch):
+    """With the Apps Script env set, one POST delivers every tab."""
+    _seed(monkeypatch)
+    posted = {}
+
+    def fake_post(url, json=None, timeout=None):
+        posted["url"] = url
+        posted["json"] = json
+        return _FakeHttpResp({"ok": True})
+
+    monkeypatch.setattr(sheets_backup.requests, "post", fake_post)
+
+    assert sheets_backup.backup_status()["transport"] == "apps_script"
+    result = sheets_backup.run_backup()
+    assert result["ok"] is True
+    assert posted["url"].endswith("/exec")
+    assert posted["json"]["secret"] == "s3cret"
+    titles = [t["title"] for t in posted["json"]["tabs"]]
+    # Data tabs are built first; Backup Info is written last (it reports
+    # the other tabs' row counts).
+    assert titles == sheets_backup.ALL_TABS[1:] + sheets_backup.ALL_TABS[:1]
+    users_tab = next(t for t in posted["json"]["tabs"] if t["title"] == "Users")
+    assert users_tab["rows"][1][0] in (str(ADMIN_ID), USER_ID)
+
+
+def test_script_transport_error_surfaces(script_env, monkeypatch):
+    _seed(monkeypatch)
+    monkeypatch.setattr(
+        sheets_backup.requests, "post",
+        lambda url, json=None, timeout=None: _FakeHttpResp(
+            {"ok": False, "error": "bad_secret"}))
+    result = sheets_backup.run_backup()
+    assert result["ok"] is False
+    assert "bad_secret" in result["reason"]
+
+
 def test_backup_status_endpoint(client, make_telegram_init_data, unconfigured_env):
     headers = {"X-Telegram-Init-Data": make_telegram_init_data(user_id=ADMIN_ID)}
     resp = client.get("/api/admin/backup/status", headers=headers)
     assert resp.status_code == 200
     assert resp.json["configured"] is False
+    assert resp.json["transport"] is None
     assert resp.json["last"] is None
 
 
@@ -217,4 +276,4 @@ def test_backup_command_admin_only(mock_bot, unconfigured_env):
         SimpleNamespace(chat=SimpleNamespace(id=ADMIN_ID)))
     assert len(mock_bot.calls["send_message"]) == 1
     text = mock_bot.calls["send_message"][0][1]
-    assert "GOOGLE_SHEETS_BACKUP_ID" in text
+    assert "GOOGLE_SHEETS_BACKUP_SCRIPT_URL" in text

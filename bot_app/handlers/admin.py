@@ -487,8 +487,8 @@ def handle_backup(message):
             chat_id,
             "📦 <b>Backup မလုပ်နိုင်သေးပါ</b>\n"
             "Vercel → Settings → Environment Variables မှာ\n"
-            "• <code>GOOGLE_SHEETS_BACKUP_ID</code>\n"
-            "• <code>GOOGLE_SERVICE_ACCOUNT_JSON</code>\n"
+            "• <code>GOOGLE_SHEETS_BACKUP_SCRIPT_URL</code>\n"
+            "• <code>GOOGLE_SHEETS_BACKUP_SCRIPT_SECRET</code>\n"
             "အရင် ထည့်ပေးပါ။",
             parse_mode="HTML")
         return
