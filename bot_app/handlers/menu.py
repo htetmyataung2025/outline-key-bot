@@ -44,6 +44,22 @@ from bot_app.services.states import (
 from bot_app.utils import bytes_to_gb, is_user_subscribed
 
 
+@bot.message_handler(content_types=["photo"])
+def handle_admin_support_photo(message):
+    # 💬 Support Chat — an admin answering a forwarded support message
+    # with a photo (Reply gesture) sends the photo into the app thread.
+    chat_id = message.chat.id
+    if str(chat_id) not in {str(a) for a in ADMIN_CHAT_IDS}:
+        return
+    if not getattr(message, "reply_to_message", None) or not message.photo:
+        return
+    from bot_app.services.support_chat import admin_reply_photo
+    file_id = message.photo[-1].file_id
+    caption = (message.caption or "").strip()
+    if admin_reply_photo(chat_id, message.reply_to_message.message_id, file_id, caption):
+        bot.reply_to(message, "✅ App Support Chat ထဲ ပို့ပြီးပါပြီ။")
+
+
 @bot.message_handler(func=lambda message: message.content_type == "text", content_types=["text"])
 def handle_all_messages(message):
     if not message.text:

@@ -37,7 +37,7 @@ import threading
 import time
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 from bot_app.config import PLANS, TELEGRAM_TOKEN
 from bot_app.helpers.rate_limit import client_ip_from_headers
@@ -1175,6 +1175,57 @@ def app_support_send():
     name = _support_display_name(chat_id) or f"User {chat_id}"
     msg = customer_say(chat_id, name, text)
     return jsonify({"success": True, "message": msg})
+
+
+@app_bp.route("/support/send-photo", methods=["POST"])
+def app_support_send_photo():
+    if _rate_limited(_client_bucket("support_send_photo"), 10):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    caption = str(data.get("caption") or "").strip()
+    if len(caption) > 1000:
+        return jsonify({"error": "message_too_long"}), 400
+    try:
+        image = base64.b64decode(str(data.get("image_b64") or ""), validate=True)
+    except Exception:
+        return jsonify({"error": "bad_image"}), 400
+    if not image or len(image) > 3_500_000:
+        return jsonify({"error": "bad_image"}), 400
+    from bot_app.services.support_chat import customer_say_photo
+    name = _support_display_name(chat_id) or f"User {chat_id}"
+    msg = customer_say_photo(chat_id, name, image, caption)
+    if msg is None:
+        return jsonify({"error": "photo_delivery_failed"}), 502
+    return jsonify({"success": True, "message": msg})
+
+
+def _support_photo_response(file_id):
+    from bot_app.services.support_chat import fetch_photo_bytes
+    data = fetch_photo_bytes(file_id or "")
+    if not data:
+        return jsonify({"error": "not_found"}), 404
+    return Response(
+        data,
+        mimetype="image/jpeg",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+@app_bp.route("/support/photo", methods=["GET"])
+def app_support_photo():
+    if not _bearer_chat_id():
+        return jsonify({"error": "unauthorized"}), 401
+    return _support_photo_response(request.args.get("file_id"))
+
+
+@app_bp.route("/support/agent/photo", methods=["GET"])
+def app_support_agent_photo():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    return _support_photo_response(request.args.get("file_id"))
 
 
 def _agent_authorized() -> bool:

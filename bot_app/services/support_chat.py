@@ -77,8 +77,13 @@ def _touch_index(chat_id, name=None, escalated=None) -> None:
     redis_set(_INDEX_KEY, idx)
 
 
-def append_message(chat_id, sender: str, text: str) -> dict:
+def append_message(chat_id, sender: str, text: str, mtype: str = None,
+                   file_id: str = None) -> dict:
     msg = {"from": sender, "text": text, "ts": _now()}
+    if mtype:
+        msg["type"] = mtype
+    if file_id:
+        msg["file_id"] = file_id
     msgs = load_thread(chat_id)
     msgs.append(msg)
     _save_thread(chat_id, msgs)
@@ -152,6 +157,71 @@ def customer_say(chat_id, name: str, text: str) -> dict:
     return msg
 
 
+def customer_say_photo(chat_id, name: str, image_bytes: bytes,
+                       caption: str = "") -> dict | None:
+    """Customer sends a photo (e.g. an error screenshot) from the app.
+
+    Telegram hosts the image: the photo is forwarded to every admin and
+    the Telegram file_id of the first successful send is stored in the
+    thread, so the app and the agent can fetch the bytes back through
+    the photo proxy endpoints. Returns the thread message, or None when
+    the photo reached no admin (nothing is stored then, so the app can
+    ask the customer to retry).
+    """
+    import io
+
+    chat_id = str(chat_id)
+    header = (
+        "💬 <b>Support Chat</b>\n"
+        f"👤 {html.escape(name or '')} (<code>{chat_id}</code>)\n\n"
+        "📷 <i>ပုံ ပို့ထားပါတယ်</i>"
+    )
+    if caption:
+        header += f"\n{html.escape(caption)}"
+    fwd = redis_get(_FWD_KEY)
+    if not isinstance(fwd, dict):
+        fwd = {}
+    file_id = None
+    for aid in ADMIN_CHAT_IDS:
+        try:
+            bio = io.BytesIO(image_bytes)
+            bio.name = "support-photo.jpg"
+            res = bot.send_photo(aid, bio, caption=header, parse_mode="HTML",
+                                 reply_markup=_presence_markup())
+            photos = getattr(res, "photo", None) or []
+            if photos and file_id is None:
+                file_id = getattr(photos[-1], "file_id", None)
+            mid = getattr(res, "message_id", None)
+            if mid:
+                fwd[f"{aid}:{mid}"] = str(chat_id)
+        except Exception:
+            pass
+    if len(fwd) > _MAX_FWD:
+        fwd = dict(list(fwd.items())[-_MAX_FWD:])
+    redis_set(_FWD_KEY, fwd)
+    if not file_id:
+        return None
+    msg = append_message(chat_id, "user", caption or "", mtype="photo",
+                         file_id=file_id)
+    _touch_index(chat_id, name=name)
+    return msg
+
+
+def fetch_photo_bytes(file_id: str) -> bytes | None:
+    """Download a support photo back from Telegram (best effort)."""
+    if not file_id:
+        return None
+    try:
+        info = bot.get_file(file_id)
+        path = getattr(info, "file_path", None)
+        if not path:
+            return None
+        data = bot.download_file(path)
+        return bytes(data) if isinstance(data, (bytes, bytearray)) else None
+    except Exception:
+        return None
+
+
 # --- admin -> customer --------------------------------------------------------
 
 def admin_reply(admin_chat_id, reply_to_message_id, text: str) -> bool:
@@ -172,6 +242,22 @@ def admin_reply(admin_chat_id, reply_to_message_id, text: str) -> bool:
     # back-and-forth would eat its 30-item cap and push out real
     # announcements (owner decision, 2026-11-20). The app detects new
     # support replies straight from the thread for its notification.
+    return True
+
+
+def admin_reply_photo(admin_chat_id, reply_to_message_id, file_id: str,
+                      caption: str = "") -> bool:
+    """Route an admin's Telegram photo Reply back into the thread."""
+    fwd = redis_get(_FWD_KEY)
+    if not isinstance(fwd, dict):
+        return False
+    customer = fwd.get(f"{admin_chat_id}:{reply_to_message_id}")
+    if not customer:
+        return False
+    append_message(customer, "admin", caption or "", mtype="photo",
+                   file_id=file_id)
+    # An admin actively answering counts as being present.
+    set_owner_present(True)
     return True
 
 

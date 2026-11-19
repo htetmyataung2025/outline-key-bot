@@ -26,6 +26,23 @@ class BotStub:
         self.sent.append((chat_id, text, kwargs))
         return SimpleNamespace(message_id=self._next_id)
 
+    def send_photo(self, chat_id, photo, caption=None, **kwargs):
+        self._next_id += 1
+        if hasattr(photo, "read"):
+            photo.read()
+        self.sent.append((chat_id, caption or "", kwargs))
+        return SimpleNamespace(
+            message_id=self._next_id,
+            photo=[SimpleNamespace(file_id="file-small"),
+                   SimpleNamespace(file_id="file-big")],
+        )
+
+    def get_file(self, file_id):
+        return SimpleNamespace(file_path=f"photos/{file_id}.jpg")
+
+    def download_file(self, file_path):
+        return b"\xff\xd8fake-jpeg-bytes"
+
 
 @pytest.fixture()
 def store(monkeypatch):
@@ -169,3 +186,62 @@ def test_agent_endpoints_need_secret(client, store, monkeypatch):
     resp = client.post("/api/app/support/agent/reply", headers=good,
                        json={"chat_id": CUSTOMER, "text": "ထပ်ဖြေမယ်"})
     assert resp.status_code == 409
+
+
+# --- photos ------------------------------------------------------------------
+
+def test_customer_say_photo_forwards_and_stores_file_id(store):
+    msg = sc.customer_say_photo(CUSTOMER, "Aung", b"\xff\xd8img", "error ပြနေတယ်")
+    assert msg is not None
+    assert msg["type"] == "photo"
+    assert msg["file_id"] == "file-big"
+    assert msg["text"] == "error ပြနေတယ်"
+    thread = sc.load_thread(CUSTOMER)
+    assert len(thread) == 1 and thread[0]["type"] == "photo"
+    # The photo reached both admins; the forward map routes replies back.
+    assert set(store.data[sc._FWD_KEY].values()) == {str(CUSTOMER)}
+
+
+def test_admin_reply_photo_routes_back(store):
+    sc.customer_say(CUSTOMER, "Aung", "help")
+    fwd_key = next(k for k in store.data[sc._FWD_KEY] if k.startswith(f"{ADMIN}:"))
+    msg_id = int(fwd_key.split(":")[1])
+    assert sc.admin_reply_photo(ADMIN, msg_id, "file-admin", "ဒီလိုလုပ်") is True
+    thread = sc.load_thread(CUSTOMER)
+    assert thread[-1]["from"] == "admin"
+    assert thread[-1]["type"] == "photo"
+    assert thread[-1]["file_id"] == "file-admin"
+    assert sc.owner_present() is True
+    assert sc.admin_reply_photo(ADMIN, 424242, "file-x") is False
+
+
+def test_support_photo_endpoints(client, store, monkeypatch):
+    import base64 as b64
+
+    monkeypatch.setenv("SUPPORT_AGENT_SECRET", "test-secret")
+    token = ra._make_app_token(CUSTOMER)
+    payload = b64.b64encode(b"\xff\xd8img").decode()
+    resp = client.post("/api/app/support/send-photo",
+                       headers={"Authorization": f"Bearer {token}"},
+                       json={"image_b64": payload, "caption": "error"})
+    assert resp.status_code == 200
+    msg = resp.get_json()["message"]
+    assert msg["type"] == "photo" and msg["file_id"] == "file-big"
+
+    resp = client.get("/api/app/support/photo",
+                      headers={"Authorization": f"Bearer {token}"},
+                      query_string={"file_id": "file-big"})
+    assert resp.status_code == 200
+    assert resp.data == b"\xff\xd8fake-jpeg-bytes"
+
+    assert client.get("/api/app/support/photo",
+                      query_string={"file_id": "file-big"}).status_code == 401
+    resp = client.get("/api/app/support/agent/photo",
+                      headers={"X-Support-Agent-Secret": "test-secret"},
+                      query_string={"file_id": "file-big"})
+    assert resp.status_code == 200
+
+    bad = client.post("/api/app/support/send-photo",
+                      headers={"Authorization": f"Bearer {token}"},
+                      json={"image_b64": "!!!not-base64!!!"})
+    assert bad.status_code == 400
