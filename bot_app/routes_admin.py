@@ -714,6 +714,27 @@ def delete_expired_keys_endpoint():
 
 
 # ---------------------------------------------------------------------------
+# 3b. Google Sheets backup
+# ---------------------------------------------------------------------------
+@admin_bp.route("/backup/status", methods=["GET"])
+def sheets_backup_status_endpoint():
+    from bot_app.services.sheets_backup import backup_status
+
+    return jsonify(backup_status()), 200
+
+
+@admin_bp.route("/backup/sheets", methods=["POST"])
+def run_sheets_backup_endpoint():
+    """Run the Google Sheets records backup now (it also runs daily from
+    the Vercel cron). Returns the service summary as-is: ``ok`` is False
+    with reason ``not_configured`` until the owner sets the env vars."""
+    from bot_app.services.sheets_backup import run_backup
+
+    result = run_backup()
+    return jsonify({"success": bool(result.get("ok")), **result}), 200
+
+
+# ---------------------------------------------------------------------------
 # 4. Redeem Code Management
 # ---------------------------------------------------------------------------
 @admin_bp.route("/redeems", methods=["GET"])

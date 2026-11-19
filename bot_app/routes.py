@@ -311,7 +311,16 @@ def entry(path=""):
         if guard.get("fixed"):
             _notify_webhook_restore(guard)
         result = run_expiry_cron()
-        return jsonify({"status": "cron completed", "webhook_guard": guard, **result}), 200
+        # Daily Google Sheets backup of all bot records (no-op until the
+        # owner configures the env vars; throttled to once per ~day).
+        try:
+            from bot_app.services.sheets_backup import maybe_run_daily_backup
+
+            backup_result = maybe_run_daily_backup()
+        except Exception:
+            backup_result = {"ok": False, "reason": "error"}
+        return jsonify({"status": "cron completed", "webhook_guard": guard,
+                        "sheets_backup": backup_result, **result}), 200
 
     if _is_reminder_request():
         result = run_cooldown_reminders()

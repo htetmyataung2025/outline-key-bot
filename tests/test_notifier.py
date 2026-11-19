@@ -69,6 +69,8 @@ def test_cron_with_no_keys(client, mock_bot, monkeypatch):
         "status": "cron completed",
         "webhook_guard": {"checked": False, "url": "", "previous": "",
                           "fixed": False, "error": None},
+        # Sheets backup is part of the daily cron; unconfigured in tests.
+        "sheets_backup": {"ok": False, "reason": "not_configured"},
         "notified": 0,
         "deleted": 0,
     }

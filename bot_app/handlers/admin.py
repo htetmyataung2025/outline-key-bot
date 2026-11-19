@@ -466,3 +466,42 @@ def handle_keyprobe(message):
             live_name = html.escape(str(rec.get("live_name", "")))[:40]
             lines.append(f"✅ {label} → Server မှာ ရှိနေသေးတယ် (တွေ့ရှိနည်း: {html.escape(str(rec['via']))} · Live name: «{live_name}»)")
     bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
+
+
+@bot.message_handler(commands=["backup"])
+def handle_backup(message):
+    """Admin-only: copy all bot records into the Google Sheets backup now.
+
+    The same backup also runs automatically once a day from the Vercel
+    cron. Until the owner sets GOOGLE_SHEETS_BACKUP_ID and
+    GOOGLE_SERVICE_ACCOUNT_JSON in the Vercel env, this replies with the
+    setup reminder instead of failing silently.
+    """
+    chat_id = message.chat.id
+    if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    from bot_app.services.sheets_backup import is_configured, run_backup
+
+    if not is_configured():
+        bot.send_message(
+            chat_id,
+            "📦 <b>Backup မလုပ်နိုင်သေးပါ</b>\n"
+            "Vercel → Settings → Environment Variables မှာ\n"
+            "• <code>GOOGLE_SHEETS_BACKUP_ID</code>\n"
+            "• <code>GOOGLE_SERVICE_ACCOUNT_JSON</code>\n"
+            "အရင် ထည့်ပေးပါ။",
+            parse_mode="HTML")
+        return
+
+    bot.send_message(chat_id, "📦 Google Sheets backup စလုပ်နေပါပြီ…")
+    result = run_backup()
+    if not result.get("ok"):
+        bot.send_message(
+            chat_id,
+            f"❌ Backup မအောင်မြင်ပါ ({html.escape(str(result.get('reason', 'error')))})")
+        return
+    counts = result.get("counts", {})
+    lines = ["✅ <b>Backup ပြီးပါပြီ</b> (Google Sheets)", ""]
+    for tab, n in counts.items():
+        lines.append(f"• {html.escape(str(tab))}: {n} rows")
+    bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
