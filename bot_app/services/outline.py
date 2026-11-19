@@ -241,6 +241,88 @@ def get_usage_by_server(server_ids=None, force=False):
     return result
 
 
+# Live access-key IDs per server, fetched from /access-keys and cached
+# briefly like the usage map. Needed to tell "key still exists on the
+# server" apart from "key was deleted on the server" — the metrics endpoint
+# cannot distinguish a deleted key from one that simply has no traffic yet.
+LIVE_KEYS_CACHE_TTL = 60.0
+_live_keys_cache = {}  # {server_id(str): {"ts": monotonic, "data": set(key_id str)}}
+_live_keys_cache_lock = threading.Lock()
+
+
+def fetch_access_keys(api_url, timeout=4):
+    """Return one server's live ``accessKeys`` list, or ``None`` on any failure.
+
+    ``None`` (unreachable server, non-200, malformed body) is deliberately
+    different from an empty list: callers must fail open on ``None`` and only
+    treat a key as deleted when the server actually answered successfully.
+    """
+    if not api_url or _is_local_sandbox():
+        return None
+    try:
+        resp = requests.get(f"{api_url}/access-keys", verify=False, timeout=timeout)
+        if resp.status_code == 200:
+            keys = resp.json().get("accessKeys", [])
+            if isinstance(keys, list):
+                return keys
+    except Exception:
+        pass
+    return None
+
+
+def get_live_key_ids_by_server(server_ids=None, force=False):
+    """Return ``{server_id: {key_id, ...}}`` of keys that exist on each server.
+
+    Only servers whose ``/access-keys`` fetch succeeded appear in the result;
+    a missing server id means "unknown — fail open", never "all keys gone".
+    Results are cached for ``LIVE_KEYS_CACHE_TTL`` seconds per server;
+    failed probes are not cached, so a recovered server is retried next time.
+    """
+    if _is_local_sandbox():
+        result = {}
+        for k_data in load_persistent_keys().values():
+            sid = str(k_data.get("server", "1"))
+            kid = str(k_data.get("key_id", ""))
+            if kid:
+                result.setdefault(sid, set()).add(kid)
+        return result
+
+    configured = get_configured_servers()
+    if server_ids is not None:
+        wanted = {str(s) for s in server_ids}
+        configured = [srv for srv in configured if str(srv.get("id")) in wanted]
+
+    now = time.monotonic()
+    result = {}
+    to_fetch = []
+    with _live_keys_cache_lock:
+        for srv in configured:
+            sid = str(srv.get("id"))
+            cached = _live_keys_cache.get(sid)
+            if not force and cached and now - cached["ts"] < LIVE_KEYS_CACHE_TTL:
+                result[sid] = cached["data"]
+            else:
+                to_fetch.append(srv)
+
+    if to_fetch:
+        def fetch(srv):
+            return str(srv.get("id")), fetch_access_keys(srv.get("api_url", ""))
+
+        with ThreadPoolExecutor(max_workers=min(8, max(1, len(to_fetch)))) as executor:
+            fetched = list(executor.map(fetch, to_fetch))
+        stamp = time.monotonic()
+        with _live_keys_cache_lock:
+            for sid, keys in fetched:
+                if keys is None:
+                    continue  # unreachable — stay fail-open, do not cache
+                ids = {str(k.get("id")) for k in keys
+                       if isinstance(k, dict) and k.get("id") is not None}
+                _live_keys_cache[sid] = {"ts": stamp, "data": ids}
+                result[sid] = ids
+
+    return result
+
+
 def get_servers_total_usage():
     def get_server_stats(api_url):
         total_keys = 0

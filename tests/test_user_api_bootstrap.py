@@ -430,3 +430,95 @@ def test_user_api_leaderboard_returns_up_to_fifty_rows_and_total_players(client,
 
 
 
+
+
+def test_user_api_bootstrap_admin_wallet_unlimited(client, make_telegram_init_data, isolated_state):
+    """Admins get wallet.unlimited=True (Mini App shows "Unlimited" like the
+    Telegram bot chat's ♾️ wallet view); regular users get False."""
+    admin_data = make_telegram_init_data(user_id=111000111, username="boss_admin")
+    resp = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": admin_data}
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["wallet"]["unlimited"] is True
+
+    user_data = make_telegram_init_data(user_id=888111222, username="plain_user")
+    resp = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": user_data}
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["wallet"]["unlimited"] is False
+
+
+def _seed_two_registry_keys(user_id):
+    from bot_app.services.registry import save_persistent_key
+    save_persistent_key(
+        server_num="1",
+        key_id="101",
+        name="Live Key 25.12.2026",
+        access_url="ss://bGl2ZWtleQ@127.0.0.1:1080",
+        limit_bytes=50 * 1000**3,
+        order_id="k_101",
+        chat_id=user_id,
+    )
+    save_persistent_key(
+        server_num="1",
+        key_id="102",
+        name="Dead Key 25.12.2026",
+        access_url="ss://ZGVhZGtleQ@127.0.0.1:1081",
+        limit_bytes=50 * 1000**3,
+        order_id="k_102",
+        chat_id=user_id,
+    )
+
+
+def test_user_api_bootstrap_hides_server_deleted_keys(client, make_telegram_init_data, isolated_state, monkeypatch):
+    """A key deleted directly on the Outline server must vanish from My Keys
+    even though its purchase/registry record still exists."""
+    user_id = 555444333
+    init_data = make_telegram_init_data(user_id=user_id, username="deleted_key_user")
+    _seed_two_registry_keys(user_id)
+
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_usage_by_server",
+        lambda servers, force=False: {}
+    )
+    # Only key 101 still exists on Server 1; 102 was deleted server-side.
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_live_key_ids_by_server",
+        lambda servers, force=False: {"1": {"101"}}
+    )
+
+    resp = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp.status_code == 200
+    keys = resp.get_json()["keys"]
+    assert len(keys) == 1
+    assert keys[0]["key"] == "ss://bGl2ZWtleQ@127.0.0.1:1080"
+
+
+def test_user_api_bootstrap_keeps_keys_when_server_unreachable(client, make_telegram_init_data, isolated_state, monkeypatch):
+    """Fail-open: when the server cannot be probed, keys are shown as before."""
+    user_id = 555444334
+    init_data = make_telegram_init_data(user_id=user_id, username="failopen_user")
+    _seed_two_registry_keys(user_id)
+
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_usage_by_server",
+        lambda servers, force=False: {}
+    )
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_live_key_ids_by_server",
+        lambda servers, force=False: {}
+    )
+
+    resp = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp.status_code == 200
+    assert len(resp.get_json()["keys"]) == 2

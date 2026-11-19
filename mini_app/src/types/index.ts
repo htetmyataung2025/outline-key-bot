@@ -91,6 +91,7 @@ export interface BootstrapData {
   }
   wallet: {
     balance: number
+    unlimited?: boolean
     main_balance: number
     bonus_balance: number
     points: number

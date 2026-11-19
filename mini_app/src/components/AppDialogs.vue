@@ -374,7 +374,7 @@ onScopeDispose(() => cancelAnimationFrame(awardFrame))
         </div>
         <SvgIcon name="diamond" />
       </div>
-      <p>Wallet Balance: <b>{{ formatNumber(state.walletBalance) }} Ks</b> · Points: <b>{{ state.points }} PTS</b></p>
+      <p>Wallet Balance: <b>{{ state.walletUnlimited ? 'Unlimited' : formatNumber(state.walletBalance) + ' Ks' }}</b> · Points: <b>{{ state.points }} PTS</b></p>
       <button class="soft-btn modal-full-btn" @click="closeDialog">ပိတ်ရန်</button>
     </template>
 

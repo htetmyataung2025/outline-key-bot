@@ -110,6 +110,7 @@ export function createMiniApp() {
     customAmount: '',
     paymentMethod: 'kbz' as PaymentMethod,
     walletBalance: cachedBootstrap?.wallet?.balance ?? 0,
+    walletUnlimited: Boolean(cachedBootstrap?.wallet?.unlimited),
     points: cachedBootstrap?.wallet?.points ?? 0,
     claimedToday: Boolean(cachedBootstrap?.wallet?.claimed_today),
     streakDays: cachedBootstrap?.wallet?.streak_days ?? (cachedBootstrap?.wallet?.claimed_today ? 1 : 0),
@@ -247,6 +248,7 @@ export function createMiniApp() {
       }
       if (data.wallet) {
         state.walletBalance = data.wallet.balance ?? 0
+        state.walletUnlimited = Boolean(data.wallet.unlimited)
         state.points = data.wallet.points ?? 0
         state.claimedToday = Boolean(data.wallet.claimed_today)
         state.streakDays = data.wallet.streak_days ?? (state.claimedToday ? 1 : 0)
@@ -352,6 +354,7 @@ export function createMiniApp() {
       wallet: {
         ...(prev.wallet || {}),
         balance: state.walletBalance,
+        unlimited: state.walletUnlimited,
         points: state.points,
         claimed_today: state.claimedToday,
         streak_days: state.streakDays,

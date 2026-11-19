@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, request, g, Response, stream_with_context
 from werkzeug.utils import secure_filename
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot_app.config import ADMIN_CHAT_IDS, MY_PAYMENT_PHONES, PLANS, points_enabled, points_settings
+from bot_app.config import ADMIN_CHAT_IDS, MY_PAYMENT_PHONES, PLANS, is_admin, points_enabled, points_settings
 from bot_app.extensions import bot
 from bot_app.helpers.auth import authenticate_user, current_user_id
 from bot_app.helpers.sse import consume_ticket, issue_ticket
@@ -33,6 +33,7 @@ from bot_app.services.outline import (
     _parse_expiry_from_name,
     create_outline_key,
     get_configured_servers,
+    get_live_key_ids_by_server,
     get_server_display_name,
     get_usage_by_server,
     renew_or_create_unlimited_key,
@@ -95,6 +96,29 @@ def _resolve_server_meta(server_id: str) -> tuple[str, str, str, str]:
     return display_name, "Singapore", "SG", "🇸🇬"
 
 
+def _resolve_key_ref(rec: dict, url_to_key: dict = None) -> tuple:
+    """Resolve a purchase record to its Outline ``(server_id, key_id)``.
+
+    Same lookup order ``_format_user_key`` uses for usage: the record's own
+    key_id wins, then the persistent-registry URL map, then the deeplink
+    helper. Returns ``(server, "")`` when the key cannot be identified —
+    callers must treat an empty key_id as "unknown", never as "deleted".
+    """
+    target_sid = str(rec.get("server", "1"))
+    target_kid = str(rec.get("key_id") or "")
+    vpn_key = rec.get("vpn_key", "")
+    if vpn_key:
+        k_clean = clean_ss_url(vpn_key)
+        if (not target_kid or target_kid == "N/A") and url_to_key and k_clean in url_to_key:
+            target_sid, target_kid = url_to_key[k_clean]
+        if not target_kid or target_kid == "N/A":
+            from bot_app.helpers.deeplink import find_key_ref_by_url
+            ref = find_key_ref_by_url(vpn_key)
+            if ref:
+                target_sid, target_kid = ref
+    return str(target_sid), str(target_kid)
+
+
 def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_to_key: dict = None) -> dict:
     vpn_key = rec.get("vpn_key", "")
     server_num = str(rec.get("server", "1"))
@@ -144,17 +168,8 @@ def _format_user_key(rec: dict, idx: int = 1, usage_by_server: dict = None, url_
     server_label = server_num if server_num.lower().startswith("server ") else f"Server {server_num}"
 
     used_gb = 0.0
-    target_sid = server_num
-    target_kid = str(rec.get("key_id") or "")
+    target_sid, target_kid = _resolve_key_ref(rec, url_to_key)
     if vpn_key:
-        k_clean = clean_ss_url(vpn_key)
-        if (not target_kid or target_kid == "N/A") and url_to_key and k_clean in url_to_key:
-            target_sid, target_kid = url_to_key[k_clean]
-        if not target_kid or target_kid == "N/A":
-            from bot_app.helpers.deeplink import find_key_ref_by_url
-            ref = find_key_ref_by_url(vpn_key)
-            if ref:
-                target_sid, target_kid = ref
         if usage_by_server and target_kid and target_kid != "N/A" and target_sid in usage_by_server:
             b_val = usage_by_server[target_sid].get(target_kid, 0)
             if b_val:
@@ -252,11 +267,33 @@ def get_bootstrap():
         except Exception:
             usage_data = {}
 
-    formatted_keys = [
-        _format_user_key(rec, idx=i, usage_by_server=usage_data, url_to_key=url_to_key)
-        for i, rec in enumerate(reversed(records), 1)
-        if rec.get("vpn_key") and rec.get("vpn_key") != "N/A"
-    ]
+    # Live key existence per server: a key deleted directly on an Outline
+    # server (e.g. via Outline Manager) must disappear from My Keys even
+    # though its purchase record remains. Fail-open — a server missing from
+    # live_key_ids was unreachable, so its keys are kept exactly as before.
+    live_key_ids = {}
+    if servers_needed:
+        try:
+            if request.args.get("refresh") == "1":
+                live_key_ids = get_live_key_ids_by_server(servers_needed, force=True)
+            else:
+                live_key_ids = get_live_key_ids_by_server(servers_needed)
+        except TypeError:
+            live_key_ids = get_live_key_ids_by_server(servers_needed)
+        except Exception:
+            live_key_ids = {}
+
+    formatted_keys = []
+    for i, rec in enumerate(reversed(records), 1):
+        if not rec.get("vpn_key") or rec.get("vpn_key") == "N/A":
+            continue
+        if live_key_ids:
+            _sid, _kid = _resolve_key_ref(rec, url_to_key)
+            if _kid and _kid != "N/A" and _sid in live_key_ids and _kid not in live_key_ids[_sid]:
+                continue  # deleted on the server — hide from My Keys
+        formatted_keys.append(
+            _format_user_key(rec, idx=i, usage_by_server=usage_data, url_to_key=url_to_key)
+        )
 
     # Available Plans
     formatted_plans = []
@@ -342,6 +379,7 @@ def get_bootstrap():
         },
         "wallet": {
             "balance": total_bal,
+            "unlimited": bool(is_admin(uid)),
             "main_balance": main_bal,
             "bonus_balance": bonus_bal,
             "points": points_val,
