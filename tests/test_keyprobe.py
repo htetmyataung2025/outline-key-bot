@@ -108,3 +108,33 @@ def test_keyprobe_handler_silent_for_non_admin(isolated_state, mock_bot, monkeyp
     admin_handlers.handle_keyprobe(message)
 
     assert mock_bot.calls["send_message"] == []
+
+
+def test_diagnose_flags_recycled_port(isolated_state, monkeypatch):
+    """A record whose port is now held by a differently-named live key is
+    graded dropped, with the port conflict surfaced for the report."""
+    user_id = 999333445
+    save_user_purchase_record(
+        chat_id=user_id, order_id="#ORD-RECYC", plan_name="Basic Plan",
+        disp_gb="50 GB", months_count=1, price_str="2,000 Ks",
+        server_num="1", expire_date="19.12.2026",
+        vpn_key="ss://cmVj@10.9.9.9:8388#Htet (999333445) 19.12.2026",
+    )
+    monkeypatch.setattr(
+        routes_user, "probe_live_servers",
+        lambda: {"1": {"ok": True, "count": 1, "error": None}},
+    )
+    monkeypatch.setattr(
+        routes_user, "get_live_keys_by_server",
+        lambda *a, **k: {"1": [{"id": "90", "accessUrl": "ss://eA@10.9.9.9:8388",
+                                "name": "Other User (111) 01.01.2027"}]},
+    )
+
+    report = routes_user.diagnose_user_keys(user_id)
+
+    assert len(report["records"]) == 1
+    rec = report["records"][0]
+    assert rec["plan"] == "Basic Plan"
+    assert rec["dropped"] is True
+    assert rec["port_conflict"] is True
+    assert rec["live_name"] == "Other User (111) 01.01.2027"

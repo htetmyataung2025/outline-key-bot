@@ -160,50 +160,88 @@ def _ss_host_port(url: str):
 
 
 def _liveness_context(live_keys: dict):
-    """Precompute identity sets from a ``{server_id: [accessKey]}`` map.
+    """Index live keys by every identity a purchase record can match.
 
-    Returns ``(ids_by_server, url_bases, host_ports)`` — every identity a
-    purchase record can be matched against the live server state with.
+    Returns a dict of maps to the live key objects themselves:
+    ``by_id`` (per server), ``by_url`` (cleaned access-URL base) and
+    ``by_port`` ((host, port) — globally unique per live key).
     """
-    ids_by_server = {}
-    url_bases = set()
-    host_ports = set()
+    by_id = {}
+    by_url = {}
+    by_port = {}
     for sid_live, srv_keys in (live_keys or {}).items():
-        ids = set()
+        ids = {}
         for item in srv_keys or []:
             if not isinstance(item, dict):
                 continue
             if item.get("id") is not None:
-                ids.add(str(item.get("id")))
+                ids[str(item.get("id"))] = item
             url = item.get("accessUrl", "")
             if url:
-                url_bases.add(clean_ss_url(url))
+                by_url[clean_ss_url(url)] = item
                 hp = _ss_host_port(url)
                 if hp:
-                    host_ports.add(hp)
-        ids_by_server[sid_live] = ids
-    return ids_by_server, url_bases, host_ports
+                    by_port[hp] = item
+        by_id[sid_live] = ids
+    return {"by_id": by_id, "by_url": by_url, "by_port": by_port}
+
+
+def _record_key_name(rec: dict) -> str:
+    """The Outline key name embedded in a record's delivered ss:// link."""
+    vpn_key = rec.get("vpn_key", "") or ""
+    if "#" in vpn_key:
+        return unquote(vpn_key.split("#", 1)[1]).strip()
+    return ""
+
+
+def _key_name_base(name: str) -> str:
+    """Key name without its trailing expiry date.
+
+    Key names look like ``"User (12345) (2) 19.12.2026"``; a renewal only
+    rewrites the date, so the base identifies the key across renewals —
+    while a different key that recycled the same port has a different base.
+    """
+    return re.sub(r"\s*\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})\s*$", "", (name or "").strip()).strip()
 
 
 def _record_liveness(rec: dict, url_to_key: dict, ctx) -> tuple:
-    """Grade one purchase record against the live identity sets.
+    """Grade one purchase record against the live keys.
 
-    Returns ``(server_id, key_id, via)`` where ``via`` is how the record's
-    key was found among the live keys — ``"id"``, ``"url"``, ``"port"`` —
-    or ``"none"``. ``"none"`` only proves deletion when the record's own
-    server was actually probed (its id appears in the live map).
+    Returns ``(server_id, key_id, via, live_key, conflict_key)``. ``via``
+    is how the record's key was found — ``"id"``, ``"url"``, ``"port"``,
+    ``"name"`` — or ``"none"``. A bare (host, port) match is NOT enough:
+    Outline reuses freed ports, so a deleted key's port can belong to a
+    different live key; the port match must be backed by the key name
+    (when both names are known). ``conflict_key`` is that other live key
+    when the port is held by a differently-named key. ``"none"`` only
+    proves deletion when the record's own server was actually probed.
     """
-    ids_by_server, url_bases, host_ports = ctx
+    by_id = ctx["by_id"]
     sid, kid = _resolve_key_ref(rec, url_to_key)
-    if kid and kid != "N/A" and kid in ids_by_server.get(sid, set()):
-        return sid, kid, "id"
+    server_keys = by_id.get(sid, {})
+
+    if kid and kid != "N/A" and kid in server_keys:
+        return sid, kid, "id", server_keys[kid], None
     rec_url = clean_ss_url(rec.get("vpn_key", ""))
-    if rec_url and rec_url in url_bases:
-        return sid, kid, "url"
+    if rec_url and rec_url in ctx["by_url"]:
+        return sid, kid, "url", ctx["by_url"][rec_url], None
+
+    rec_name = _record_key_name(rec)
+    rec_base = _key_name_base(rec_name)
+    conflict = None
     rec_hp = _ss_host_port(rec.get("vpn_key", ""))
-    if rec_hp is not None and rec_hp in host_ports:
-        return sid, kid, "port"
-    return sid, kid, "none"
+    if rec_hp is not None and rec_hp in ctx["by_port"]:
+        holder = ctx["by_port"][rec_hp]
+        holder_base = _key_name_base(holder.get("name", ""))
+        if not rec_base or not holder_base or holder_base == rec_base:
+            return sid, kid, "port", holder, None
+        conflict = holder  # port recycled by a different key
+
+    if rec_base:
+        for item in server_keys.values():
+            if _key_name_base(item.get("name", "")) == rec_base:
+                return sid, kid, "name", item, conflict
+    return sid, kid, "none", None, conflict
 
 
 def diagnose_user_keys(uid) -> dict:
@@ -230,14 +268,18 @@ def diagnose_user_keys(uid) -> dict:
     for rec in records:
         if not rec.get("vpn_key") or rec.get("vpn_key") == "N/A":
             continue
-        sid, kid, via = _record_liveness(rec, url_to_key, ctx)
+        sid, kid, via, live_key, conflict = _record_liveness(rec, url_to_key, ctx)
         fetched = sid in live_keys
         graded.append({
             "order_id": rec.get("order_id", ""),
-            "plan": rec.get("plan", ""),
+            "plan": rec.get("plan_name") or rec.get("plan", ""),
             "server": sid,
             "key_id": kid,
+            "key_name": _record_key_name(rec),
             "via": via,
+            "live_id": str(live_key.get("id")) if live_key else "",
+            "live_name": (live_key or conflict or {}).get("name", ""),
+            "port_conflict": bool(conflict),
             "server_fetched": fetched,
             "dropped": bool(fetched and via == "none"),
         })
@@ -400,11 +442,13 @@ def get_bootstrap():
     # Live key existence per server: a key deleted directly on an Outline
     # server (e.g. via Outline Manager) must disappear from My Keys even
     # though its purchase record remains. A record is dropped ONLY when its
-    # own server answered the /access-keys probe AND none of the key's
-    # identities match a live key: not its key id, not its access-URL base,
-    # not its (host, port). The port identity matters because stored record
-    # URLs can drift from the server's canonical accessUrl (re-encoding,
-    # fragments), while an Outline port belongs to exactly one key.
+    # own server answered the /access-keys probe AND no identity matches a
+    # live key: not its key id, not its access-URL base, not its key name,
+    # not its (host, port) — and a bare port match does not count, because
+    # Outline recycles freed ports; the port must be backed by the key
+    # name (see _record_liveness). URL/name identities matter because
+    # stored record URLs can drift from the server's canonical accessUrl
+    # (re-encoding, fragments).
     # Fail-open everywhere else: unreachable server, unidentifiable record.
     live_keys = {}
     if servers_needed:
@@ -425,7 +469,8 @@ def get_bootstrap():
         if not rec.get("vpn_key") or rec.get("vpn_key") == "N/A":
             continue
         if live_keys:
-            _sid, _kid, _via = _record_liveness(rec, url_to_key, liveness_ctx)
+            _sid, _kid, _via, _live, _conflict = _record_liveness(
+                rec, url_to_key, liveness_ctx)
             if _sid in live_keys and _via == "none":
                 continue  # deleted on the server — hide from My Keys
         formatted_keys.append(

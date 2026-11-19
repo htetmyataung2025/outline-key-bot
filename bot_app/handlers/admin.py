@@ -455,10 +455,14 @@ def handle_keyprobe(message):
     for rec in report["records"]:
         label = (f"{html.escape(str(rec['plan']))} · {html.escape(str(rec['order_id']))}"
                  f" · S{html.escape(str(rec['server']))}")
-        if rec["dropped"]:
+        if rec["dropped"] and rec.get("port_conflict"):
+            holder = html.escape(str(rec.get("live_name", "")))[:40]
+            lines.append(f"🗑 {label} → Server မှာ မရှိတော့ပါ — အဲ့ Port ကို တခြား key «{holder}» သုံးနေပြီ (Mini App မှာ ဖျောက်ပေးမယ်)")
+        elif rec["dropped"]:
             lines.append(f"🗑 {label} → Server မှာ မရှိတော့ပါ (Mini App မှာ ဖျောက်ပေးမယ်)")
         elif not rec["server_fetched"]:
             lines.append(f"❔ {label} → Server ကို ဆက်သွယ်မရလို့ မဖျောက်ဘဲ ထားထားတယ်")
         else:
-            lines.append(f"✅ {label} → Server မှာ ရှိနေသေးတယ် (တွေ့ရှိနည်း: {html.escape(str(rec['via']))})")
+            live_name = html.escape(str(rec.get("live_name", "")))[:40]
+            lines.append(f"✅ {label} → Server မှာ ရှိနေသေးတယ် (တွေ့ရှိနည်း: {html.escape(str(rec['via']))} · Live name: «{live_name}»)")
     bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML")

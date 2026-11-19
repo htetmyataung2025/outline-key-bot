@@ -578,3 +578,62 @@ def test_user_api_bootstrap_hides_deleted_key_without_registry_entry(client, mak
     keys = resp.get_json()["keys"]
     assert len(keys) == 1
     assert keys[0]["id"] == "#ORD-LIVE1"
+
+
+def test_user_api_bootstrap_recycled_port_does_not_save_deleted_key(client, make_telegram_init_data, isolated_state, monkeypatch):
+    """Outline recycles freed ports: a deleted key whose port now belongs to
+    a DIFFERENT key must still be hidden (the port match needs the key name
+    behind it), while a key whose name matches a live key stays visible even
+    when its stored port/URL no longer match (e.g. after re-issue)."""
+    user_id = 555444336
+    init_data = make_telegram_init_data(user_id=user_id, username="recycled_port_user")
+
+    # Deleted key: port 8888 is live again, but under another user's key.
+    save_user_purchase_record(
+        chat_id=user_id,
+        order_id="#ORD-RECYCLED",
+        plan_name="Basic Plan",
+        disp_gb="50 GB",
+        months_count=1,
+        price_str="2,000 Ks",
+        server_num="1",
+        expire_date="19.12.2026",
+        vpn_key="ss://cmVjeWNsZWQ@203.0.113.5:8888#Htet (555444336) 19.12.2026",
+    )
+    # Live key: stored port/URL drifted, but its name (sans date) is live.
+    save_user_purchase_record(
+        chat_id=user_id,
+        order_id="#ORD-NAME1",
+        plan_name="Basic Plan",
+        disp_gb="50 GB",
+        months_count=1,
+        price_str="2,000 Ks",
+        server_num="1",
+        expire_date="20.12.2026",
+        vpn_key="ss://bmFtZWQ@203.0.113.5:7777#Htet (555444336) (2) 20.12.2026",
+    )
+
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_usage_by_server",
+        lambda servers, force=False: {}
+    )
+    monkeypatch.setattr(
+        "bot_app.routes_user.get_live_keys_by_server",
+        lambda servers, force=False: {
+            "1": [
+                {"id": "55", "accessUrl": "ss://b2s@203.0.113.5:8888",
+                 "name": "Other User (111) 01.01.2027"},
+                {"id": "56", "accessUrl": "ss://eA@203.0.113.5:6666",
+                 "name": "Htet (555444336) (2) 25.12.2026"},
+            ]
+        }
+    )
+
+    resp = client.get(
+        "/api/user/bootstrap",
+        headers={"X-Telegram-Init-Data": init_data}
+    )
+    assert resp.status_code == 200
+    keys = resp.get_json()["keys"]
+    assert len(keys) == 1
+    assert keys[0]["id"] == "#ORD-NAME1"
