@@ -372,3 +372,20 @@ def handle_ask_send_key_callback(call):
     bot.send_message(call.message.chat.id, prompt_txt, parse_mode="HTML", reply_markup=get_back_inline_keyboard())
 
 
+# ▶️ Broadcast Continue Handler
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "broadcast_continue")
+def handle_broadcast_continue(call):
+    chat_id = call.message.chat.id
+    if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        bot.answer_callback_query(call.id, "⛔ Admin သီးသန့်ပါ။")
+        return
+    from bot_app.services.broadcast import advance_broadcast, send_progress
+
+    job = advance_broadcast(bot)
+    if not job or job.get("status") == "done":
+        bot.answer_callback_query(call.id, "✅ Broadcast ပို့ပြီးပါပြီ!")
+        return
+    bot.answer_callback_query(call.id, "▶️ ဆက်ပို့နေပါတယ်…")
+    send_progress(bot, job, chat_id=chat_id)
