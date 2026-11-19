@@ -154,30 +154,21 @@ def handle_photo_messages(message):
         send_force_join_message(chat_id)
         return
 
-    # Admin Broadcast Photo
+    # Admin Broadcast Photo — resumable chunked job (services/broadcast),
+    # same engine as the text broadcast; caption also lands in the app.
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
-        all_users = load_all_users()
-        success_count = 0
+        from bot_app.services.broadcast import advance_broadcast, send_progress, start_broadcast
         photo_id = message.photo[-1].file_id
         caption_text = message.caption or ""
-
-        bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
-        for uid in all_users:
-            if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
-            try:
-                bot.send_photo(uid, photo_id, caption=caption_text, parse_mode="HTML")
-                success_count += 1
-            except:
-                pass
-        bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nရောက်ရှိသူ: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
-        record_audit_log(
-            message.from_user.id,
-            "BROADCAST",
-            "broadcast",
-            str(len(all_users)),
-            {"message_type": "photo", "sent": success_count, "recipients": len(all_users)},
-        )
+        job, created = start_broadcast(chat_id, "photo", caption_text, photo_id=photo_id)
+        if not created:
+            bot.send_message(chat_id, "⚠️ Broadcast တစ်ခု ပို့နေဆဲ ရှိပါတယ် — အရင်တစ်ခု ပြီးအောင် စောင့်ပေးပါ။")
+            send_progress(bot, job, chat_id=chat_id)
+            return
+        bot.send_message(chat_id, f"⏳ ပုံပါသော Broadcast စာအား User စုစုပေါင်း ({len(job['recipients'])}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
+        job = advance_broadcast(bot, job=job)
+        send_progress(bot, job, chat_id=chat_id)
         return
 
     # Top-Up Slip Handler
