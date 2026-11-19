@@ -321,7 +321,7 @@ def entry(path=""):
         try:
             from bot_app.services.broadcast import advance_broadcast
 
-            advance_broadcast(bot)
+            advance_broadcast(bot, budget_s=30.0, cap=100)
         except Exception:
             pass
         return jsonify({"status": "reminder completed", **result}), 200
