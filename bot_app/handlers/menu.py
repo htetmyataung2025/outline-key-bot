@@ -216,27 +216,20 @@ def handle_all_messages(message):
                 bot.reply_to(message, f"❌ Customer ထံ ပို့မရပါ - {str(e)}")
             return
 
-    # 📢 Admin Broadcast Text
+    # 📢 Admin Broadcast Text — resumable chunked job (services/broadcast):
+    # the old single-request loop died at Vercel's 60s wall once the user
+    # list grew; the job now advances in chunks and also lands in the app.
     if str(chat_id) in [str(aid) for aid in ADMIN_CHAT_IDS] and get_broadcast_state(chat_id):
         set_broadcast_state(chat_id, False)
-        all_users = load_all_users()
-        success_count = 0
-        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(all_users)}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
-        for uid in all_users:
-            if str(uid) in [str(aid) for aid in ADMIN_CHAT_IDS]: continue
-            try:
-                bot.send_message(uid, input_value, parse_mode="HTML")
-                success_count += 1
-            except:
-                pass
-        bot.send_message(chat_id, f"✅ <b>Broadcast ပို့ပြီးပါပြီ!</b>\n\nရောက်ရှိသူ: <b>{success_count} / {len(all_users)}</b>", parse_mode="HTML")
-        record_audit_log(
-            message.from_user.id,
-            "BROADCAST",
-            "broadcast",
-            str(len(all_users)),
-            {"message_type": "text", "sent": success_count, "recipients": len(all_users)},
-        )
+        from bot_app.services.broadcast import advance_broadcast, send_progress, start_broadcast
+        job, created = start_broadcast(chat_id, "text", input_value)
+        if not created:
+            bot.send_message(chat_id, "⚠️ Broadcast တစ်ခု ပို့နေဆဲ ရှိပါတယ် — အရင်တစ်ခု ပြီးအောင် စောင့်ပေးပါ။")
+            send_progress(bot, job, chat_id=chat_id)
+            return
+        bot.send_message(chat_id, f"⏳ Broadcast စာအား User စုစုပေါင်း ({len(job['recipients'])}) ဆီ အကုန် ပို့ပေးနေပါသည်...")
+        job = advance_broadcast(bot, job=job)
+        send_progress(bot, job, chat_id=chat_id)
         return
 
     # 🛍️ Plan များဝယ်ရန်
