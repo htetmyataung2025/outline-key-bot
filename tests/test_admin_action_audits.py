@@ -138,9 +138,9 @@ def test_text_broadcast_audits_admin(mock_bot, isolated_state, monkeypatch):
     from bot_app.handlers.menu import handle_all_messages
 
     # save_user_id/load_all_users need KV (disabled in tests) — stub the
-    # recipient list the handler reads.
+    # recipient list the broadcast service reads.
     users = [str(CUSTOMER_ID), "555555555"]
-    monkeypatch.setattr("bot_app.handlers.menu.load_all_users", lambda: users)
+    monkeypatch.setattr("bot_app.services.broadcast.load_all_users", lambda: users)
     set_broadcast_state(ADMIN_ID, True)
 
     handle_all_messages(_admin_message("📢 hello everyone"))
