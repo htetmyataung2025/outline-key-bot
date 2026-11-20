@@ -468,6 +468,35 @@ def handle_keyprobe(message):
     bot.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
 
 
+@bot.message_handler(commands=["notitest"])
+def handle_notitest(message):
+    """Admin-only: push a test notification into the caller's OWN app
+    inbox, so the owner can verify the whole notification path
+    (backend inbox -> app fetch -> phone popup) end to end.
+    """
+    chat_id = message.chat.id
+    if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    try:
+        from bot_app.services.app_notify import push_app_notification
+        push_app_notification(
+            chat_id,
+            "test",
+            "🔔 စမ်းသပ် Notification",
+            "ဒီစာကို မြင်ရရင် App Notification အလုပ်လုပ်ပါတယ် ✓ "
+            "ဖုန်း မျက်နှာပြင် အပေါ်မှာ popup တက်လာရင် အားလုံး အဆင်ပြေပါပြီ။",
+        )
+    except Exception as exc:
+        bot.send_message(
+            chat_id,
+            f"🔔 Noti စမ်းသပ်မှု မအောင်မြင်ပါ ({html.escape(type(exc).__name__)})")
+        return
+    bot.send_message(
+        chat_id,
+        "🔔 စမ်းသပ် Notification ပို့လိုက်ပြီ — App ထဲက 🔔 ကို ဖွင့်ကြည့်ပါ။ "
+        "ဖုန်း popup ကတော့ App နောက်ခံ စစ်ဆေးချိန် (အများဆုံး ~၁၀ မိနစ်) အတွင်း တက်လာပါမယ်။")
+
+
 @bot.message_handler(commands=["backup"])
 def handle_backup(message):
     """Admin-only: copy all bot records into the Google Sheets backup now.
