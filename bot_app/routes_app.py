@@ -1349,7 +1349,7 @@ def app_support_agent_promo_key():
 # he reviews slips himself and the agent stays out (the review
 # endpoint refuses with 409); while he is away the agent may approve
 # a pending slip through the same review_slip choke point the
-# Telegram button and the dashboard use, recorded as "Claude Agent".
+# Telegram button and the dashboard use, recorded as "H&E Agent".
 
 @app_bp.route("/agent/slips/pending", methods=["GET"])
 def app_agent_slips_pending():
@@ -1384,7 +1384,7 @@ def app_agent_slips_review():
     if not slip_id or action not in ("APPROVE", "REJECT"):
         return jsonify({"error": "slip_id and a valid action are required"}), 400
     from bot_app.services.slips import review_slip
-    res = review_slip(slip_id, action, reviewed_by="Claude Agent",
+    res = review_slip(slip_id, action, reviewed_by="H&E Agent",
                       reason=reason)
     if not res.get("success"):
         return jsonify(res), res.get("code", 400)

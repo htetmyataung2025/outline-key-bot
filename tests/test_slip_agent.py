@@ -4,7 +4,7 @@ The agent mirrors the Support Chat presence model: it may list
 pending slips and fetch slip photos with the agent secret, but the
 review endpoint refuses while the owner is present. Reviews go
 through the same ``review_slip`` choke point as the Telegram button,
-recorded as reviewed_by="Claude Agent".
+recorded as reviewed_by="H&E Agent".
 """
 
 import pytest
@@ -74,7 +74,7 @@ def test_review_approve_credits_wallet(client, isolated_state, mock_bot,
     assert resp.get_json()["success"] is True
     slip = get_slip_by_id("S1")
     assert slip["status"] == "APPROVED"
-    assert slip["reviewed_by"] == "Claude Agent"
+    assert slip["reviewed_by"] == "H&E Agent"
     assert get_user_balance(UID) == before + 5000
     # A second review of the same slip is refused by the choke point.
     resp = client.post(REVIEW, headers=SECRET,

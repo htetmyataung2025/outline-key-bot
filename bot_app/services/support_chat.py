@@ -305,7 +305,7 @@ def agent_reply(chat_id, text: str) -> tuple:
     msg = append_message(chat_id, "Muse", text)
     # No inbox push here either — see admin_reply (30-item inbox cap).
     note = (
-        "🤖 <b>Claude Support ဖြေပြီး</b>\n"
+        "🤖 <b>H&E Agent ဖြေပြီး</b>\n"
         f"👤 Customer: <code>{chat_id}</code>\n\n"
         f"{html.escape(text)}"
     )

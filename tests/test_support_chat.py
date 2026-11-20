@@ -120,7 +120,7 @@ def test_agent_reply_blocked_while_owner_present(store):
     # Agent answers also stay out of the app inbox (30-item cap).
     assert store.pushes == []
     # Admins receive an oversight copy of every agent answer.
-    assert any("Claude Support ဖြေပြီး" in text for _, text, _ in store.bot.sent)
+    assert any("H&E Agent ဖြေပြီး" in text for _, text, _ in store.bot.sent)
 
 
 def test_pending_threads_and_escalation(store):
