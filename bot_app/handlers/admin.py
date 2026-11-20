@@ -478,7 +478,10 @@ def handle_notitest(message):
     if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
         return
     try:
-        from bot_app.services.app_notify import push_app_notification
+        from bot_app.services.app_notify import (
+            list_app_notifications,
+            push_app_notification,
+        )
         push_app_notification(
             chat_id,
             "test",
@@ -486,6 +489,7 @@ def handle_notitest(message):
             "ဒီစာကို မြင်ရရင် App Notification အလုပ်လုပ်ပါတယ် ✓ "
             "ဖုန်း မျက်နှာပြင် အပေါ်မှာ popup တက်လာရင် အားလုံး အဆင်ပြေပါပြီ။",
         )
+        items, unread = list_app_notifications(chat_id)
     except Exception as exc:
         bot.send_message(
             chat_id,
@@ -493,7 +497,9 @@ def handle_notitest(message):
         return
     bot.send_message(
         chat_id,
-        "🔔 စမ်းသပ် Notification ပို့လိုက်ပြီ — App ထဲက 🔔 ကို ဖွင့်ကြည့်ပါ။ "
+        f"🔔 စမ်းသပ် Notification ပို့လိုက်ပြီ — Server ဘက်မှာ App inbox ထဲ "
+        f"အခု {len(items)} ခု (မဖတ်ရသေး {unread} ခု) ရှိနေပါပြီ။ "
+        "App ထဲက 🔔 ကို ဖွင့်ကြည့်ပါ။ "
         "ဖုန်း popup ကတော့ App နောက်ခံ စစ်ဆေးချိန် (အများဆုံး ~၁၀ မိနစ်) အတွင်း တက်လာပါမယ်။")
 
 
