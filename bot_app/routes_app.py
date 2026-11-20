@@ -1309,3 +1309,36 @@ def app_support_agent_escalate():
     from bot_app.services.support_chat import escalate
     escalate(chat_id, summary)
     return jsonify({"success": True})
+
+
+@app_bp.route("/support/agent/promo-key", methods=["POST"])
+def app_support_agent_promo_key():
+    """Bot Update #18: issue the Facebook promo key (agent-only).
+
+    Body: {"chat_id", "code", "name"?}. The code must match the live
+    promo code; the service enforces one claim per account and the
+    total cap, creates a 10 GB / 5-day key on Server 2 named after
+    the customer, and returns the ss:// key for the agent to paste
+    into the Support Chat thread.
+    """
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    chat_id = str(data.get("chat_id") or "").strip()
+    code = str(data.get("code") or "").strip()
+    name = str(data.get("name") or "").strip()
+    if not chat_id:
+        return jsonify({"error": "chat_id is required"}), 400
+    from bot_app.services.promo import PROMO_CODE, claim_promo_key
+    if code.upper() != PROMO_CODE:
+        return jsonify({"ok": False, "error": "bad_code"}), 400
+    res = claim_promo_key(chat_id, fallback_name=name)
+    if res.get("ok"):
+        return jsonify(res)
+    status = {
+        "already_claimed": 409,
+        "cap_reached": 409,
+        "busy": 409,
+        "key_creation_failed": 502,
+    }.get(res.get("error"), 400)
+    return jsonify(res), status
