@@ -5,8 +5,11 @@ code in the in-app Support Chat gets one free trial key from the
 support agent: 10 GB / 5 days on Server 2, named after the customer.
 ``create_outline_key`` ends the key name with the expiry date, so the
 nightly expiry cron deletes the key automatically when the 5 days
-are up, and ``save_persistent_key`` inside it lands the key in the
-customer's My Keys like any purchased key.
+are up. The app's My Keys list is device-local storage, so delivery
+is three-way: the agent pastes the key in Support Chat, a Telegram
+DM carries a tap-to-copy copy, and the purchase record puts it in
+the app's History (a tap there adds it to My Keys). Re-sending the
+code re-delivers the same key and repairs a missing History record.
 
 One claim per Telegram account and a hard cap on total claims, both
 recorded in KV under ``promo_claims:<code-lower>`` as
@@ -17,10 +20,18 @@ import random
 import string
 import time
 
+from bot_app.config import is_admin
+from bot_app.extensions import bot
+from bot_app.helpers.deeplink import get_key_delivery_markup
 from bot_app.services.app_notify import push_app_notification
-from bot_app.services.orders import save_key_mapping, save_user_purchase_record
+from bot_app.services.orders import (
+    load_all_user_history,
+    save_key_mapping,
+    save_user_purchase_record,
+)
 from bot_app.services.outline import create_outline_key
 from bot_app.services.profiles import get_user_profile
+from bot_app.services.registry import load_persistent_keys
 from bot_app.storage.kv import redis_delete, redis_get, redis_set, redis_set_nx
 
 PROMO_CODE = "HEFREEFORYOU"
@@ -37,6 +48,74 @@ _LOCK_TTL_S = 20
 def _load_claims() -> dict:
     data = redis_get(_CLAIMS_KEY)
     return data if isinstance(data, dict) else {}
+
+
+def _dm_key(chat_id: str, vpn_key: str, expire_date: str) -> None:
+    """Send the key to the customer's Telegram (tap-to-copy <code>).
+
+    Support Chat text cannot be selected/copied in the app, and the
+    app's My Keys list is device-local storage — so the Telegram DM is
+    the reliable delivery copy, mirroring the points-redeem flow. The
+    key also sits in the app's History (purchase record), where a tap
+    adds it to My Keys. Best-effort: a blocked bot must not fail a
+    claim that already succeeded.
+    """
+    try:
+        bot.send_message(
+            chat_id,
+            "🎉 <b>Facebook Promo Key ရရှိပါပြီ!</b>\n\n"
+            f"🔑 <b>Key:</b>\n<code>{vpn_key}</code>\n\n"
+            f"📦 <b>Data:</b> {PROMO_GB} GB\n"
+            f"⏰ <b>သက်တမ်း:</b> {PROMO_DAYS} ရက် (Expire {expire_date})\n"
+            f"📡 <b>Server:</b> Server {PROMO_SERVER} (Singapore)\n\n"
+            "Key ကို နှိပ်ပြီး copy ကူးနိုင်ပါတယ်။ H&E VPN App ထဲမှာလည်း "
+            "Profile → မှတ်တမ်း ထဲက 'Free Promo' ကို နှိပ်ရင် My Keys ထဲ "
+            "ထည့်ပြီး တန်း ချိတ်သုံးနိုင်ပါတယ်။",
+            parse_mode="HTML",
+            reply_markup=get_key_delivery_markup(vpn_key),
+        )
+    except Exception as e:
+        print("Promo DM Error:", e)
+
+
+def _repair_claim(chat_id: str, claim: dict) -> str:
+    """Re-deliver an existing claim: make sure the purchase record the
+    app's History reads actually exists (the first claim writes it
+    best-effort) and return the key from the registry, or "" if the
+    key can no longer be found."""
+    key_name = (claim or {}).get("key_name") or ""
+    entry = None
+    try:
+        for k_data in load_persistent_keys().values():
+            if k_data.get("name") == key_name:
+                entry = k_data
+                break
+    except Exception as e:
+        print("Promo repair registry Error:", e)
+    if not entry:
+        return ""
+    vpn_key = (entry.get("access_url") or "").strip()
+    if not vpn_key:
+        return ""
+    order_id = claim.get("order_id") or entry.get("order_id") or "N/A"
+    try:
+        history = load_all_user_history().get(str(chat_id), [])
+        if not any(r.get("order_id") == order_id for r in history):
+            save_user_purchase_record(
+                chat_id=chat_id,
+                order_id=order_id,
+                plan_name="Free Promo (Facebook)",
+                disp_gb=f"{PROMO_GB} GB",
+                months_count=1,
+                price_str="0 Ks (Promo)",
+                server_num=str(entry.get("server") or PROMO_SERVER),
+                expire_date=entry.get("expire_date")
+                or claim.get("expire_date", ""),
+                vpn_key=vpn_key,
+            )
+    except Exception as e:
+        print("Promo repair record Error:", e)
+    return vpn_key
 
 
 def promo_status() -> dict:
@@ -64,15 +143,30 @@ def claim_promo_key(chat_id, fallback_name: str = "") -> dict:
     if lock is False:
         return {"ok": False, "error": "busy"}
     try:
+        # Admins (the owner) are exempt from the one-per-person rule and
+        # the cap, and their claims are not recorded against the cap —
+        # the owner needs unlimited test claims to check error cases.
+        try:
+            admin = bool(is_admin(chat_id))
+        except Exception:
+            admin = False
         claims = _load_claims()
-        prior = claims.get(chat_id)
+        prior = claims.get(chat_id) if not admin else None
         if prior:
+            # Re-deliver: repair the History record if the first claim's
+            # best-effort write missed, DM the key again, and hand the
+            # key back so the agent can re-send it in the chat too.
+            vpn_key = _repair_claim(chat_id, prior)
+            if vpn_key:
+                _dm_key(chat_id, vpn_key,
+                        prior.get("expire_date", ""))
             return {
                 "ok": False,
                 "error": "already_claimed",
                 "expire_date": prior.get("expire_date", ""),
+                "vpn_key": vpn_key,
             }
-        if len(claims) >= PROMO_CAP:
+        if not admin and len(claims) >= PROMO_CAP:
             return {"ok": False, "error": "cap_reached"}
 
         try:
@@ -101,12 +195,14 @@ def claim_promo_key(chat_id, fallback_name: str = "") -> dict:
         if not vpn_key:
             return {"ok": False, "error": "key_creation_failed"}
 
-        claims[chat_id] = {
-            "ts": int(time.time()),
-            "key_name": key_name,
-            "expire_date": expire_date,
-        }
-        redis_set(_CLAIMS_KEY, claims)
+        if not admin:
+            claims[chat_id] = {
+                "ts": int(time.time()),
+                "key_name": key_name,
+                "expire_date": expire_date,
+                "order_id": order_id,
+            }
+            redis_set(_CLAIMS_KEY, claims)
 
         try:
             save_user_purchase_record(
@@ -121,8 +217,8 @@ def claim_promo_key(chat_id, fallback_name: str = "") -> dict:
                 vpn_key=vpn_key,
             )
             save_key_mapping(user_name.strip().lower(), chat_id)
-        except Exception:
-            pass
+        except Exception as e:
+            print("Promo record Error:", e)
         try:
             push_app_notification(
                 chat_id,
@@ -133,6 +229,7 @@ def claim_promo_key(chat_id, fallback_name: str = "") -> dict:
             )
         except Exception:
             pass
+        _dm_key(chat_id, vpn_key, expire_date)
 
         return {
             "ok": True,

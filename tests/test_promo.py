@@ -13,6 +13,14 @@ SECRET = {"X-Support-Agent-Secret": "test-secret"}
 URL = "/api/app/support/agent/promo-key"
 
 
+class BotStub:
+    def __init__(self):
+        self.sent = []  # (chat_id, text, kwargs)
+
+    def send_message(self, chat_id, text, **kwargs):
+        self.sent.append((chat_id, text, kwargs))
+
+
 @pytest.fixture()
 def store(monkeypatch):
     data = {}
@@ -34,6 +42,11 @@ def store(monkeypatch):
     monkeypatch.setattr(promo, "save_key_mapping", lambda *a, **k: None)
     monkeypatch.setattr(promo, "get_user_profile",
                         lambda cid: {"full_name": "Aung Khant"})
+    monkeypatch.setattr(promo, "bot", BotStub())
+    monkeypatch.setattr(promo, "get_key_delivery_markup", lambda k: None)
+    monkeypatch.setattr(promo, "load_persistent_keys", lambda: {})
+    monkeypatch.setattr(promo, "load_all_user_history", lambda: {})
+    monkeypatch.setattr(promo, "is_admin", lambda cid: False)
     return data
 
 
@@ -123,3 +136,71 @@ def test_promo_failed_creation_can_retry(client, store, created, monkeypatch):
     assert resp.get_json()["error"] == "key_creation_failed"
     # The failed attempt must not burn the customer's one claim.
     assert promo._load_claims() == {}
+
+
+def test_promo_claim_sends_telegram_dm(client, store, created, monkeypatch):
+    monkeypatch.setenv("SUPPORT_AGENT_SECRET", "test-secret")
+    resp = client.post(URL, headers=SECRET,
+                       json={"chat_id": CUSTOMER, "code": promo.PROMO_CODE})
+    assert resp.status_code == 200
+    # Support Chat text cannot be copied in the app, so the key is also
+    # delivered by Telegram DM in a tap-to-copy <code> block.
+    assert len(promo.bot.sent) == 1
+    chat_id, text, _kwargs = promo.bot.sent[0]
+    assert str(chat_id) == str(CUSTOMER)
+    assert "ss://fake-key#k" in text
+
+
+def test_promo_admin_unlimited_claims(client, store, created, monkeypatch):
+    # The owner (admin) can claim repeatedly for testing, and admin
+    # claims never consume the 50-customer cap.
+    monkeypatch.setenv("SUPPORT_AGENT_SECRET", "test-secret")
+    monkeypatch.setattr(promo, "is_admin", lambda cid: True)
+    for _ in range(2):
+        resp = client.post(URL, headers=SECRET,
+                           json={"chat_id": CUSTOMER,
+                                 "code": promo.PROMO_CODE})
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+    assert len(created) == 2
+    assert promo._load_claims() == {}
+
+
+def test_promo_reclaim_redelivers_and_repairs(client, store, created,
+                                              monkeypatch):
+    monkeypatch.setenv("SUPPORT_AGENT_SECRET", "test-secret")
+    store[promo._CLAIMS_KEY] = {
+        str(CUSTOMER): {
+            "ts": 1,
+            "key_name": "Aung Khant [GW] 25.11.2026",
+            "expire_date": "25.11.2026",
+            "order_id": "PROMO-ABC123",
+        }
+    }
+    monkeypatch.setattr(promo, "load_persistent_keys", lambda: {
+        "2_99": {
+            "name": "Aung Khant [GW] 25.11.2026",
+            "access_url": "ss://reg-key#x",
+            "server": "2",
+            "order_id": "PROMO-ABC123",
+            "expire_date": "25.11.2026",
+        }
+    })
+    written = []
+    monkeypatch.setattr(promo, "save_user_purchase_record",
+                        lambda **k: written.append(k))
+    # History has no record for the claim -> the repair must write one.
+    monkeypatch.setattr(promo, "load_all_user_history", lambda: {})
+
+    resp = client.post(URL, headers=SECRET,
+                       json={"chat_id": CUSTOMER, "code": promo.PROMO_CODE})
+    assert resp.status_code == 409
+    body = resp.get_json()
+    assert body["error"] == "already_claimed"
+    assert body["vpn_key"] == "ss://reg-key#x"
+    assert created == []  # never creates a second key
+    assert len(written) == 1
+    assert written[0]["order_id"] == "PROMO-ABC123"
+    assert written[0]["vpn_key"] == "ss://reg-key#x"
+    assert len(promo.bot.sent) == 1  # key DM'd again
+    assert "ss://reg-key#x" in promo.bot.sent[0][1]
