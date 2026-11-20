@@ -103,6 +103,39 @@ def get_slip_by_id(slip_id: str) -> dict | None:
     return slips.get(str(slip_id))
 
 
+def pending_slips_for_agent() -> list:
+    """PENDING slips enriched for the auto-review agent (Bot Update #19).
+
+    ``tx_duplicate`` is computed across ALL recorded slips (any status):
+    a transaction reference that appears on more than one slip means a
+    re-used slip — the most common top-up fraud — even when the first
+    copy was rejected. Oldest first, so the agent works the queue in
+    arrival order.
+    """
+    slips = load_all_slips()
+    tx_counts: dict = {}
+    for s in slips.values():
+        tx = (s.get("extracted_tx_id") or "").strip()
+        if tx:
+            tx_counts[tx] = tx_counts.get(tx, 0) + 1
+    out = []
+    for s in reversed(get_slips_list("PENDING")):
+        tx = (s.get("extracted_tx_id") or "").strip()
+        out.append({
+            "id": s.get("id"),
+            "chat_id": s.get("chat_id"),
+            "username": s.get("username"),
+            "amount": s.get("amount"),
+            "method": s.get("method"),
+            "file_id": s.get("file_id"),
+            "image_url": s.get("image_url"),
+            "extracted_tx_id": tx,
+            "tx_duplicate": bool(tx) and tx_counts.get(tx, 0) > 1,
+            "created_at": s.get("created_at"),
+        })
+    return out
+
+
 def load_audit_logs() -> list:
     logs = redis_get("admin_audit_logs")
     if logs is not None and isinstance(logs, list):

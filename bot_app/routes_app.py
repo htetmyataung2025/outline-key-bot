@@ -1342,3 +1342,50 @@ def app_support_agent_promo_key():
         "key_creation_failed": 502,
     }.get(res.get("error"), 400)
     return jsonify(res), status
+
+
+# --- slip auto-review agent (Bot Update #19) --------------------------------
+# Mirrors the Support Chat presence model: while the owner is present
+# he reviews slips himself and the agent stays out (the review
+# endpoint refuses with 409); while he is away the agent may approve
+# a pending slip through the same review_slip choke point the
+# Telegram button and the dashboard use, recorded as "Claude Agent".
+
+@app_bp.route("/agent/slips/pending", methods=["GET"])
+def app_agent_slips_pending():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    from bot_app.services.slips import pending_slips_for_agent
+    from bot_app.services.support_chat import owner_present
+    return jsonify({
+        "owner_present": owner_present(),
+        "slips": pending_slips_for_agent(),
+    })
+
+
+@app_bp.route("/agent/slips/photo", methods=["GET"])
+def app_agent_slips_photo():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    return _support_photo_response(request.args.get("file_id"))
+
+
+@app_bp.route("/agent/slips/review", methods=["POST"])
+def app_agent_slips_review():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    from bot_app.services.support_chat import owner_present
+    if owner_present():
+        return jsonify({"error": "owner_present"}), 409
+    data = request.get_json(silent=True) or {}
+    slip_id = str(data.get("slip_id") or "").strip()
+    action = str(data.get("action") or "").strip().upper()
+    reason = str(data.get("reason") or "").strip()
+    if not slip_id or action not in ("APPROVE", "REJECT"):
+        return jsonify({"error": "slip_id and a valid action are required"}), 400
+    from bot_app.services.slips import review_slip
+    res = review_slip(slip_id, action, reviewed_by="Claude Agent",
+                      reason=reason)
+    if not res.get("success"):
+        return jsonify(res), res.get("code", 400)
+    return jsonify(res)
