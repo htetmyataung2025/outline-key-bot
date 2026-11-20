@@ -1177,6 +1177,18 @@ def app_support_send():
     return jsonify({"success": True, "message": msg})
 
 
+@app_bp.route("/support/clear", methods=["POST"])
+def app_support_clear():
+    if _rate_limited(_client_bucket("support_clear"), 10):
+        return _rate_limit_response()
+    chat_id = _bearer_chat_id()
+    if not chat_id:
+        return jsonify({"error": "unauthorized"}), 401
+    from bot_app.services.support_chat import clear_thread
+    clear_thread(chat_id)
+    return jsonify({"success": True})
+
+
 @app_bp.route("/support/send-photo", methods=["POST"])
 def app_support_send_photo():
     if _rate_limited(_client_bucket("support_send_photo"), 10):

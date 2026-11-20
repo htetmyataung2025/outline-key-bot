@@ -31,7 +31,7 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
-from bot_app.storage.kv import redis_get, redis_set
+from bot_app.storage.kv import redis_delete, redis_get, redis_set
 
 _MAX_MSGS = 100
 _MAX_FWD = 300
@@ -92,6 +92,35 @@ def append_message(chat_id, sender: str, text: str, mtype: str = None,
     else:
         _touch_index(chat_id)
     return msg
+
+
+def clear_thread(chat_id) -> None:
+    """Delete a customer's whole support thread (Bot Update #14).
+
+    The app calls this when the customer leaves the Support Chat: the
+    owner wants the history wiped on exit so every visit starts fresh.
+    Removes the thread, its index entry and any admin forward-map
+    entries pointing at it. Best-effort like everything in this module.
+    """
+    try:
+        redis_delete(_thread_key(chat_id))
+    except Exception:
+        pass
+    try:
+        idx = _load_index()
+        if str(chat_id) in idx:
+            del idx[str(chat_id)]
+            redis_set(_INDEX_KEY, idx)
+    except Exception:
+        pass
+    try:
+        fwd = redis_get(_FWD_KEY)
+        if isinstance(fwd, dict):
+            kept = {k: v for k, v in fwd.items() if str(v) != str(chat_id)}
+            if len(kept) != len(fwd):
+                redis_set(_FWD_KEY, kept)
+    except Exception:
+        pass
 
 
 # --- owner presence (handover flag) -----------------------------------------

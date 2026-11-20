@@ -49,6 +49,7 @@ def store(monkeypatch):
     data = {}
     monkeypatch.setattr(sc, "redis_get", lambda key: data.get(key))
     monkeypatch.setattr(sc, "redis_set", lambda key, value: data.__setitem__(key, value))
+    monkeypatch.setattr(sc, "redis_delete", lambda key: data.pop(key, None))
     bot = BotStub()
     monkeypatch.setattr(sc, "bot", bot)
     pushes = []
@@ -245,3 +246,34 @@ def test_support_photo_endpoints(client, store, monkeypatch):
                       headers={"Authorization": f"Bearer {token}"},
                       json={"image_b64": "!!!not-base64!!!"})
     assert bad.status_code == 400
+
+
+def test_clear_thread_wipes_history_index_and_forwards(store):
+    sc.customer_say(CUSTOMER, "Aung", "hello")
+    fwd = store.data.get(sc._FWD_KEY) or {}
+    assert fwd
+    admin_chat, msg_id = next(iter(fwd)).split(":")
+    assert sc.admin_reply(int(admin_chat), int(msg_id), "hi")
+    assert sc.load_thread(CUSTOMER)
+    assert str(CUSTOMER) in sc._load_index()
+    sc.clear_thread(CUSTOMER)
+    assert sc.load_thread(CUSTOMER) == []
+    assert str(CUSTOMER) not in sc._load_index()
+    fwd = store.data.get(sc._FWD_KEY) or {}
+    assert all(str(v) != str(CUSTOMER) for v in fwd.values())
+    # A fresh conversation can start right away.
+    sc.customer_say(CUSTOMER, "Aung", "again")
+    assert len(sc.load_thread(CUSTOMER)) == 1
+
+
+def test_app_support_clear_endpoint(client, store, mock_bot):
+    assert client.post("/api/app/support/clear").status_code == 401
+    token = ra._make_app_token(CUSTOMER)
+    client.post("/api/app/support/send",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"text": "hi"})
+    assert sc.load_thread(CUSTOMER)
+    resp = client.post("/api/app/support/clear",
+                       headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert sc.load_thread(CUSTOMER) == []
