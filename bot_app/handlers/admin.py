@@ -503,6 +503,50 @@ def handle_notitest(message):
         "ဖုန်း popup ကတော့ App နောက်ခံ စစ်ဆေးချိန် (အများဆုံး ~၁၀ မိနစ်) အတွင်း တက်လာပါမယ်။")
 
 
+@bot.message_handler(commands=["appstats"])
+def handle_appstats(message):
+    """Admin-only: how many customers run each app version (bot update
+    #17). Versions are recorded from the X-App-Version header the app
+    sends with every authenticated request; builds older than the
+    rebuilt v0.6.8 do not send it, so their users appear only after
+    they update.
+    """
+    chat_id = message.chat.id
+    if str(chat_id) not in [str(aid) for aid in ADMIN_CHAT_IDS]:
+        return
+    try:
+        from bot_app.services.app_stats import version_stats
+
+        stats = version_stats()
+    except Exception as exc:
+        bot.send_message(
+            chat_id,
+            f"📊 App စာရင်း ဖတ်မရပါ ({html.escape(type(exc).__name__)})")
+        return
+    if not stats["total"]:
+        bot.send_message(
+            chat_id,
+            "📊 App Version မှတ်တမ်း မရှိသေးပါ။\n"
+            "ဒီစနစ် ပါတဲ့ App (v0.6.8 အသစ်) ကို Customer တွေ စသုံးမှ "
+            "စမှတ်ပါမယ်။")
+        return
+    lines = ["📊 <b>App အသုံးပြုမှု စာရင်း</b>", "", "Version အလိုက် သုံးသူ:"]
+    for version, count in sorted(
+        stats["counts"].items(), key=lambda kv: (-kv[1], kv[0])
+    ):
+        lines.append(f"• v{version} — {count} ယောက်")
+    lines += [
+        "",
+        f"စုစုပေါင်း မှတ်မိသူ: {stats['total']} ယောက်",
+        f"ပြီးခဲ့တဲ့ ၇ ရက် အတွင်း သုံးသူ: {stats['active_7d']} ယောက်",
+        f"ပြီးခဲ့တဲ့ ၃၀ ရက် အတွင်း သုံးသူ: {stats['active_30d']} ယောက်",
+        "",
+        "မှတ်ချက်: v0.6.8 အသစ် မတင်ရသေးသူတွေ ဒီစာရင်းမှာ မပါသေးပါ — "
+        "Update လုပ်ပြီးမှ ပါလာပါမယ်။",
+    ]
+    bot.send_message(chat_id, "\n".join(lines))
+
+
 @bot.message_handler(commands=["backup"])
 def handle_backup(message):
     """Admin-only: copy all bot records into the Google Sheets backup now.

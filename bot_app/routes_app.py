@@ -481,7 +481,20 @@ def _verify_app_token(token):
 def _bearer_chat_id():
     auth = request.headers.get("Authorization") or ""
     if auth.startswith("Bearer "):
-        return _verify_app_token(auth[len("Bearer "):].strip())
+        chat_id = _verify_app_token(auth[len("Bearer "):].strip())
+        if chat_id:
+            # Bot update #17: remember which app version this customer
+            # runs (header sent by the app) for the /appstats overview.
+            # Best-effort telemetry — never break the request over it.
+            version = (request.headers.get("X-App-Version") or "").strip()
+            if version:
+                try:
+                    from bot_app.services import app_stats
+
+                    app_stats.record_seen(chat_id, version)
+                except Exception:
+                    pass
+        return chat_id
     return None
 
 
