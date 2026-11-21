@@ -1,5 +1,6 @@
 """Payment-slip OCR via OCR.space + transaction-id extraction."""
 
+import base64
 import random
 import re
 import string
@@ -111,6 +112,169 @@ def extract_transaction_last6(ocr_text):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Slip amount extraction (Bot Update #20)
+#
+# Customers pick the top-up amount BEFORE uploading the slip, and many pick
+# the wrong one (e.g. select 1,000 Ks, send a 5,000 Ks slip). The slip photo
+# itself is the truth, so at intake the OCR text is also mined for the
+# transfer amount and — when one is confidently read — it replaces the
+# customer-selected amount on the recorded slip.
+# ---------------------------------------------------------------------------
+
+AMOUNT_LABELS = [
+    "amount", "total", "ပမာဏ", "ငွေပမာဏ", "လွှဲငွေ", "ပေးချေ",
+]
+
+_MONEY_TOKEN_RE = re.compile(r"\d[\d,]*\d(?:\.\d{1,2})?|\d(?:\.\d{1,2})?")
+_CURRENCY_RE = re.compile(r"(?:ks|mmk|ကျပ်)", re.IGNORECASE)
+
+
+def _money_value(token):
+    """Parse one OCR number token into an int Ks amount, or None.
+
+    Accepts comma-grouped ("4,000.00"), decimal ("4000.00") and plain
+    round numbers ("5000"). Rejects fragments of dates, times, phone
+    numbers and transaction references: those are either too long, not
+    round, or outside the plausible top-up range.
+    """
+    token = (token or "").strip()
+    if not token:
+        return None
+    has_comma = "," in token
+    has_decimal = "." in token
+    try:
+        value = float(token.replace(",", ""))
+    except ValueError:
+        return None
+    if value != int(value):
+        return None
+    amount = int(value)
+    if amount < 100 or amount > 1_000_000:
+        return None
+    int_part = token.replace(",", "").split(".")[0]
+    if len(int_part) > 7:
+        return None  # phone numbers / transaction references
+    if not (has_comma or has_decimal or amount % 100 == 0):
+        return None  # bare non-round numbers are usually dates / ids
+    return amount
+
+
+def _amounts_in_line(line):
+    out = []
+    for m in _MONEY_TOKEN_RE.finditer(line):
+        v = _money_value(m.group(0))
+        if v is not None:
+            out.append(v)
+    return out
+
+
+def extract_slip_amount(ocr_text):
+    """Best-effort transfer amount (int Ks) from slip OCR text, or None."""
+    if not ocr_text:
+        return None
+    text = clean_ocr_text_thoroughly(ocr_text)
+    for ph in MY_PAYMENT_PHONES:
+        text = text.replace(ph, "")
+    lines = text.splitlines()
+
+    # 1) Label-anchored: the amount printed next to an amount label, or on
+    #    the line directly under it (some receipts stack label and value).
+    for i, line in enumerate(lines):
+        lowered = line.lower()
+        if "balance" in lowered:
+            continue  # a balance line is never the transfer amount
+        if any(lbl in lowered for lbl in AMOUNT_LABELS):
+            vals = _amounts_in_line(line)
+            if vals:
+                return vals[0]
+            if i + 1 < len(lines):
+                vals = _amounts_in_line(lines[i + 1])
+                if vals:
+                    return vals[0]
+
+    # 2) Currency-anchored: numbers sitting next to Ks / MMK / ကျပ်.
+    anchored = []
+    for line in lines:
+        for m in _MONEY_TOKEN_RE.finditer(line):
+            window = line[max(0, m.start() - 4): m.end() + 5]
+            if _CURRENCY_RE.search(window):
+                v = _money_value(m.group(0))
+                if v is not None:
+                    anchored.append(v)
+    if anchored:
+        # Most repeated value wins; ties go to the first one seen.
+        return max(set(anchored), key=lambda v: (anchored.count(v), -anchored.index(v)))
+    return None
+
+
+def parse_slip_ocr_bytes(img_bytes):
+    """OCR raw image bytes via OCR.space (base64), same engine as slips."""
+    if not img_bytes:
+        return ""
+    try:
+        payload = {
+            'apikey': OCR_API_KEY,
+            'base64Image': "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode(),
+            'language': 'eng',
+            'isOverlayRequired': False,
+            'OCREngine': '2',
+        }
+        res = requests.post('https://api.ocr.space/parse/image', data=payload, timeout=20)
+        if res.status_code == 200:
+            result = res.json()
+            if result.get("IsErroredOnProcessing") == False:
+                parsed_results = result.get("ParsedResults", [])
+                if parsed_results:
+                    return parsed_results[0].get("ParsedText", "")
+    except Exception as e:
+        print("OCR API Error (bytes):", e)
+    return ""
+
+
+def extract_slip_facts(file_path=None):
+    """One OCR pass returning ``(order_id, tx_last6, amount)``.
+
+    ``amount`` is the transfer amount read off the slip (int Ks) or None
+    when OCR could not read one confidently.
+    """
+    ocr_text = parse_slip_ocr(file_path) if file_path else ""
+    amount = extract_slip_amount(ocr_text)
+    last6 = extract_transaction_last6(ocr_text)
+    if last6 and len(last6) == 6:
+        return f"#{last6}", last6, amount
+    chars = string.ascii_uppercase + string.digits
+    rand_part = ''.join(random.choices(chars, k=6))
+    return f"#{rand_part}", "", amount
+
+
+def extract_amount_and_tx_from_bytes(img_bytes):
+    """``(tx_last6, amount)`` for intake flows that receive raw bytes."""
+    ocr_text = parse_slip_ocr_bytes(img_bytes)
+    if not ocr_text:
+        return "", None
+    return extract_transaction_last6(ocr_text) or "", extract_slip_amount(ocr_text)
+
+
+def resolve_slip_amount(selected, detected):
+    """Decide the amount to record for a slip: ``(final_amount, status)``.
+
+    Status ``"ocr"`` — OCR read the slip; its amount wins (this is the
+    auto-fill that stops a wrong customer selection being recorded).
+    Status ``"selected"`` — OCR found nothing trustworthy; keep the
+    customer's amount and let the admin/agent verify from the photo.
+    A detected amount under the 500 Ks minimum top-up is never trusted:
+    an OCR misread must not silently shrink a customer's slip.
+    """
+    try:
+        selected = int(selected or 0)
+    except (TypeError, ValueError):
+        selected = 0
+    if detected is not None and detected >= 500:
+        return detected, "ocr"
+    return selected, "selected"
+
+
 def extract_order_id_and_tx(file_path=None):
     """Return ``(order_id, tx_last6)``.
 
@@ -118,15 +282,8 @@ def extract_order_id_and_tx(file_path=None):
     (empty string when the id fell back to random) so the dashboard can
     show and audit what OCR actually read.
     """
-    if file_path:
-        ocr_text = parse_slip_ocr(file_path)
-        last6 = extract_transaction_last6(ocr_text)
-        if last6 and len(last6) == 6:
-            return f"#{last6}", last6
-
-    chars = string.ascii_uppercase + string.digits
-    rand_part = ''.join(random.choices(chars, k=6))
-    return f"#{rand_part}", ""
+    order_id, tx_last6, _amount = extract_slip_facts(file_path)
+    return order_id, tx_last6
 
 
 def generate_order_id_from_slip(file_path=None):

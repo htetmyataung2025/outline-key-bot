@@ -54,6 +54,7 @@ from bot_app.utils import bytes_to_gb, clean_ss_url
 from bot_app.services.leaderboard import build_leaderboard
 from bot_app.services.points import load_all_points
 from bot_app.services.profiles import load_all_profiles
+from bot_app.services.ocr import extract_amount_and_tx_from_bytes, resolve_slip_amount
 from bot_app.services.slips import load_all_slips, record_slip
 from bot_app.timeutil import myanmar_now
 
@@ -908,11 +909,38 @@ def upload_topup_slip():
         except Exception:
             file_bytes = None
 
+    # Bot Update #20: read the amount off the slip photo itself — when OCR
+    # finds one it replaces the amount the customer entered in the Mini App.
+    tx_ref = ""
+    ocr_amount = None
+    if file_bytes:
+        tx_ref, ocr_amount = extract_amount_and_tx_from_bytes(file_bytes)
+    selected_amount = amount
+    amount, amount_status = resolve_slip_amount(amount, ocr_amount)
+    amount_note = ""
+    if amount_status == "ocr" and ocr_amount != selected_amount:
+        amount_note = (
+            f"\n🤖 <b>OCR ပြင်ထည့်ထားသည်:</b> Customer ရွေးခဲ့သော {selected_amount:,} Ks → "
+            f"ပြေစာပါ ပမာဏ <b>{amount:,} Ks</b>"
+        )
+    elif file_bytes and amount_status == "selected":
+        amount_note = (
+            "\n⚠️ <i>OCR ဖြင့် ပမာဏ ဖတ်မရပါ — Customer ရွေးသော ပမာဏဖြင့် မှတ်ထားသည်။ "
+            "ပုံကို သေချာ စစ်ပေးပါ။</i>"
+        )
+
+    if tx_ref:
+        # Bot Update #20.1: prefer the transaction-derived Top-Up ID
+        # (same rule as the app flow); random id stays if it is taken.
+        candidate = f"#{tx_ref}"
+        if candidate not in load_all_slips():
+            slip_id = candidate
+
     admin_alert_text = (
         f"📥 <b>Mini App Top-Up Slip အသစ် ရောက်ရှိပါသည်!</b>\n\n"
         f"🧾 <b>Top-Up ID:</b> <code>{slip_id}</code>\n"
         f"👤 <b>Customer:</b> @{username} (<code>{uid}</code>)\n"
-        f"💵 <b>ပမာဏ:</b> <code>{amount:,} Ks</code>\n\n"
+        f"💵 <b>ပမာဏ:</b> <code>{amount:,} Ks</code>{amount_note}\n\n"
         f"<i>စစ်ဆေးပြီးပါက အောက်ပါ Approve / Reject ခလုတ်များဖြင့် သတ်မှတ်ပေးပါခင်ဗျာ။</i>"
     )
 
@@ -967,18 +995,28 @@ def upload_topup_slip():
         username=username,
         image_url=image_url,
         file_id=captured_file_id,
+        extracted_tx_id=tx_ref,
         admin_messages=admin_messages,
         admin_caption=admin_alert_text,
         method=method,
+        ocr_amount=ocr_amount,
+        selected_amount=selected_amount,
     )
 
     # Notify customer in Telegram chat so they have a receipt ID record even after closing Mini App
+    correct_note = ""
+    if amount_status == "ocr" and ocr_amount != selected_amount:
+        correct_note = (
+            f"\n\n🤖 <i>ပြေစာပါ ပမာဏ ({amount:,} MMK) နှင့် ရွေးထားသော ပမာဏ ({selected_amount:,} MMK) "
+            f"မတူသဖြင့် ပြေစာ ပမာဏ အတိုင်း ပြင်မှတ်ပေးထားပါသည်ခင်ဗျာ။</i>"
+        )
     user_reply = (
         f"💌 <b>ငွေလွှဲပြေစာအား လက်ခံရရှိပါသည်ခင်ဗျာ။ (Mini App)</b>\n\n"
         f"🧾 <b>Top-Up ID:</b> <code>{slip_id}</code>\n"
         f"💳 <b>နည်းလမ်း:</b> {method}\n"
         f"💵 <b>ငွေပမာဏ:</b> {amount:,} MMK\n\n"
         f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
+        f"{correct_note}"
     )
     try:
         bot.send_message(uid, user_reply, parse_mode="HTML")

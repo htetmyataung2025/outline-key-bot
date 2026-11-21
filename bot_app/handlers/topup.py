@@ -9,7 +9,7 @@ from bot_app.helpers.callback_guard import is_callback_processed
 from bot_app.helpers.payment_text import get_payment_instruction_text
 from bot_app.keyboards import get_topup_amounts_keyboard
 from bot_app.services.billing import update_user_balance
-from bot_app.services.ocr import extract_order_id_and_tx
+from bot_app.services.ocr import extract_slip_facts, resolve_slip_amount
 from bot_app.services.orders import load_all_users, save_user_id
 from bot_app.services.profiles import touch_user
 from bot_app.services.slips import get_slip_by_id, record_audit_log, record_slip, review_slip
@@ -177,19 +177,35 @@ def handle_photo_messages(message):
     user_name = f"{user_first} {user_last}".strip() or "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
     
-    topup_amt = get_topup_state(chat_id) or 1000
+    selected_amt = get_topup_state(chat_id) or 1000
     set_topup_state(chat_id, None)
     set_custom_topup_state(chat_id, False)
 
     photo_file = bot.get_file(message.photo[-1].file_id)
-    topup_id, tx_ref = extract_order_id_and_tx(photo_file.file_path)
+    topup_id, tx_ref, ocr_amount = extract_slip_facts(photo_file.file_path)
+
+    # Bot Update #20: the amount printed on the slip wins over the amount
+    # the customer selected — a wrong selection must not be recorded.
+    topup_amt, amount_status = resolve_slip_amount(selected_amt, ocr_amount)
+    amount_note = ""
+    if amount_status == "ocr" and ocr_amount != selected_amt:
+        amount_note = (
+            f"\n\n🤖 <b>OCR ပြင်ထည့်ထားသည်:</b> Customer ရွေးခဲ့သော {selected_amt:,} MMK → "
+            f"ပြေစာပါ ပမာဏ <b>{topup_amt:,} MMK</b>"
+        )
+    elif amount_status == "selected":
+        amount_note = (
+            "\n\n⚠️ <i>OCR ဖြင့် ပမာဏ ဖတ်မရပါ — Customer ရွေးသော ပမာဏဖြင့် မှတ်ထားသည်။ "
+            "ပုံကို သေချာ စစ်ပေးပါ။</i>"
+        )
 
     admin_alert_text = (
         f"💰 <b>ငွေဖြည့်ပြေစာအသစ် (Top-Up Request)</b>\n\n"
         f"🧾 Top-Up ID: <code>{topup_id}</code>\n\n"
         f"👤 အသုံးပြုသူ: {user_name} ({username})\n\n"
         f"💵 ဖြည့်သွင်းငွေပမာဏ: <b>{topup_amt:,} MMK</b>\n\n"
-        f"🆔 User Chat ID: <code>{chat_id}</code>\n\n"
+        f"🆔 User Chat ID: <code>{chat_id}</code>"
+        f"{amount_note}\n\n"
         f"<i>စစ်ဆေးပြီးပါက အောက်ပါ Approve / Reject ခလုတ်များဖြင့် သတ်မှတ်ပေးပါခင်ဗျာ။</i>"
     )
 
@@ -215,13 +231,22 @@ def handle_photo_messages(message):
         extracted_tx_id=tx_ref,
         admin_messages=admin_messages,
         admin_caption=admin_alert_text,
+        ocr_amount=ocr_amount,
+        selected_amount=selected_amt,
     )
 
+    correct_note = ""
+    if amount_status == "ocr" and ocr_amount != selected_amt:
+        correct_note = (
+            f"\n\n🤖 <i>ပြေစာပါ ပမာဏ ({topup_amt:,} MMK) နှင့် ရွေးထားသော ပမာဏ ({selected_amt:,} MMK) "
+            f"မတူသဖြင့် ပြေစာ ပမာဏ အတိုင်း ပြင်မှတ်ပေးထားပါသည်ခင်ဗျာ။</i>"
+        )
     user_reply = (
         f"💌 <b>ငွေလွှဲပြေစာအား လက်ခံရရှိပါသည်ခင်ဗျာ။</b>\n\n"
         f"🧾 <b>Top-Up ID:</b> <code>{topup_id}</code>\n\n"
         f"💵 <b>ငွေပမာဏ:</b> {topup_amt:,} MMK\n\n"
         f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
+        f"{correct_note}"
     )
     bot.reply_to(message, user_reply, parse_mode="HTML")
 

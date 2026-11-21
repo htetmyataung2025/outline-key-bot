@@ -639,6 +639,7 @@ from bot_app.services.points import (
     refund_starter,
     try_claim,
 )
+from bot_app.services.ocr import extract_amount_and_tx_from_bytes, resolve_slip_amount
 from bot_app.services.slips import load_all_slips, record_slip
 from bot_app.timeutil import myanmar_now as _mm_now
 
@@ -680,12 +681,42 @@ def app_topup():
         profile = {}
     username = profile.get("username") or profile.get("full_name") or "AppUser"
 
+    # Bot Update #20: read the amount off the slip photo itself — when OCR
+    # finds one it replaces the amount the customer picked in the app, so a
+    # wrong selection is never what gets recorded.
+    tx_ref = ""
+    ocr_amount = None
+    if file_bytes:
+        tx_ref, ocr_amount = extract_amount_and_tx_from_bytes(file_bytes)
+    selected_amount = amount
+    amount, amount_status = resolve_slip_amount(amount, ocr_amount)
+    amount_note = ""
+    if amount_status == "ocr" and ocr_amount != selected_amount:
+        amount_note = (
+            f"\n🤖 <b>OCR ပြင်ထည့်ထားသည်:</b> Customer ရွေးခဲ့သော {selected_amount:,} Ks → "
+            f"ပြေစာပါ ပမာဏ <b>{amount:,} Ks</b>"
+        )
+    elif file_bytes and amount_status == "selected":
+        amount_note = (
+            "\n⚠️ <i>OCR ဖြင့် ပမာဏ ဖတ်မရပါ — Customer ရွေးသော ပမာဏဖြင့် မှတ်ထားသည်။ "
+            "ပုံကို သေချာ စစ်ပေးပါ။</i>"
+        )
+
     slip_id = "".join(_random.choices(_string.ascii_uppercase + _string.digits, k=8))
+    if tx_ref:
+        # Bot Update #20.1: like the Telegram-bot flow, prefer the id
+        # derived from the slip's transaction reference so the admin can
+        # match the alert to the receipt at a glance. The random id stays
+        # when the derived one is already taken — a record is never
+        # overwritten.
+        candidate = f"#{tx_ref}"
+        if candidate not in load_all_slips():
+            slip_id = candidate
     admin_alert_text = (
         f"📥 <b>H&E VPN App Top-Up Slip အသစ် ရောက်ရှိပါသည်!</b>\n\n"
         f"🧾 <b>Top-Up ID:</b> <code>{slip_id}</code>\n"
         f"👤 <b>Customer:</b> @{username} (<code>{chat_id}</code>)\n"
-        f"💵 <b>ပမာဏ:</b> <code>{amount:,} Ks</code>\n\n"
+        f"💵 <b>ပမာဏ:</b> <code>{amount:,} Ks</code>{amount_note}\n\n"
         f"<i>စစ်ဆေးပြီးပါက အောက်ပါ Approve / Reject ခလုတ်များဖြင့် သတ်မှတ်ပေးပါခင်ဗျာ။</i>"
     )
     markup = InlineKeyboardMarkup()
@@ -723,9 +754,12 @@ def app_topup():
         username=username,
         image_url="app_upload",
         file_id=captured_file_id,
+        extracted_tx_id=tx_ref,
         admin_messages=admin_messages,
         admin_caption=admin_alert_text,
         method=method,
+        ocr_amount=ocr_amount,
+        selected_amount=selected_amount,
     )
     return jsonify({
         "success": True,
@@ -733,6 +767,8 @@ def app_topup():
         "status": "PENDING",
         "amount": amount,
         "method": method,
+        "ocr_amount": ocr_amount,
+        "amount_corrected": amount_status == "ocr" and ocr_amount != selected_amount,
         "message": "ပြေစာ လက်ခံရရှိပြီးဖြစ်ပါသည်ခင်ဗျာ။ Admin မှ မကြာမီ စစ်ဆေးအတည်ပြုပေးပါမည်။",
     })
 

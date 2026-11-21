@@ -43,6 +43,8 @@ def record_slip(
     admin_messages: list | None = None,
     admin_caption: str = "",
     method: str = "KBZ",
+    ocr_amount: int | None = None,
+    selected_amount: int | None = None,
 ) -> dict:
     slips = load_all_slips()
     now = myanmar_now()
@@ -54,6 +56,11 @@ def record_slip(
         "image_url": image_url,
         "file_id": file_id,
         "extracted_tx_id": extracted_tx_id,
+        # Bot Update #20: the amount OCR read off the slip photo and the
+        # amount the customer originally selected, kept for audit whenever
+        # intake auto-filled the recorded amount from the slip itself.
+        "ocr_amount": ocr_amount,
+        "selected_amount": selected_amount,
         "method": str(method or "KBZ").upper(),
         "status": "PENDING",  # PENDING, APPROVED, REJECTED
         "reviewed_by": None,
@@ -130,6 +137,8 @@ def pending_slips_for_agent() -> list:
             "file_id": s.get("file_id"),
             "image_url": s.get("image_url"),
             "extracted_tx_id": tx,
+            "ocr_amount": s.get("ocr_amount"),
+            "selected_amount": s.get("selected_amount"),
             "tx_duplicate": bool(tx) and tx_counts.get(tx, 0) > 1,
             "created_at": s.get("created_at"),
         })

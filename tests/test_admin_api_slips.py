@@ -245,7 +245,7 @@ def test_photo_handler_records_admin_message_ids(mock_bot, isolated_state, monke
     from bot_app.handlers import topup
     from bot_app.services.states import set_topup_state
 
-    monkeypatch.setattr(topup, "extract_order_id_and_tx", lambda path: ("#777001", "TX777"))
+    monkeypatch.setattr(topup, "extract_slip_facts", lambda path: ("#777001", "TX777", None))
     set_topup_state(CUSTOMER_ID, 2000)
 
     message = SimpleNamespace(
