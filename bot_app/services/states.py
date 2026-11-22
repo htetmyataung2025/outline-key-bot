@@ -18,6 +18,7 @@ from bot_app.storage.paths import (
     CUSTOM_TOPUP_STATE_FILE,
     DEDUCT_STATE_FILE,
     MANUAL_DISPATCH_STATE_FILE,
+    SLIP_GATE_STATE_FILE,
     REDEEM_STATE_FILE,
     RENEW_CHOICE_STATE_FILE,
     REPLACEMENT_STATE_FILE,
@@ -161,6 +162,24 @@ def set_manual_dispatch_state(admin_id, order_info_dict=None):
 def get_manual_dispatch_state(admin_id):
     states = _load_states("admin_manual_dispatch_state", MANUAL_DISPATCH_STATE_FILE)
     return states.get(str(admin_id))
+
+def set_slip_gate_state(chat_id, gate_dict=None):
+    """Bot Update #21: park a bounced slip photo (file_id + intake facts)
+    so the customer's "this IS a real slip" button can forward it to the
+    admin queue without re-uploading."""
+    states = _load_states("slip_gate_state", SLIP_GATE_STATE_FILE)
+    cid = str(chat_id)
+    if not gate_dict and cid not in states:
+        return
+    if gate_dict:
+        states[cid] = gate_dict
+    else:
+        states.pop(cid, None)
+    _save_states("slip_gate_state", SLIP_GATE_STATE_FILE, states)
+
+def get_slip_gate_state(chat_id):
+    states = _load_states("slip_gate_state", SLIP_GATE_STATE_FILE)
+    return states.get(str(chat_id))
 
 def set_search_state(chat_id, is_searching=True):
     states = _load_states("admin_search_state", SEARCH_STATE_FILE)

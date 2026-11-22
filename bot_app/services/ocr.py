@@ -232,28 +232,93 @@ def parse_slip_ocr_bytes(img_bytes):
     return ""
 
 
+# ---------------------------------------------------------------------------
+# Slip-photo gate (Bot Update #21)
+#
+# Some customers upload a photo that is not a payment slip at all (an app
+# install screenshot, a random picture) — usually because something else
+# went wrong and the top-up upload is the only photo channel they find.
+# Those photos used to land in the admin review queue as fake slips. The
+# gate checks the OCR text of every slip photo for ANY sign of a real
+# wallet receipt — a transaction reference, a transfer amount, the
+# shop's own receiving number/name, or a wallet brand (KBZ / Wave / AYA /
+# CB / UAB). The check is deliberately generous: a photo is bounced only
+# when NOTHING slip-like is found, so a genuine but blurry receipt still
+# passes (and each flow offers an explicit "this IS a real slip" escape
+# hatch that records it flagged as unverified).
+# ---------------------------------------------------------------------------
+
+SLIP_BRAND_MARKERS = (
+    "kbz", "kpay", "wave", "aya", "cbpay", "cb pay", "uab", "onepay",
+)
+
+# Shown when a photo is bounced by the gate. The bot variant (HTML) is
+# paired with an inline "this IS a real slip" button; the plain variant
+# goes into the app / Mini App JSON responses.
+NOT_A_SLIP_NOTICE_BOT = (
+    "⚠️ <b>ဒီပုံက ငွေလွှဲပြေစာ မဟုတ်ပါဘူး ခင်ဗျာ။</b>\n\n"
+    "KBZ Pay / Wave Pay / AYA Pay စတဲ့ Pay app ထဲက ငွေလွှဲ ပြီးသား "
+    "ပြေစာ ပုံကို ပို့ပေးပါ။\n\n"
+    "ပြေစာ အစစ် ဖြစ်ပြီး ပုံ မှုန်နေလို့ စနစ်က ဖတ်မရတာဆိုရင် "
+    "အောက်က ခလုတ်ကို နှိပ်ပြီး Admin စစ်ပေးဖို့ ပို့နိုင်ပါတယ်။"
+)
+
+NOT_A_SLIP_MESSAGE = (
+    "ဒီပုံက ငွေလွှဲပြေစာ မဟုတ်ပါဘူး ခင်ဗျာ။ KBZ Pay / Wave Pay / AYA Pay "
+    "ထဲက ငွေလွှဲ ပြီးသား ပြေစာ ပုံကို ပို့ပေးပါ။ ပြေစာ အစစ် ဖြစ်ပါက "
+    "Telegram Bot (@H_E_FEATURE_Bot) မှတစ်ဆင့် ပြန်ပို့နိုင်ပါတယ်။"
+)
+
+
+def slip_photo_is_probable(ocr_text):
+    """True when the OCR text shows ANY sign of a real payment slip."""
+    if not ocr_text:
+        return False
+    if extract_transaction_last6(ocr_text):
+        return True
+    if extract_slip_amount(ocr_text) is not None:
+        return True
+    cleaned = clean_ocr_text_thoroughly(ocr_text)
+    squashed = cleaned.replace(" ", "").replace("-", "")
+    for ph in MY_PAYMENT_PHONES:
+        digits = re.sub(r"\D", "", str(ph))
+        if digits and digits in squashed:
+            return True
+    lowered = cleaned.lower()
+    if "htet myat aung" in lowered:
+        return True
+    return any(marker in lowered for marker in SLIP_BRAND_MARKERS)
+
+
 def extract_slip_facts(file_path=None):
-    """One OCR pass returning ``(order_id, tx_last6, amount)``.
+    """One OCR pass returning ``(order_id, tx_last6, amount, probable)``.
 
     ``amount`` is the transfer amount read off the slip (int Ks) or None
-    when OCR could not read one confidently.
+    when OCR could not read one confidently. ``probable`` is the Bot
+    Update #21 gate verdict: whether the photo looks like a payment
+    slip at all.
     """
     ocr_text = parse_slip_ocr(file_path) if file_path else ""
     amount = extract_slip_amount(ocr_text)
     last6 = extract_transaction_last6(ocr_text)
+    probable = slip_photo_is_probable(ocr_text)
     if last6 and len(last6) == 6:
-        return f"#{last6}", last6, amount
+        return f"#{last6}", last6, amount, probable
     chars = string.ascii_uppercase + string.digits
     rand_part = ''.join(random.choices(chars, k=6))
-    return f"#{rand_part}", "", amount
+    return f"#{rand_part}", "", amount, probable
 
 
 def extract_amount_and_tx_from_bytes(img_bytes):
-    """``(tx_last6, amount)`` for intake flows that receive raw bytes."""
+    """``(tx_last6, amount, probable)`` for flows that receive raw bytes."""
     ocr_text = parse_slip_ocr_bytes(img_bytes)
     if not ocr_text:
-        return "", None
-    return extract_transaction_last6(ocr_text) or "", extract_slip_amount(ocr_text)
+        return "", None, False
+    return (
+        extract_transaction_last6(ocr_text) or "",
+        extract_slip_amount(ocr_text),
+        slip_photo_is_probable(ocr_text),
+    )
 
 
 def resolve_slip_amount(selected, detected):
@@ -282,7 +347,7 @@ def extract_order_id_and_tx(file_path=None):
     (empty string when the id fell back to random) so the dashboard can
     show and audit what OCR actually read.
     """
-    order_id, tx_last6, _amount = extract_slip_facts(file_path)
+    order_id, tx_last6, _amount, _probable = extract_slip_facts(file_path)
     return order_id, tx_last6
 
 

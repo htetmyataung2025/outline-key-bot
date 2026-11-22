@@ -54,7 +54,7 @@ from bot_app.utils import bytes_to_gb, clean_ss_url
 from bot_app.services.leaderboard import build_leaderboard
 from bot_app.services.points import load_all_points
 from bot_app.services.profiles import load_all_profiles
-from bot_app.services.ocr import extract_amount_and_tx_from_bytes, resolve_slip_amount
+from bot_app.services.ocr import NOT_A_SLIP_MESSAGE, extract_amount_and_tx_from_bytes, resolve_slip_amount
 from bot_app.services.slips import load_all_slips, record_slip
 from bot_app.timeutil import myanmar_now
 
@@ -913,12 +913,32 @@ def upload_topup_slip():
     # finds one it replaces the amount the customer entered in the Mini App.
     tx_ref = ""
     ocr_amount = None
+    probable = True
     if file_bytes:
-        tx_ref, ocr_amount = extract_amount_and_tx_from_bytes(file_bytes)
+        tx_ref, ocr_amount, probable = extract_amount_and_tx_from_bytes(file_bytes)
+    # Bot Update #21: bounce a photo with NO sign of a payment slip before
+    # it reaches the review queue, unless the caller vouches for it
+    # (force_slip) — then it is recorded flagged as unverified.
+    _json_body = request.get_json(silent=True) or {}
+    force_slip = str(
+        request.form.get("force_slip") or _json_body.get("force_slip") or ""
+    ).strip().lower() in ("1", "true", "yes")
+    if file_bytes and not probable and not force_slip:
+        return jsonify({
+            "success": False,
+            "error": "not_a_slip",
+            "message": NOT_A_SLIP_MESSAGE,
+        }), 400
+    unverified = bool(file_bytes and not probable and force_slip)
     selected_amount = amount
     amount, amount_status = resolve_slip_amount(amount, ocr_amount)
     amount_note = ""
-    if amount_status == "ocr" and ocr_amount != selected_amount:
+    if unverified:
+        amount_note = (
+            "\n⚠️ <b>စစ်ဆေးရန် လိုသည်:</b> Customer က 'ပြေစာ အစစ်ပါ' ဟု အတည်ပြု၍ ပို့လာသော slip ဖြစ်သည် — "
+            "OCR ဖြင့် ပြေစာ လက္ခဏာ မတွေ့ခဲ့ပါ။ ပုံကို သေချာ စစ်ပြီးမှ Approve လုပ်ပါ။"
+        )
+    elif amount_status == "ocr" and ocr_amount != selected_amount:
         amount_note = (
             f"\n🤖 <b>OCR ပြင်ထည့်ထားသည်:</b> Customer ရွေးခဲ့သော {selected_amount:,} Ks → "
             f"ပြေစာပါ ပမာဏ <b>{amount:,} Ks</b>"
@@ -1001,6 +1021,7 @@ def upload_topup_slip():
         method=method,
         ocr_amount=ocr_amount,
         selected_amount=selected_amount,
+        unverified_photo=unverified,
     )
 
     # Notify customer in Telegram chat so they have a receipt ID record even after closing Mini App

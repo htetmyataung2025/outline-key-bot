@@ -108,11 +108,12 @@ def test_extract_slip_facts_single_ocr_pass(monkeypatch):
         return KBZ_RECEIPT
 
     monkeypatch.setattr(ocr, "parse_slip_ocr", fake_ocr)
-    order_id, tx, amount = ocr.extract_slip_facts("photos/slip.jpg")
+    order_id, tx, amount, probable = ocr.extract_slip_facts("photos/slip.jpg")
     assert calls == ["photos/slip.jpg"]
     assert tx == "157230"  # last 6 of the receipt's transaction reference
     assert order_id == "#157230"
     assert amount == 4000
+    assert probable is True
 
 
 # --- App intake: POST /api/app/topup ----------------------------------------
@@ -131,7 +132,7 @@ def _app_topup(client, user_id, amount, monkeypatch, ocr_result):
 
 
 def test_app_topup_autofills_amount_from_slip(client, isolated_state, mock_bot, monkeypatch):
-    resp = _app_topup(client, 555000222, 1000, monkeypatch, ("001572", 5000))
+    resp = _app_topup(client, 555000222, 1000, monkeypatch, ("001572", 5000, True))
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["amount"] == 5000
@@ -154,7 +155,7 @@ def test_app_topup_id_collision_falls_back_to_random(client, isolated_state, moc
     from bot_app.services.slips import record_slip
 
     record_slip(slip_id="#001572", chat_id=999, amount=5000)
-    resp = _app_topup(client, 555000555, 5000, monkeypatch, ("001572", 5000))
+    resp = _app_topup(client, 555000555, 5000, monkeypatch, ("001572", 5000, True))
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["slip_id"] != "#001572"
@@ -164,7 +165,10 @@ def test_app_topup_id_collision_falls_back_to_random(client, isolated_state, moc
 
 
 def test_app_topup_keeps_selection_when_ocr_reads_nothing(client, isolated_state, mock_bot, monkeypatch):
-    resp = _app_topup(client, 555000333, 2000, monkeypatch, ("", None))
+    # Probable slip (another signal matched) but no amount/tx read: the
+    # customer's selection stands. A photo with NO signal at all is
+    # bounced by the Bot Update #21 gate — see tests/test_slip_gate.py.
+    resp = _app_topup(client, 555000333, 2000, monkeypatch, ("", None, True))
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["amount"] == 2000
@@ -179,7 +183,7 @@ def test_app_topup_keeps_selection_when_ocr_reads_nothing(client, isolated_state
 # --- Mini App intake: POST /api/user/topup-slip ------------------------------
 
 def test_miniapp_topup_autofills_amount_from_slip(client, isolated_state, mock_bot, monkeypatch, make_telegram_init_data):
-    monkeypatch.setattr(ru, "extract_amount_and_tx_from_bytes", lambda b: ("778899", 5000))
+    monkeypatch.setattr(ru, "extract_amount_and_tx_from_bytes", lambda b: ("778899", 5000, True))
     user_id = 555000444
     init_data = make_telegram_init_data(user_id=user_id)
     resp = client.post(

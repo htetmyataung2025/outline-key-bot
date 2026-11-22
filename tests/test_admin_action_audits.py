@@ -163,7 +163,7 @@ def test_text_broadcast_audits_admin(mock_bot, isolated_state, monkeypatch):
 def test_admin_notification_keyboard_has_reject_button(mock_bot, isolated_state, monkeypatch):
     from bot_app.handlers import topup
 
-    monkeypatch.setattr(topup, "extract_slip_facts", lambda file_path=None: ("#KKBTEST", "123456", None))
+    monkeypatch.setattr(topup, "extract_slip_facts", lambda file_path=None: ("#KKBTEST", "123456", None, True))
     photo_message = SimpleNamespace(
         content_type="photo",
         chat=SimpleNamespace(id=CUSTOMER_ID),

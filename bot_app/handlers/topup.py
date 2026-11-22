@@ -9,13 +9,13 @@ from bot_app.helpers.callback_guard import is_callback_processed
 from bot_app.helpers.payment_text import get_payment_instruction_text
 from bot_app.keyboards import get_topup_amounts_keyboard
 from bot_app.services.billing import update_user_balance
-from bot_app.services.ocr import extract_slip_facts, resolve_slip_amount
+from bot_app.services.ocr import NOT_A_SLIP_NOTICE_BOT, extract_slip_facts, resolve_slip_amount
 from bot_app.services.orders import load_all_users, save_user_id
 from bot_app.services.profiles import touch_user
 from bot_app.services.slips import get_slip_by_id, record_audit_log, record_slip, review_slip
 from bot_app.services.states import (
-    get_broadcast_state,
-    get_topup_state, set_admin_reject_state, set_broadcast_state, set_custom_topup_state, set_topup_state,
+    get_broadcast_state, get_slip_gate_state,
+    get_topup_state, set_admin_reject_state, set_broadcast_state, set_custom_topup_state, set_slip_gate_state, set_topup_state,
 )
 from bot_app.utils import is_user_subscribed
 
@@ -176,19 +176,61 @@ def handle_photo_messages(message):
     user_last = message.from_user.last_name if message.from_user.last_name else ""
     user_name = f"{user_first} {user_last}".strip() or "HMA User"
     username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
-    
+
     selected_amt = get_topup_state(chat_id) or 1000
     set_topup_state(chat_id, None)
     set_custom_topup_state(chat_id, False)
 
     photo_file = bot.get_file(message.photo[-1].file_id)
-    topup_id, tx_ref, ocr_amount = extract_slip_facts(photo_file.file_path)
+    topup_id, tx_ref, ocr_amount, probable = extract_slip_facts(photo_file.file_path)
 
+    # Bot Update #21: a photo with NO sign of a payment slip (an app
+    # screenshot, a random picture) never enters the review queue. The
+    # customer is told right away and gets one escape hatch — "this IS a
+    # real slip" — which forwards the parked photo flagged as unverified.
+    if not probable:
+        set_slip_gate_state(chat_id, {
+            "file_id": message.photo[-1].file_id,
+            "topup_id": topup_id,
+            "tx_ref": tx_ref,
+            "selected_amt": selected_amt,
+            "user_name": user_name,
+            "username": username,
+        })
+        gate_markup = InlineKeyboardMarkup()
+        gate_markup.add(InlineKeyboardButton(
+            "✅ ပြေစာ အစစ်ပါ — Admin စစ်ပေးဖို့ ပို့မယ်",
+            callback_data="slip_gate_send",
+        ))
+        bot.reply_to(message, NOT_A_SLIP_NOTICE_BOT, parse_mode="HTML", reply_markup=gate_markup)
+        return
+
+    _finalize_topup_slip(
+        chat_id, user_name, username, selected_amt,
+        topup_id, tx_ref, ocr_amount, message.photo[-1].file_id,
+        reply_message=message,
+    )
+
+
+def _finalize_topup_slip(chat_id, user_name, username, selected_amt,
+                         topup_id, tx_ref, ocr_amount, photo_file_id,
+                         unverified=False, reply_message=None):
+    """Record a slip, alert the admins and confirm to the customer.
+
+    Shared by the normal photo flow and the Bot Update #21 gate escape
+    hatch (``unverified=True`` — the customer vouched for a photo OCR
+    could not verify, so the admin alert says a human must check it).
+    """
     # Bot Update #20: the amount printed on the slip wins over the amount
     # the customer selected — a wrong selection must not be recorded.
     topup_amt, amount_status = resolve_slip_amount(selected_amt, ocr_amount)
     amount_note = ""
-    if amount_status == "ocr" and ocr_amount != selected_amt:
+    if unverified:
+        amount_note = (
+            "\n\n⚠️ <b>စစ်ဆေးရန် လိုသည်:</b> Customer က 'ပြေစာ အစစ်ပါ' ဟု အတည်ပြု၍ ပို့လာသော slip ဖြစ်သည် — "
+            "OCR ဖြင့် ပြေစာ လက္ခဏာ မတွေ့ခဲ့ပါ။ ပုံကို သေချာ စစ်ပြီးမှ Approve လုပ်ပါ။"
+        )
+    elif amount_status == "ocr" and ocr_amount != selected_amt:
         amount_note = (
             f"\n\n🤖 <b>OCR ပြင်ထည့်ထားသည်:</b> Customer ရွေးခဲ့သော {selected_amt:,} MMK → "
             f"ပြေစာပါ ပမာဏ <b>{topup_amt:,} MMK</b>"
@@ -216,7 +258,7 @@ def handle_photo_messages(message):
     admin_messages = []
     for aid in ADMIN_CHAT_IDS:
         try:
-            sent = bot.send_photo(aid, message.photo[-1].file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=markup)
+            sent = bot.send_photo(aid, photo_file_id, caption=admin_alert_text, parse_mode="HTML", reply_markup=markup)
             if sent is not None:
                 admin_messages.append({"chat_id": sent.chat.id, "message_id": sent.message_id})
         except:
@@ -227,12 +269,13 @@ def handle_photo_messages(message):
         chat_id=chat_id,
         amount=topup_amt,
         username=username,
-        file_id=message.photo[-1].file_id,
+        file_id=photo_file_id,
         extracted_tx_id=tx_ref,
         admin_messages=admin_messages,
         admin_caption=admin_alert_text,
         ocr_amount=ocr_amount,
         selected_amount=selected_amt,
+        unverified_photo=unverified,
     )
 
     correct_note = ""
@@ -248,5 +291,46 @@ def handle_photo_messages(message):
         f"<i>Admin မှ ပြေစာစစ်ဆေးအတည်ပြုပြီးသည်နှင့် Wallet ထဲသို့ ချက်ချင်း ငွေထည့်ပေးပါမည်။ ကျေးဇူးတင်ပါသည်ခင်ဗျာ။ 🙏</i>"
         f"{correct_note}"
     )
-    bot.reply_to(message, user_reply, parse_mode="HTML")
+    if reply_message is not None:
+        bot.reply_to(reply_message, user_reply, parse_mode="HTML")
+    else:
+        bot.send_message(chat_id, user_reply, parse_mode="HTML")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "slip_gate_send")
+def handle_slip_gate_send(call):
+    """Bot Update #21 escape hatch: the customer confirms the bounced
+    photo IS a real slip — forward the parked photo into the review
+    queue flagged as unverified."""
+    chat_id = call.message.chat.id
+    state = get_slip_gate_state(chat_id)
+    if not state:
+        bot.answer_callback_query(
+            call.id,
+            "⚠️ ဒီပုံအတွက် အချိန်ကုန်သွားပါပြီ — ပြေစာပုံကို ပြန်ပို့ပေးပါ။",
+            show_alert=True,
+        )
+        return
+    bot.answer_callback_query(call.id)
+    set_slip_gate_state(chat_id, None)
+    _finalize_topup_slip(
+        chat_id,
+        state.get("user_name") or "HMA User",
+        state.get("username") or "No Username",
+        state.get("selected_amt") or 1000,
+        state.get("topup_id") or "#GATE",
+        state.get("tx_ref") or "",
+        None,
+        state.get("file_id") or "",
+        unverified=True,
+    )
+    try:
+        bot.edit_message_text(
+            "✅ <b>ပြေစာကို Admin စစ်ပေးဖို့ ပို့လိုက်ပါပြီ</b> — စစ်ဆေးပြီးတာနဲ့ Wallet ထဲ ထည့်ပေးပါမယ် ခင်ဗျာ။",
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
 

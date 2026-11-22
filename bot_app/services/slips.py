@@ -45,6 +45,7 @@ def record_slip(
     method: str = "KBZ",
     ocr_amount: int | None = None,
     selected_amount: int | None = None,
+    unverified_photo: bool = False,
 ) -> dict:
     slips = load_all_slips()
     now = myanmar_now()
@@ -61,6 +62,10 @@ def record_slip(
         # intake auto-filled the recorded amount from the slip itself.
         "ocr_amount": ocr_amount,
         "selected_amount": selected_amount,
+        # Bot Update #21: True when the customer overrode the slip-photo
+        # gate ("this IS a real slip") — OCR could not verify the photo,
+        # so a human must check it before approving.
+        "unverified_photo": bool(unverified_photo),
         "method": str(method or "KBZ").upper(),
         "status": "PENDING",  # PENDING, APPROVED, REJECTED
         "reviewed_by": None,
@@ -139,6 +144,7 @@ def pending_slips_for_agent() -> list:
             "extracted_tx_id": tx,
             "ocr_amount": s.get("ocr_amount"),
             "selected_amount": s.get("selected_amount"),
+            "unverified_photo": bool(s.get("unverified_photo")),
             "tx_duplicate": bool(tx) and tx_counts.get(tx, 0) > 1,
             "created_at": s.get("created_at"),
         })

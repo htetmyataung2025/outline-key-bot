@@ -639,7 +639,7 @@ from bot_app.services.points import (
     refund_starter,
     try_claim,
 )
-from bot_app.services.ocr import extract_amount_and_tx_from_bytes, resolve_slip_amount
+from bot_app.services.ocr import NOT_A_SLIP_MESSAGE, extract_amount_and_tx_from_bytes, resolve_slip_amount
 from bot_app.services.slips import load_all_slips, record_slip
 from bot_app.timeutil import myanmar_now as _mm_now
 
@@ -686,12 +686,29 @@ def app_topup():
     # wrong selection is never what gets recorded.
     tx_ref = ""
     ocr_amount = None
+    probable = True
     if file_bytes:
-        tx_ref, ocr_amount = extract_amount_and_tx_from_bytes(file_bytes)
+        tx_ref, ocr_amount, probable = extract_amount_and_tx_from_bytes(file_bytes)
+    # Bot Update #21: a photo with NO sign of a payment slip is bounced
+    # before it reaches the review queue, unless the caller explicitly
+    # vouches for it (force_slip) — then it is recorded flagged.
+    force_slip = bool(body.get("force_slip"))
+    if file_bytes and not probable and not force_slip:
+        return jsonify({
+            "success": False,
+            "error": "not_a_slip",
+            "message": NOT_A_SLIP_MESSAGE,
+        }), 400
+    unverified = bool(file_bytes and not probable and force_slip)
     selected_amount = amount
     amount, amount_status = resolve_slip_amount(amount, ocr_amount)
     amount_note = ""
-    if amount_status == "ocr" and ocr_amount != selected_amount:
+    if unverified:
+        amount_note = (
+            "\n⚠️ <b>စစ်ဆေးရန် လိုသည်:</b> Customer က 'ပြေစာ အစစ်ပါ' ဟု အတည်ပြု၍ ပို့လာသော slip ဖြစ်သည် — "
+            "OCR ဖြင့် ပြေစာ လက္ခဏာ မတွေ့ခဲ့ပါ။ ပုံကို သေချာ စစ်ပြီးမှ Approve လုပ်ပါ။"
+        )
+    elif amount_status == "ocr" and ocr_amount != selected_amount:
         amount_note = (
             f"\n🤖 <b>OCR ပြင်ထည့်ထားသည်:</b> Customer ရွေးခဲ့သော {selected_amount:,} Ks → "
             f"ပြေစာပါ ပမာဏ <b>{amount:,} Ks</b>"
@@ -760,6 +777,7 @@ def app_topup():
         method=method,
         ocr_amount=ocr_amount,
         selected_amount=selected_amount,
+        unverified_photo=unverified,
     )
     return jsonify({
         "success": True,
@@ -768,6 +786,7 @@ def app_topup():
         "amount": amount,
         "method": method,
         "ocr_amount": ocr_amount,
+        "unverified": unverified,
         "amount_corrected": amount_status == "ocr" and ocr_amount != selected_amount,
         "message": "ပြေစာ လက်ခံရရှိပြီးဖြစ်ပါသည်ခင်ဗျာ။ Admin မှ မကြာမီ စစ်ဆေးအတည်ပြုပေးပါမည်။",
     })

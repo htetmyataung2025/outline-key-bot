@@ -91,7 +91,11 @@ def test_user_api_claim_dynamic_admin_cooldown_adjustment(client, make_telegram_
     assert "နောက် Claim ရရှိရန်" in cooldown_data["message"]
 
 
-def test_user_api_topup_slip_upload(client, make_telegram_init_data, isolated_state, mock_bot):
+def test_user_api_topup_slip_upload(client, make_telegram_init_data, isolated_state, mock_bot, monkeypatch):
+    # Bot Update #21: the intake gate reads the photo via OCR — simulate a
+    # slip-like photo whose amount could not be read (selected amount wins).
+    import bot_app.routes_user as ru
+    monkeypatch.setattr(ru, "extract_amount_and_tx_from_bytes", lambda b: ("", None, True))
     user_id = 555666888
     init_data = make_telegram_init_data(user_id=user_id, username="slip_uploader")
 
