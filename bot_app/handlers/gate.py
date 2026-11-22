@@ -59,6 +59,19 @@ def send_welcome(message):
                 pass
             return
 
+    # Facebook promo (Bot Update #22): the post carries this bot link
+    # instead of the code itself — https://t.me/<bot>?start=promo hands
+    # out the code with the full claim steps (link the app, then send
+    # the code in Support Chat). Answered before the force-join gate so
+    # the Facebook funnel never stalls on the channel-join wall.
+    if len(_parts) == 2 and _parts[1].strip() == "promo":
+        try:
+            from bot_app.services.promo import promo_bot_message
+            bot.send_message(chat_id, promo_bot_message(), parse_mode="HTML")
+        except Exception:
+            pass
+        return
+
     if not is_user_subscribed(chat_id):
         send_force_join_message(chat_id)
         return

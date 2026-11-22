@@ -38,7 +38,7 @@ PROMO_CODE = "HEFREEFORYOU"
 PROMO_SERVER = "2"
 PROMO_GB = 10
 PROMO_DAYS = 5
-PROMO_CAP = 50
+PROMO_CAP = 100
 
 _CLAIMS_KEY = f"promo_claims:{PROMO_CODE.lower()}"
 _LOCK_KEY = f"{_CLAIMS_KEY}:lock"
@@ -116,6 +116,29 @@ def _repair_claim(chat_id: str, claim: dict) -> str:
     except Exception as e:
         print("Promo repair record Error:", e)
     return vpn_key
+
+
+def promo_bot_message() -> str:
+    """The message the Telegram bot sends for ``/start promo`` (Bot
+    Update #22). The Facebook post no longer prints the code: people
+    follow the post's bot link and the bot hands out the code together
+    with the full claim steps — including linking the app first, since
+    an unlinked app cannot use Support Chat, where the code is claimed.
+    """
+    return (
+        "🎉 <b>H&E VPN အခမဲ့ Key Promo</b>\n\n"
+        f"သင့်ရဲ့ Promo Code: <code>{PROMO_CODE}</code> (နှိပ်ပြီး copy လုပ်ထားပါ)\n\n"
+        "<b>Key ရယူနည်း:</b>\n"
+        "၁။ H&E VPN App ကို ဖွင့်ပါ\n"
+        "၂။ App ထဲမှာ <b>Telegram အကောင့် ချိတ်ပါ</b> — Profile ထဲက "
+        "\"Telegram ချိတ်ရန်\" ကို နှိပ်လိုက်ရင် ဒီ Bot ဆီ ပြန်ရောက်လာမယ်, "
+        "Start နှိပ်ရုံပဲ (မချိတ်ရသေးရင် Support Chat သုံးလို့ မရပါဘူး)\n"
+        "၃။ App → Profile → <b>Support Chat</b> ထဲ ဝင်ပြီး code ကို ပို့ပါ\n"
+        f"၄။ ခဏအတွင်း <b>{PROMO_GB} GB / {PROMO_DAYS} ရက်</b> Key ရပါမယ် — "
+        "ဒီ Telegram DM ထဲလည်း ပို့ပေးမှာဖြစ်ပြီး App → Profile → "
+        "မှတ်တမ်း (History) ကနေလည်း နှိပ်ပြီး သုံးနိုင်ပါတယ်\n\n"
+        f"⚠️ တစ်ယောက် တစ်ခါပဲ, လူ {PROMO_CAP} ပြည့်ရင် ပိတ်ပါမယ် ခင်ဗျာ။"
+    )
 
 
 def promo_status() -> dict:

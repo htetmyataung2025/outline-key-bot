@@ -2,6 +2,8 @@
 
 Storage is an in-memory stand-in for the promo module's redis helpers;
 ``create_outline_key`` is monkeypatched so no Outline server is hit.
+Bot Update #22 raised the cap to 100 and moved code delivery into the
+Telegram bot (``/start promo``).
 """
 
 import pytest
@@ -153,7 +155,7 @@ def test_promo_claim_sends_telegram_dm(client, store, created, monkeypatch):
 
 def test_promo_admin_unlimited_claims(client, store, created, monkeypatch):
     # The owner (admin) can claim repeatedly for testing, and admin
-    # claims never consume the 50-customer cap.
+    # claims never consume the 100-customer cap.
     monkeypatch.setenv("SUPPORT_AGENT_SECRET", "test-secret")
     monkeypatch.setattr(promo, "is_admin", lambda cid: True)
     for _ in range(2):
@@ -204,3 +206,22 @@ def test_promo_reclaim_redelivers_and_repairs(client, store, created,
     assert written[0]["vpn_key"] == "ss://reg-key#x"
     assert len(promo.bot.sent) == 1  # key DM'd again
     assert "ss://reg-key#x" in promo.bot.sent[0][1]
+
+
+# --- Bot Update #22: cap 100 + bot-side code delivery -------------------------
+
+def test_promo_cap_is_100(store):
+    assert promo.PROMO_CAP == 100
+    status = promo.promo_status()
+    assert status["cap"] == 100
+    assert status["remaining"] == 100
+
+
+def test_promo_bot_message_has_code_cap_and_linking_steps():
+    text = promo.promo_bot_message()
+    assert promo.PROMO_CODE in text
+    assert "100" in text
+    # The claim happens in Support Chat, which needs a linked app — the
+    # message must walk the customer through linking first.
+    assert "ချိတ်ပါ" in text
+    assert "Support Chat" in text

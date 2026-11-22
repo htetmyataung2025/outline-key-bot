@@ -167,3 +167,20 @@ def test_customer_main_menu_has_no_web_app_button():
     rows = get_main_menu_keyboard(USER).keyboard
     assert all("web_app" not in btn for row in rows for btn in row)
 
+
+
+# ── Facebook promo deep link (Bot Update #22) ─────────────────────────────
+
+def test_start_promo_sends_code_with_linking_steps(mock_bot, isolated_state):
+    from bot_app.handlers import gate
+
+    message = _start_message(USER)
+    message.text = "/start promo"
+    gate.send_welcome(message)
+
+    sent = [text for _cid, text in mock_bot.calls["send_message"]]
+    promo_msgs = [t for t in sent if "HEFREEFORYOU" in t]
+    assert promo_msgs, "the promo code message was not sent"
+    assert "Support Chat" in promo_msgs[0]
+    assert "ချိတ်ပါ" in promo_msgs[0]  # app-linking step included
+    assert "100" in promo_msgs[0]
