@@ -189,6 +189,51 @@ def test_agent_endpoints_need_secret(client, store, monkeypatch):
     assert resp.status_code == 409
 
 
+# --- agent typing indicator (Bot Update #24) ---------------------------------
+
+def test_agent_typing_flag_roundtrip_and_expiry(store):
+    assert sc.agent_typing(CUSTOMER) is False
+    sc.set_agent_typing(CUSTOMER, True)
+    assert sc.agent_typing(CUSTOMER) is True
+    sc.set_agent_typing(CUSTOMER, False)
+    assert sc.agent_typing(CUSTOMER) is False
+    # A stale flag (agent died mid-compose) expires on its own.
+    from bot_app.storage.kv import redis_set
+    redis_set(f"support_typing:{CUSTOMER}", {"ts": sc._now() - 100})
+    assert sc.agent_typing(CUSTOMER) is False
+
+
+def test_agent_reply_clears_typing(store):
+    sc.set_agent_typing(CUSTOMER, True)
+    status, _msg = sc.agent_reply(CUSTOMER, "ဖြေပေးလိုက်ပြီ")
+    assert status == "ok"
+    assert sc.agent_typing(CUSTOMER) is False
+
+
+def test_agent_typing_endpoint_and_messages_field(client, store, monkeypatch):
+    monkeypatch.setenv("SUPPORT_AGENT_SECRET", "test-secret")
+    assert client.post("/api/app/support/agent/typing",
+                       json={"chat_id": CUSTOMER, "typing": True}).status_code == 401
+    good = {"X-Support-Agent-Secret": "test-secret"}
+    resp = client.post("/api/app/support/agent/typing", headers=good,
+                       json={"chat_id": CUSTOMER, "typing": True})
+    assert resp.status_code == 200
+    assert resp.get_json()["agent_typing"] is True
+
+    token = ra._make_app_token(CUSTOMER)
+    resp = client.get("/api/app/support/messages",
+                      headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert resp.get_json()["agent_typing"] is True
+
+    resp = client.post("/api/app/support/agent/typing", headers=good,
+                       json={"chat_id": CUSTOMER, "typing": False})
+    assert resp.get_json()["agent_typing"] is False
+    resp = client.get("/api/app/support/messages",
+                      headers={"Authorization": f"Bearer {token}"})
+    assert resp.get_json()["agent_typing"] is False
+
+
 # --- photos ------------------------------------------------------------------
 
 def test_customer_say_photo_forwards_and_stores_file_id(store):

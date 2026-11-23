@@ -1222,8 +1222,9 @@ def app_support_messages():
     chat_id = _bearer_chat_id()
     if not chat_id:
         return jsonify({"error": "unauthorized"}), 401
-    from bot_app.services.support_chat import load_thread
-    return jsonify({"messages": load_thread(chat_id)})
+    from bot_app.services.support_chat import agent_typing, load_thread
+    return jsonify({"messages": load_thread(chat_id),
+                    "agent_typing": agent_typing(chat_id)})
 
 
 @app_bp.route("/support/send", methods=["POST"])
@@ -1350,6 +1351,19 @@ def app_support_agent_presence():
     from bot_app.services.support_chat import set_owner_present
     present = set_owner_present(bool(data.get("present")))
     return jsonify({"success": True, "owner_present": present})
+
+
+@app_bp.route("/support/agent/typing", methods=["POST"])
+def app_support_agent_typing():
+    if not _agent_authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    chat_id = str(data.get("chat_id") or "").strip()
+    if not chat_id:
+        return jsonify({"error": "chat_id is required"}), 400
+    from bot_app.services.support_chat import agent_typing, set_agent_typing
+    set_agent_typing(chat_id, bool(data.get("typing")))
+    return jsonify({"success": True, "agent_typing": agent_typing(chat_id)})
 
 
 @app_bp.route("/support/agent/escalate", methods=["POST"])

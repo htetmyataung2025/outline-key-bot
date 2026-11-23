@@ -138,6 +138,33 @@ def set_owner_present(present: bool) -> bool:
     return owner_present()
 
 
+# --- agent typing indicator (Bot Update #24) --------------------------------
+# The app shows a Messenger-style "typing…" bubble while the support agent
+# composes a reply. The flag is a short-TTL timestamp: the agent sets it
+# when it starts working on a thread, refreshes it if composing runs long,
+# and clears it when the reply (or an escalation) lands — so a crashed run
+# can never leave a customer staring at dots for more than the TTL.
+
+_TYPING_KEY = "support_typing:"  # + chat_id -> {"ts": epoch}
+_TYPING_TTL_S = 45
+
+
+def set_agent_typing(chat_id, typing: bool) -> None:
+    key = _TYPING_KEY + str(chat_id)
+    if typing:
+        redis_set(key, {"ts": _now()})
+    else:
+        redis_delete(key)
+
+
+def agent_typing(chat_id) -> bool:
+    data = redis_get(_TYPING_KEY + str(chat_id))
+    if not isinstance(data, dict):
+        return False
+    ts = data.get("ts")
+    return isinstance(ts, (int, float)) and (_now() - int(ts)) < _TYPING_TTL_S
+
+
 # --- customer -> admins -------------------------------------------------------
 
 def _presence_markup() -> InlineKeyboardMarkup:
@@ -303,6 +330,7 @@ def agent_reply(chat_id, text: str) -> tuple:
         return "owner_present", None
     chat_id = str(chat_id)
     msg = append_message(chat_id, "Muse", text)
+    set_agent_typing(chat_id, False)
     # No inbox push here either — see admin_reply (30-item inbox cap).
     note = (
         "🤖 <b>H&E Agent ဖြေပြီး</b>\n"
@@ -320,6 +348,7 @@ def agent_reply(chat_id, text: str) -> tuple:
 def escalate(chat_id, summary: str) -> None:
     """Hand a thread to the owner unanswered (money/complaint cases)."""
     chat_id = str(chat_id)
+    set_agent_typing(chat_id, False)
     _touch_index(chat_id, escalated=True)
     note = (
         "🚨 <b>Support Escalation</b>\n"
