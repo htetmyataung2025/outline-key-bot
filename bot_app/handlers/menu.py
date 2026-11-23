@@ -27,7 +27,7 @@ from bot_app.services.orders import (
 )
 from bot_app.services.outline import (
     _parse_expiry_from_name, fetch_key_from_server, get_configured_servers,
-    get_customer_summary_stats, get_server_display_name, get_servers_total_usage,
+    get_customer_summary_stats, get_server_display_name, get_server_label, get_servers_total_usage,
     search_users_by_query,
 )
 from bot_app.services.slips import record_audit_log, review_slip
@@ -344,7 +344,7 @@ def handle_all_messages(message):
         history_texts = []
         for idx, rec in enumerate(reversed(records), 1):
             sid = str(rec.get('server', '1'))
-            srv_name = "VIP Server 🇸🇬" if sid == "VIP" else get_server_display_name(sid)
+            srv_name = "VIP Server 🇸🇬" if sid == "VIP" else get_server_label(sid)
             vpn_k = rec.get('vpn_key', '')
             key_block = f"<code>{vpn_k}</code>" if vpn_k != "N/A" else "<i>(Key လဲလှယ်ရန် Menu ရှိ '♻️ Key လဲရန်' အသုံးပြုနိုင်ပါသည်)</i>"
 
@@ -697,7 +697,7 @@ def handle_all_messages(message):
             if target_servers:
                 for srv in target_servers:
                     sid = str(srv.get("id"))
-                    btn_label = f"📡 {get_server_display_name(sid)} သို့"
+                    btn_label = f"📡 {get_server_label(sid)} သို့"
                     markup.add(InlineKeyboardButton(btn_label, callback_data=f"replace_srv{sid}_{server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_date}"))
             markup.row(InlineKeyboardButton("❌ Reject", callback_data=f"replace_reject_{chat_id}_{key_id}"))
 
@@ -784,7 +784,7 @@ def handle_all_messages(message):
             
             order_id_disp = get_order_id_for_key(full_name)
             ord_line = f"🧾 Order ID : <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
-            server_disp = f"Singapore Server {server_num} 🇸🇬" if bytes_transferred else f"Singapore Server {server_num} 🇸🇬 <i>(⚠️ Server Offline)</i>"
+            server_disp = get_server_label(server_num) if bytes_transferred else f"{get_server_label(server_num)} <i>(⚠️ Server Offline)</i>"
 
             result_text = (
                 f"👤 အသုံးပြုသူ : {display_name}\n\n"

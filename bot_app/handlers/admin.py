@@ -10,7 +10,7 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot_app.config import ADMIN_CHAT_IDS
 from bot_app.extensions import bot
 from bot_app.helpers.callback_guard import is_callback_processed
-from bot_app.services.outline import resolve_server_api_url
+from bot_app.services.outline import get_server_label, resolve_server_api_url
 from bot_app.keyboards import (
     get_admin_rd_amounts_keyboard, get_admin_rd_count_keyboard, get_admin_rd_days_keyboard,
     get_admin_rd_mode_keyboard, get_back_inline_keyboard, get_main_menu_keyboard,
@@ -264,7 +264,7 @@ def handle_view_key_detail(call):
             date_match = re.search(r'\d{1,2}\.\d{1,2}\.(\d{4}|\d{2})', full_name)
             end_date = date_match.group(0) if date_match else "မသိရှိပါ"
             order_id_disp = get_order_id_for_key(full_name)
-            server_name = f"Server {server_num} 🇸🇬"
+            server_name = get_server_label(server_num)
         else:
             full_name = cached_info.get("name", "Unnamed Key")
             final_key = cached_info.get("access_url", "N/A")
@@ -273,7 +273,7 @@ def handle_view_key_detail(call):
             usage_gb = "ဆာဗာလိုင်းမရသဖြင့် မသိရှိနိုင်ပါ"
             end_date = cached_info.get("expire_date", "မသိရှိပါ")
             order_id_disp = cached_info.get("order_id", "N/A")
-            server_name = f"Server {server_num} 🇸🇬 <i>(⚠️ ဆာဗာ Offline ဖြစ်နေပါသည်)</i>"
+            server_name = f"{get_server_label(server_num)} <i>(⚠️ ဆာဗာ Offline ဖြစ်နေပါသည်)</i>"
 
         order_line = f"🧾 <b>Order ID:</b> <code>{order_id_disp}</code>\n" if order_id_disp != "N/A" else ""
         markup = InlineKeyboardMarkup()
@@ -314,7 +314,7 @@ def handle_admin_del_key(call):
             InlineKeyboardButton("✅ Yes (ဖျက်မည်)", callback_data=f"delkey_confirm_{server_num}_{key_id}"),
             InlineKeyboardButton("❌ No (မဖျက်တော့ပါ)", callback_data="delkey_cancel")
         )
-        bot.send_message(call.message.chat.id, f"⚠️ <b>သတိပေးချက်:</b> Server {server_num} ပေါ်မှ ID ({key_id}) ရှိသော Key ကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?", parse_mode="HTML", reply_markup=markup)
+        bot.send_message(call.message.chat.id, f"⚠️ <b>သတိပေးချက်:</b> {get_server_label(server_num)} ပေါ်မှ ID ({key_id}) ရှိသော Key ကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?", parse_mode="HTML", reply_markup=markup)
 
     elif action == "confirm":
         persistent_registry = load_persistent_keys()
@@ -335,7 +335,7 @@ def handle_admin_del_key(call):
         api_url = api_url.rstrip('/') if api_url else ""
         try:
             requests.delete(f"{api_url}/access-keys/{key_id}", verify=False, timeout=8)
-            bot.edit_message_text(f"✅ <b>Server {server_num} ပေါ်မှ Key (ID: {key_id}) အား အောင်မြင်စွာ ဖျက်ဆီးပြီးပါပြီဗျာ။</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
+            bot.edit_message_text(f"✅ <b>{get_server_label(server_num)} ပေါ်မှ Key (ID: {key_id}) အား အောင်မြင်စွာ ဖျက်ဆီးပြီးပါပြီဗျာ။</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
         except:
             bot.edit_message_text(f"✅ <b>မှတ်တမ်းများထဲမှ Key (ID: {key_id}) အား ဖျက်ဆီးပြီးပါပြီ။ (Server Down နေသဖြင့် Server ဘက်သို့ သီးသန့် အမိန့်မရောက်ခဲ့ပါ)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
 

@@ -89,7 +89,7 @@ def server_num_for_api_url(api_url):
 
 def clean_server_label(name):
     """Strip decoration emojis the admin may leave in a Settings server name."""
-    cleaned = (name or "").replace("📡", "").replace("🇸🇬", "").replace("⚡", "")
+    cleaned = (name or "").replace("📡", "").replace("🇸🇬", "").replace("🇯🇵", "").replace("🇺🇸", "").replace("⚡", "")
     return " ".join(cleaned.split())
 
 
@@ -106,6 +106,29 @@ def get_server_display_name(server_id) -> str:
         if str(srv.get("id")) == sid:
             return clean_server_label(srv.get("name", "")) or f"Server {sid}"
     return f"Server {sid}"
+
+
+# Country flag per server id — the owner's fleet: 1/2 Singapore,
+# 3 Japan, 4 United States. Unknown ids get no flag rather than a
+# wrong one.
+_SERVER_FLAGS = {"1": "🇸🇬", "2": "🇸🇬", "3": "🇯🇵", "4": "🇺🇸"}
+
+
+def server_flag(server_id) -> str:
+    """Country flag for a server id ('' when the id has no known flag)."""
+    return _SERVER_FLAGS.get(str(server_id), "")
+
+
+def get_server_label(server_id) -> str:
+    """Customer-facing server label: display name + flag ('SG-1 🇸🇬').
+
+    The single format used across the bot, the app-facing messages and
+    admin summaries (owner's format, 2026-11-24) — never a hard-coded
+    'Server N 🇸🇬' that would mislabel the Japan / US servers.
+    """
+    name = get_server_display_name(server_id)
+    flag = server_flag(server_id)
+    return f"{name} {flag}" if flag else name
 
 
 def iter_configured_server_urls():
@@ -423,22 +446,21 @@ def get_servers_total_usage():
     for srv in servers:
         sid = str(srv.get("id"))
         s_total, s_bytes = get_server_stats(srv.get("api_url", ""))
-        per_server.append((get_server_display_name(sid), s_total, s_bytes))
+        per_server.append((sid, s_total, s_bytes))
 
     if not servers:
         # Legacy env-only setup: fall back to the hard .env slots.
         env_urls = list(iter_configured_server_urls())
-        names = ["Server 1", "Server 2", "Server 3"]
-        per_server = [(names[i] if i < len(names) else f"Server {i+1}",) +
-                      get_server_stats(u) for i, u in enumerate(env_urls)]
+        per_server = [(str(i + 1),) + get_server_stats(u)
+                      for i, u in enumerate(env_urls)]
 
     report_lines = []
     overall_bytes = 0
-    for sname, s_total, s_bytes in per_server:
+    for sid, s_total, s_bytes in per_server:
         s_gb = bytes_to_gb(s_bytes)
         overall_bytes += s_bytes
         report_lines.append(
-            f"📡 <b>{sname} 🇸🇬</b>\n🔑 Total Keys: <b>{s_total}</b>\n🧰 Total Usage: <b>{s_gb} GB</b>\n"
+            f"📡 <b>{get_server_label(sid)}</b>\n🔑 Total Keys: <b>{s_total}</b>\n🧰 Total Usage: <b>{s_gb} GB</b>\n"
         )
 
     overall_gb = bytes_to_gb(overall_bytes)
@@ -490,14 +512,14 @@ def get_customer_summary_stats():
     servers = get_configured_servers()
     if servers:
         server_lines = "\n".join(
-            f"📡 {srv.get('name', f'Server {srv.get('id')}')} 🇸🇬 : <b>{len(per_server_users.get(str(srv.get('id')), set()))}</b> ယောက်\n"
+            f"📡 {get_server_label(srv.get('id'))} : <b>{len(per_server_users.get(str(srv.get('id')), set()))}</b> ယောက်\n"
             for srv in servers
         )
     else:
         server_lines = (
-            f"📡 Server 1 🇸🇬 : <b>{len(per_server_users.get('1', set()))}</b> ယောက်\n"
-            f"📡 Server 2 🇸🇬 : <b>{len(per_server_users.get('2', set()))}</b> ယောက်\n"
-            f"📡 Server 3 🇸🇬 : <b>{len(per_server_users.get('3', set()))}</b> ယောက်\n"
+            f"📡 {get_server_label('1')} : <b>{len(per_server_users.get('1', set()))}</b> ယောက်\n"
+            f"📡 {get_server_label('2')} : <b>{len(per_server_users.get('2', set()))}</b> ယောက်\n"
+            f"📡 {get_server_label('3')} : <b>{len(per_server_users.get('3', set()))}</b> ယောက်\n"
         )
 
     summary_text = (
@@ -569,7 +591,7 @@ def search_users_by_query(query):
                 seen_identifiers.add(uid)
 
     for server_num, key_id, k_name in found_matches[:30]:
-        srv_icon = f"📡 S{server_num}🇸🇬" if server_num != "VIP" else "⚡ VIP 🇸🇬"
+        srv_icon = f"📡 S{server_num}{server_flag(server_num)}" if server_num != "VIP" else "⚡ VIP 🇸🇬"
         btn_text = f"{srv_icon} | {k_name}"
         markup.add(InlineKeyboardButton(btn_text, callback_data=f"viewkey_{server_num}_{key_id}"))
 

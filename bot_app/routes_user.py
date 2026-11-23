@@ -50,6 +50,7 @@ from bot_app.services.points import (
     try_claim,
 )
 from bot_app.services.registry import load_persistent_keys
+from bot_app.services.stock import record_stock_sale, stock_available, stock_out_message
 from bot_app.utils import bytes_to_gb, clean_ss_url
 from bot_app.services.leaderboard import build_leaderboard
 from bot_app.services.points import load_all_points
@@ -702,6 +703,15 @@ def purchase_plan():
     if has_redeem_credit:
         server_num = "1"
 
+    # Monthly stock cap (Bot Update #25): checked before charging, on the
+    # final server; manual plans are fulfilled by hand and skip the cap.
+    if not is_admin_user and not plan.get("manual") and not stock_available(server_num, plan):
+        return jsonify({
+            "success": False,
+            "error": "server_stock_out",
+            "message": stock_out_message(server_num),
+        }), 400
+
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     if is_admin_user:
         # Admins are truly unlimited: the balance check above is skipped and
@@ -801,6 +811,8 @@ def purchase_plan():
         }), 502
 
     save_sale_transaction(server_num, uid, plan_code, plan['name'], months_count, amount, order_id=order_id)
+    if not is_admin_user:
+        record_stock_sale(server_num, plan)
     save_user_purchase_record(
         chat_id=uid,
         order_id=order_id,

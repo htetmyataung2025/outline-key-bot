@@ -19,10 +19,11 @@ from bot_app.services.orders import (
     save_key_mapping, save_sale_transaction, save_user_purchase_record,
 )
 from bot_app.services.outline import (
-    create_outline_key, get_configured_servers, get_server_display_name,
+    create_outline_key, get_configured_servers, get_server_display_name, get_server_label,
     get_user_ultimate_keys, renew_or_create_unlimited_key, renew_specific_unlimited_key,
 )
 from bot_app.services.profiles import touch_user
+from bot_app.services.stock import record_stock_sale, stock_available, stock_out_message
 from bot_app.utils import is_user_subscribed
 
 
@@ -73,14 +74,14 @@ def handle_select_plan(call):
                 markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
             elif plan_code == "ultimate" or has_redeem_credit:
                 srv1_tag = "Redeem Credit" if has_redeem_credit else "Main Server"
-                markup.row(InlineKeyboardButton(f"📡 {get_server_display_name('1')} 🇸🇬 ({srv1_tag}) ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
+                markup.row(InlineKeyboardButton(f"📡 {get_server_label('1')} ({srv1_tag}) ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
             else:
                 # One button per configured server — the Settings page is the
                 # source of truth, so adding/removing servers there updates
                 # this list without a redeploy.
                 for srv in get_configured_servers():
                     sid = str(srv.get("id"))
-                    markup.row(InlineKeyboardButton(f"📡 {get_server_display_name(sid)} ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_{sid}"))
+                    markup.row(InlineKeyboardButton(f"📡 {get_server_label(sid)} ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_{sid}"))
         else:
             shortfall = amount - balance
             markup.row(InlineKeyboardButton(f"💰 ငွေ {shortfall:,} Ks ထပ်ဖြည့်ရန်", callback_data="btn_open_topup"))
@@ -91,7 +92,7 @@ def handle_select_plan(call):
         balance_disp = "♾️" if is_admin else f"{balance:,} MMK"
         balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
         
-        server_notice = f"\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် {get_server_display_name('1')} မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
+        server_notice = f"\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် {get_server_label('1')} မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
 
         text = (
             f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
@@ -150,11 +151,11 @@ def send_plan_purchase(chat_id, plan_code):
             markup.row(InlineKeyboardButton(f"💳 Wallet ဖြင့် တန်းဝယ်မည် ({amount:,} Ks)", callback_data=f"buywallet_{plan_code}_VIP"))
         elif plan_code == "ultimate" or has_redeem_credit:
             srv1_tag = "Redeem Credit" if has_redeem_credit else "Main Server"
-            markup.row(InlineKeyboardButton(f"📡 {get_server_display_name('1')} 🇸🇬 ({srv1_tag}) ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
+            markup.row(InlineKeyboardButton(f"📡 {get_server_label('1')} ({srv1_tag}) ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_1"))
         else:
             for srv in get_configured_servers():
                 sid = str(srv.get("id"))
-                markup.row(InlineKeyboardButton(f"📡 {get_server_display_name(sid)} ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_{sid}"))
+                markup.row(InlineKeyboardButton(f"📡 {get_server_label(sid)} ဖြင့် ဝယ်မည်", callback_data=f"buywallet_{plan_code}_{sid}"))
     else:
         shortfall = amount - balance
         markup.row(InlineKeyboardButton(f"💰 ငွေ {shortfall:,} Ks ထပ်ဖြည့်ရန်", callback_data="btn_open_topup"))
@@ -164,7 +165,7 @@ def send_plan_purchase(chat_id, plan_code):
 
     balance_disp = "♾️" if is_admin else f"{balance:,} MMK"
     balance_status = "✅ ဝယ်ယူရန် လုံလောက်ပါသည်" if (balance >= amount or is_admin) else f"⚠️ ငွေမလုံလောက်ပါ (ထပ်ဖြည့်ရန်: {amount - balance:,} Ks)"
-    server_notice = f"\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် {get_server_display_name('1')} မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
+    server_notice = f"\n💡 <i>(Redeem ငွေ လက်ကျန်ပါရှိသဖြင့် {get_server_label('1')} မှသာ ထုတ်ပေးမည် ဖြစ်ပါသည်)</i>" if has_redeem_credit else ""
 
     text = (
         f"🛍️ <b>ဝယ်ယူမည့် Plan အချက်အလက်</b>\n\n"
@@ -202,6 +203,11 @@ def handle_renew_choice(call):
         bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။", show_alert=True)
         return
 
+    # Monthly stock cap (Bot Update #25): refuse before charging.
+    if not is_admin and not plan.get("manual") and not stock_available(server_num, plan):
+        bot.answer_callback_query(call.id, stock_out_message(server_num), show_alert=True)
+        return
+
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_bal, used_bonus_days = update_user_balance(chat_id, -amount)
     
@@ -233,6 +239,8 @@ def handle_renew_choice(call):
         return
 
     save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
+    if not is_admin:
+        record_stock_sale(server_num, plan)
     save_user_purchase_record(
         chat_id=chat_id,
         order_id=order_id,
@@ -257,7 +265,7 @@ def handle_renew_choice(call):
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
         f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
-        f"📡 <b>Server:</b> {get_server_display_name(server_num)}\n\n"
+        f"📡 <b>Server:</b> {get_server_label(server_num)}\n\n"
         f"{exp_info_text}\n\n"
         f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{user_disp_bal}</code>\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
@@ -293,6 +301,11 @@ def handle_buy_with_wallet(call):
 
     if not is_admin and balance < amount:
         bot.answer_callback_query(call.id, "❌ လက်ကျန်ငွေ မလုံလောက်ပါ။ ကျေးဇူးပြု၍ ငွေအရင်ဖြည့်ပေးပါ။", show_alert=True)
+        return
+
+    # Monthly stock cap (Bot Update #25): refuse before charging.
+    if not is_admin and not plan.get("manual") and not stock_available(server_num, plan):
+        bot.answer_callback_query(call.id, stock_out_message(server_num), show_alert=True)
         return
 
     order_id = "#" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -357,6 +370,8 @@ def handle_buy_with_wallet(call):
         return
 
     save_sale_transaction(server_num, chat_id, plan_code, plan['name'], 1, amount, order_id=order_id)
+    if not is_admin:
+        record_stock_sale(server_num, plan)
     save_user_purchase_record(
         chat_id=chat_id,
         order_id=order_id,
@@ -381,7 +396,7 @@ def handle_buy_with_wallet(call):
         f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
         f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
         f"🛍️ <b>Plan:</b> {plan['name']} ({disp_gb})\n\n"
-        f"📡 <b>Server:</b> {get_server_display_name(server_num)}\n\n"
+        f"📡 <b>Server:</b> {get_server_label(server_num)}\n\n"
         f"{exp_info_text}\n\n"
         f"💳 <b>ကျန်ရှိသော လက်ကျန်ငွေ:</b> <code>{user_disp_bal}</code>\n\n"
         f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n"
@@ -401,7 +416,7 @@ def handle_buy_with_wallet(call):
                 f"🧾 Order ID: <code>{order_id}</code>\n"
                 f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                 f"🛍️ Plan: {plan['name']}\n"
-                f"📡 Server: {get_server_display_name(server_num)}\n"
+                f"📡 Server: {get_server_label(server_num)}\n"
                 f"💵 ရရှိငွေ: {amount:,} MMK\n"
                 f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else '၁လစာ'})",
                 parse_mode="HTML"

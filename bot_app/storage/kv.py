@@ -172,6 +172,38 @@ def redis_increment_with_expiry(key, ttl_seconds):
         return None
 
 
+def redis_incrby_with_expiry(key, amount, ttl_seconds):
+    """INCRBY ``key`` by ``amount`` and keep a TTL on it (refreshed per call).
+
+    Same contract as :func:`redis_increment_with_expiry` — bypasses
+    redis_set (no data-version bump) and returns the new value, or None
+    when Redis is unconfigured/unreachable. Passing ``amount=0`` reads the
+    current counter value without changing it.
+    """
+    if not _is_kv_available():
+        return None
+    url, token = _kv_config()
+    if not url or not token:
+        return None
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        encoded_key = urllib.parse.quote(json.dumps(key), safe="")
+        res = get_session().post(
+            f"{url}/incrby/{encoded_key}/{int(amount)}", headers=headers, timeout=5)
+        if res.status_code in (403, 429):
+            _disable_kv_temporary(600)
+            return None
+        if res.status_code != 200:
+            return None
+        count = int(res.json().get("result") or 0)
+        get_session().post(
+            f"{url}/expire/{encoded_key}/{int(ttl_seconds)}", headers=headers, timeout=5
+        )
+        return count
+    except Exception:
+        return None
+
+
 def redis_delete(key):
     """DEL ``key``. True on success, False when unconfigured/unreachable."""
     _KV_CACHE.pop(key, None)

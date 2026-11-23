@@ -44,9 +44,11 @@ from bot_app.helpers.rate_limit import client_ip_from_headers
 from bot_app.services.outline import (
     _parse_expiry_from_name,
     get_server_display_name,
+    get_server_label,
     get_usage_by_server,
 )
 from bot_app.services.registry import clean_key_label, load_persistent_keys
+from bot_app.services.stock import record_stock_sale, stock_available, stock_out_message
 from bot_app.storage.kv import (
     redis_delete,
     redis_get,
@@ -288,7 +290,7 @@ def build_key_detail(entry: dict, used_bytes):
 
     return {
         "key_name": key_name,
-        "server_name": get_server_display_name(server),
+        "server_name": get_server_label(server),
         "server_id": server,
         "key_id": key_id,
         "owner_uid": owner_uid,
@@ -860,11 +862,19 @@ def app_buy():
                 "message": "လက်ကျန်ငွေ မလုံလောက်ပါ။ ငွေအရင်ဖြည့်ပေးပါ။",
             }), 402
 
+        # Monthly stock cap (Bot Update #25): capped servers refuse the
+        # sale before any money moves; admins are exempt.
+        if not is_admin and not stock_available(server_num, plan):
+            return jsonify({
+                "error": "server_stock_out",
+                "message": stock_out_message(server_num),
+            }), 400
+
         main_bal, bonus_bal, _total = get_user_balance_breakdown(chat_id)
         if bonus_bal > 0 and not is_admin and server_num != "1":
             return jsonify({
                 "error": "redeem_credit_server",
-                "message": "Redeem/Bonus လက်ကျန်ငွေ ပါရှိသဖြင့် Server 1 မှသာ ဝယ်ယူနိုင်ပါသည်။",
+                "message": f"Redeem/Bonus လက်ကျန်ငွေ ပါရှိသဖြင့် {get_server_label('1')} မှသာ ဝယ်ယူနိုင်ပါသည်။",
             }), 400
 
         # Ultimate owners choose: renew an existing key or mint a new one.
@@ -908,6 +918,8 @@ def app_buy():
 
         save_sale_transaction(server_num, chat_id, plan_code, plan["name"], 1,
                               amount, order_id=order_id)
+        if not is_admin:
+            record_stock_sale(server_num, plan)
         save_user_purchase_record(
             chat_id=chat_id, order_id=order_id, plan_name=plan["name"],
             disp_gb=plan["data"], months_count=1, price_str=f"{amount:,} Ks",
@@ -936,7 +948,7 @@ def app_buy():
                 f"🎉 <b>ဝယ်ယူမှု အောင်မြင်ပါသည်ခင်ဗျာ!</b>\n\n"
                 f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
                 f"🛍️ <b>Plan:</b> {plan['name']} ({plan['data']})\n\n"
-                f"📡 <b>Server:</b> {get_server_display_name(server_num)}\n\n"
+                f"📡 <b>Server:</b> {get_server_label(server_num)}\n\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n<code>{vpn_key}</code>",
                 parse_mode="HTML", reply_markup=get_key_delivery_markup(vpn_key))
@@ -952,7 +964,7 @@ def app_buy():
                     f"🧾 Order ID: <code>{order_id}</code>\n"
                     f"👤 Customer: {user_name} (ID: <code>{chat_id}</code>)\n"
                     f"🛍️ Plan: {plan['name']}\n"
-                    f"📡 Server: {get_server_display_name(server_num)}\n"
+                    f"📡 Server: {get_server_label(server_num)}\n"
                     f"💵 ရရှိငွေ: {amount:,} MMK\n"
                     f"⏰ သက်တမ်း: {expire_date} ({f'Redeem ငွေဖြင့် {apply_days} ရက်' if apply_days else '၁လစာ'})",
                     parse_mode="HTML",
@@ -1062,7 +1074,7 @@ def app_points_redeem():
                 f"🎉 <b>Points ဖြင့် Starter Plan လဲယူမှု အောင်မြင်ပါသည်!</b>\n\n"
                 f"🧾 <b>Order ID:</b> <code>{order_id}</code>\n\n"
                 f"🛍️ <b>Plan:</b> {plan['name']} ({plan.get('data', '25 GB')})\n\n"
-                f"📡 <b>Server:</b> {get_server_display_name('1')}\n\n"
+                f"📡 <b>Server:</b> {get_server_label('1')}\n\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"💎 <b>ကျန်ရှိ Points:</b> {res.get('new_balance', 0):,}\n\n"
                 f"🔑 <b>လူကြီးမင်း၏ VPN Key:</b>\n\n<code>{vpn_key}</code>",
@@ -1160,7 +1172,7 @@ def app_key_replace():
             for srv in get_configured_servers():
                 sid = str(srv.get("id"))
                 markup.add(InlineKeyboardButton(
-                    f"📡 {get_server_display_name(sid)} သို့",
+                    f"📡 {get_server_label(sid)} သို့",
                     callback_data=f"replace_srv{sid}_{old_server_num}_{key_id}_{chat_id}_{rem_gb}_{exp_str}"))
             markup.row(InlineKeyboardButton(
                 "❌ Reject", callback_data=f"replace_reject_{chat_id}_{key_id}"))

@@ -7,7 +7,7 @@ from bot_app.extensions import bot
 from bot_app.helpers.callback_guard import is_callback_processed
 from bot_app.helpers.deeplink import get_key_delivery_markup
 from bot_app.services.outline import (_parse_expiry_from_name, create_outline_key,
-                                      resolve_server_api_url)
+                                      get_server_label, resolve_server_api_url)
 from bot_app.timeutil import myanmar_now
 
 
@@ -80,7 +80,7 @@ def handle_admin_replace_callback(call):
             success_msg = (
                 f"🎉 <b>လူကြီးမင်း၏ VPN Key ကို အဆင်ပြေစွာ အသစ် လဲလှယ်ပေးလိုက်ပါပြီခင်ဗျာ!</b>\n\n"
                 f"👤 <b>အသုံးပြုသူ:</b> {user_name}\n\n"
-                f"📡 <b>Server အသစ်:</b> Server {new_server_num} 🇸🇬\n\n"
+                f"📡 <b>Server အသစ်:</b> {get_server_label(new_server_num)}\n\n"
                 f"🧰 <b>ကျန်ရှိသော Data:</b> {rem_gb} GB\n\n"
                 f"⏰ <b>သက်တမ်းကုန်ဆုံးရက်:</b> {expire_date}\n\n"
                 f"🔑 <b>VPN Key အသစ်:</b>\n\n"
@@ -93,10 +93,10 @@ def handle_admin_replace_callback(call):
                 push_app_notification(
                     target_chat_id, "key_replace",
                     "Key အသစ် လဲလှယ်ပေးပြီးပါပြီ 🎉",
-                    f"Server {new_server_num} · Expire {expire_date}\n{new_key}")
+                    f"{get_server_label(new_server_num)} · Expire {expire_date}\n{new_key}")
             except Exception:
                 pass
-            bot.edit_message_text(call.message.text + f"\n\n✅ <b>REPLACED (Server {new_server_num} 🇸🇬)</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
+            bot.edit_message_text(call.message.text + f"\n\n✅ <b>REPLACED ({get_server_label(new_server_num)})</b>", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML")
             bot.answer_callback_query(call.id, "✅ Key အသစ် အစားထိုး ပို့ပေးလိုက်ပါပြီခင်ဗျာ။")
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
