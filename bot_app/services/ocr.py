@@ -62,8 +62,33 @@ _DATE_LIKE = re.compile(
 )
 
 
-def _digits_after_keyword(clean_line):
-    """Digits that appear AFTER the keyword inside one cleaned line.
+# Date/time shapes that appear on wallet receipts. Their digits must never
+# be mistaken for a transaction reference: on 2026-11-23 a KBZ slip's
+# "23/11/2026 08:29" fused (after space cleanup) into "202608" — year +
+# hour — and was returned as the tx ref, so the duplicate check ran
+# against a number that was never a reference (Bot Update #23).
+_DATE_TIME_RES = [
+    re.compile(r'\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}'),           # 23/11/2026
+    re.compile(r'\d{4}[/.\-]\d{1,2}[/.\-]\d{1,2}'),             # 2026/11/23
+    re.compile(r'\d{1,2}:\d{2}(?::\d{2})?'),                    # 08:29 / 13:16:50
+    # 12 Nov 2026 / 09 November 2026 (Wave, AYA, UAB receipts)
+    re.compile(r'\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}', re.I),
+    re.compile(r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}', re.I),
+]
+
+
+def _mask_dates_times(text):
+    """Blank out date/time substrings so their digits can never fuse into
+    a fake reference. Bare digit runs carry no separators or month names,
+    so real refs are untouched — including UAB's date-prefixed ids like
+    121120266442341, which must survive masking whole."""
+    for rx in _DATE_TIME_RES:
+        text = rx.sub(" ", text)
+    return text
+
+
+def _digit_runs_after_keyword(clean_line):
+    """All digit runs that appear AFTER a tx keyword inside one cleaned line.
 
     Position-aware so a phone number sitting before the label on the same
     line ("Receiver 09xxx Transaction 112233445566") is not picked up.
@@ -72,10 +97,12 @@ def _digits_after_keyword(clean_line):
     for kw in TX_KEYWORDS:
         idx = lowered.find(kw)
         if idx != -1:
-            digits = re.findall(r'\d{6,24}', clean_line[idx + len(kw):])
-            if digits:
-                return digits[0][-6:]
-    return None
+            return re.findall(r'\d{6,24}', clean_line[idx + len(kw):])
+    return []
+
+
+def _plausible_ref(run):
+    return not _PHONE_LIKE.match(run) and not _DATE_LIKE.match(run)
 
 
 def extract_transaction_last6(ocr_text):
@@ -85,26 +112,35 @@ def extract_transaction_last6(ocr_text):
     normalized_text = clean_ocr_text_thoroughly(ocr_text)
     for ph in MY_PAYMENT_PHONES:
         normalized_text = normalized_text.replace(ph, "")
+    masked_text = _mask_dates_times(normalized_text)
 
-    lines = normalized_text.splitlines()
-    for i, line in enumerate(lines):
-        clean_l = line.replace(" ", "").replace("-", "")
-        hit = _digits_after_keyword(clean_l)
-        if hit:
-            return hit
-        if any(k in clean_l.lower() for k in TX_KEYWORDS) and i + 1 < len(lines):
-            next_l = lines[i + 1].replace(" ", "").replace("-", "")
-            next_digits = re.findall(r'\d{6,24}', next_l)
-            if next_digits:
-                return next_digits[0][-6:]
-
-    # KBZPay statement refs start with "010" and are 15-23 digits long.
-    kpay_match = re.search(r'(?<!\d)(010\d{12,20})(?!\d)', normalized_text.replace(" ", ""))
+    # 1) KBZPay refs are unambiguous: "010" + 12-20 digits (15-23 total),
+    #    and nothing else on a receipt looks like that. Search the
+    #    space-stripped text so a ref split by an OCR space still hits,
+    #    and run this FIRST so a date/time line sitting next to the
+    #    အမှတ် label can never win over the real reference.
+    kpay_match = re.search(r'(?<!\d)(010\d{12,20})(?!\d)', masked_text.replace(" ", ""))
     if kpay_match:
         return kpay_match.group(1)[-6:]
 
-    # Last resort: first long digit run that is not a phone number or a date.
-    for num in re.findall(r'(?<!\d)\d{8,15}(?!\d)', normalized_text.replace("-", " ")):
+    # 2) Keyword-anchored candidates: digit runs after a tx label on the
+    #    same line, or on the line right after a label line — collected on
+    #    the date/time-masked text. Keep the longest plausible one: real
+    #    refs are 10-20 digits (Wave 10, AYA 12, UAB 15, KBZ 20).
+    candidates = []
+    lines = masked_text.splitlines()
+    for i, line in enumerate(lines):
+        clean_l = line.replace(" ", "").replace("-", "")
+        candidates.extend(_digit_runs_after_keyword(clean_l))
+        if any(k in clean_l.lower() for k in TX_KEYWORDS) and i + 1 < len(lines):
+            next_l = lines[i + 1].replace(" ", "").replace("-", "")
+            candidates.extend(re.findall(r'\d{6,24}', next_l))
+    candidates = [c for c in candidates if _plausible_ref(c)]
+    if candidates:
+        return max(candidates, key=len)[-6:]
+
+    # 3) Last resort: first long digit run that is not a phone or a date.
+    for num in re.findall(r'(?<!\d)\d{8,15}(?!\d)', masked_text.replace("-", " ")):
         if _PHONE_LIKE.match(num) or _DATE_LIKE.match(num):
             continue
         return num[-6:]
